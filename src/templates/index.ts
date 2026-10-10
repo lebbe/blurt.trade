@@ -146,6 +146,9 @@ export type AdminReportsData = { viewer: AuthenticatedUser; reports: ReportedBlu
 // `activeSessions`: how many browsers and devices the viewer is logged in on.
 export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
 
+// /settings/delete, the account deletion confirmation.
+export type DeleteAccountData = { viewer: AuthenticatedUser }
+
 type ComposerProps = {
   text?: string
   validationError?: string
@@ -385,6 +388,46 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
           <button type="submit">Log out everywhere</button>
         </form>
       </section>
+      <section aria-label="Delete account">
+        <h2>Delete account</h2>
+        <p>Deletes your profile and your blurts for good. You'll be asked for your password.</p>
+        <p><a href="/settings/delete">Delete my account</a></p>
+      </section>
+    </main>
+  `
+}
+
+// What deleting an account does: on the confirmation page, in both views.
+export const accountDeletionEffects = [
+  'Your profile, avatar, location, follows (both ways), sessions, invite codes and reports are deleted.',
+  'Your blurts and replies are deleted. One that someone replied to stays as an empty placeholder, with no text and no author, so their replies still read.',
+  'Your username is retired: nobody can sign up with it again, so nobody can pass for you.',
+  "You're logged out everywhere. It can't be undone; nightly backups still hold the account for up to 30 days.",
+]
+
+function DeleteAccountPage({ viewer, validationError }: DeleteAccountData & FormProps) {
+  return html`
+    <header>
+      <h1>Delete account: ${viewer.username}</h1>
+      <p><a href="/settings">Back to settings</a></p>
+    </header>
+    <main>
+      <ul>
+        ${accountDeletionEffects.map((effect) => html`<li>${effect}</li>`)}
+      </ul>
+      <form method="post" action="/settings/delete">
+        ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+        <label
+          >Your password, to confirm
+          <input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            maxlength=${passwordMaxLength}
+            required
+        /></label>
+        <button type="submit">Delete my account for good</button>
+      </form>
     </main>
   `
 }
@@ -1300,6 +1343,10 @@ function PrivacyPage({ contact }: InfoPageData) {
         you joined it.
       </p>
       <p>
+        For deleted accounts, only the username is kept, in lower case and with nothing else, so it
+        can't be taken again.
+      </p>
+      <p>
         Public: your username, profile, avatar, blurts, follower counts and who invited you.
         Everything else is private, though admins see who reported what.
       </p>
@@ -1343,8 +1390,18 @@ function PrivacyPage({ contact }: InfoPageData) {
       </p>
       <h2>Deleting your account</h2>
       <p>
-        Deleting your account deletes everything above that belongs to it. A blurt someone replied
-        to stays as an empty placeholder, with no text and no author, so the thread still reads.
+        <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It
+        deletes at once, in one go, everything above that belongs to the account: your profile,
+        avatar and location, your blurts and their embeddings, who you follow and who follows you,
+        your invite codes, your reports, your sessions and your waitlist entry. You're logged out
+        everywhere.
+      </p>
+      <p>
+        What stays: a blurt someone replied to stays as an empty placeholder, with no text and no
+        author, so the thread still reads. The invite code you signed up with stays marked as used,
+        with nothing linking it to you. Your username goes on the list of retired names, with
+        nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go
+        down. Backups still hold the account until they expire, 30 days at most.
       </p>
       <h2>Your rights</h2>
       <p>
@@ -1440,6 +1497,15 @@ export function renderProfilePage(data: ProfilePageData): string {
 
 export function renderSettingsPage(data: SettingsData): string {
   return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(SettingsPage, data) }))
+}
+
+export function renderDeleteAccountPage(data: DeleteAccountData, validationError?: string): string {
+  return (
+    '<!doctype html>' +
+    renderToString(
+      h(IndexDocument, { children: h(DeleteAccountPage, { ...data, validationError }) }),
+    )
+  )
 }
 
 export function renderNearPage(data: NearData): string {

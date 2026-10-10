@@ -101,12 +101,30 @@ function userIdFrom(payload: JWTPayload): number | undefined {
     : undefined
 }
 
+// Sessions of deleted accounts, by session id, until their last access token has run out
+// (ms). Their refresh tokens die with their session rows, but an access token is checked
+// by its signature alone, so without this one would still pass for up to 5 minutes. In
+// memory only: with several app instances, another instance may still show the deleted
+// user as logged in until the token runs out, though everything it would read or write
+// for them is gone. Session ids are random UUIDs, never reused.
+const deletedSessions = new Map<string, number>()
+
+function isDeletedSession(sessionId: string, now = Date.now()): boolean {
+  const until = deletedSessions.get(sessionId)
+  if (until !== undefined && until <= now) {
+    deletedSessions.delete(sessionId)
+    return false
+  }
+  return until !== undefined
+}
+
 async function verifyAccessToken(token: unknown): Promise<Session | undefined> {
   const payload = await verifyJwt(token, accessKey)
   const id = payload && userIdFrom(payload)
   return id !== undefined &&
     typeof payload?.username === 'string' &&
-    typeof payload.sid === 'string'
+    typeof payload.sid === 'string' &&
+    !isDeletedSession(payload.sid)
     ? { user: { id, username: payload.username }, sessionId: payload.sid }
     : undefined
 }
@@ -327,6 +345,22 @@ export async function endAllSessions(userId: number, response: Response): Promis
     'UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL',
     [userId],
   )
+  clearSessionCookies(response)
+}
+
+// After account deletion, whose transaction already removed the session rows (their ids
+// are `sessionIds`): this browser is logged out at once, and the access tokens of those
+// sessions stop working here too.
+export function endDeletedAccountSessions(sessionIds: string[], response: Response): void {
+  const now = Date.now()
+  for (const [id, until] of deletedSessions) {
+    if (until <= now) {
+      deletedSessions.delete(id)
+    }
+  }
+  for (const id of sessionIds) {
+    deletedSessions.set(id, now + accessTokenSeconds * 1000)
+  }
   clearSessionCookies(response)
 }
 

@@ -373,6 +373,66 @@ export async function deleteBlurts(
   }
 }
 
+// Deletes the account and everything that refers to it, in one transaction. The user's
+// blurts go through deleteBlurts (one with replies from others stays as an authorless
+// placeholder). Deleting the users row then cascades to the profile (avatar, location),
+// sessions, follows both ways, the user's own invite codes and the reports they made; the
+// code they signed up with stays used (used_at) with used_by_user_id set NULL. Their
+// waitlist entry goes. The username is retired for good (retired_usernames), so nobody
+// can take it and pass for them. signup_counter is left alone: it counts sign-ups, so a
+// deletion doesn't free a slot. Returns the ids of the sessions it ended (for
+// endDeletedAccountSessions), or undefined if the user doesn't exist (any more).
+export async function deleteAccount(userId: number): Promise<string[] | undefined> {
+  const client = await db().connect()
+  try {
+    await client.query('BEGIN')
+    // Locks the user first: posting, following or reporting as them takes a key-share lock
+    // on this row, so those finish before this, or wait and then find no user.
+    const { rows } = await client.query<{ username: string }>(
+      'SELECT username FROM users WHERE id = $1 FOR UPDATE',
+      [userId],
+    )
+    const user = rows[0]
+    if (!user) {
+      await client.query('ROLLBACK')
+      return undefined
+    }
+    const blurts = await client.query<{ id: number }>('SELECT id FROM blurts WHERE user_id = $1', [
+      userId,
+    ])
+    await deleteBlurts(
+      blurts.rows.map((blurt) => blurt.id),
+      client,
+    )
+    await client.query(
+      'INSERT INTO retired_usernames (username) VALUES (lower($1)) ON CONFLICT DO NOTHING',
+      [user.username],
+    )
+    await client.query('DELETE FROM waitlist WHERE lower(username) = lower($1)', [user.username])
+    const sessions = await client.query<{ id: string }>(
+      'DELETE FROM sessions WHERE user_id = $1 RETURNING id',
+      [userId],
+    )
+    await client.query('DELETE FROM users WHERE id = $1', [userId])
+    await client.query('COMMIT')
+    return sessions.rows.map((session) => session.id)
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Whether the username belonged to a deleted account (see deleteAccount).
+export async function isUsernameRetired(username: string): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'SELECT 1 FROM retired_usernames WHERE username = lower($1)',
+    [username],
+  )
+  return rowCount === 1
+}
+
 // Whether the user may moderate: see /admin/reports and delete anyone's blurt.
 export async function isAdmin(userId: number): Promise<boolean> {
   const { rows } = await db().query<{ isAdmin: boolean }>(
@@ -458,8 +518,9 @@ export async function getSignupState(): Promise<SignupState> {
 // Claims a sign-up slot and creates the user, an empty profile and the user's own invite
 // codes, in one transaction. Without an invite code the slot must be under the soft limit;
 // with one, under the hard limit, and the code is redeemed. Returns 'taken' if the username
-// is taken, 'full' if there was no slot left, and 'invalid-code' if the code doesn't exist,
-// is used or has expired. In all three cases nothing is claimed or redeemed.
+// is taken or retired (see deleteAccount), 'full' if there was no slot left, and
+// 'invalid-code' if the code doesn't exist, is used or has expired. In all three cases
+// nothing is claimed or redeemed.
 export async function addUser(
   username: string,
   passwordHash: string,
@@ -483,8 +544,9 @@ export async function addUser(
 
     const { rows } = await client.query<User>(
       `WITH new_user AS (
-         INSERT INTO users (username, password_hash) VALUES ($1, $2)
-         ON CONFLICT DO NOTHING -- username taken, in any letter case
+         INSERT INTO users (username, password_hash) SELECT $1::text, $2::text
+         WHERE NOT EXISTS (SELECT 1 FROM retired_usernames WHERE username = lower($1))
+         ON CONFLICT DO NOTHING -- username taken in any letter case, or retired
          RETURNING id, username, password_hash
        ), new_profile AS (
          INSERT INTO user_profiles (user_id, avatar) SELECT id, $3::jsonb FROM new_user

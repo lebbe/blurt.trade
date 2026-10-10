@@ -21,22 +21,23 @@ carry `Vary: Accept`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path              | Auth  | JSON                                                                          | Errors                  |
-| ----------------- | ----- | ----------------------------------------------------------------------------- | ----------------------- |
-| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }` | 400 bad cursor          |
-| `/everyone`       | —     | the same, always the everyone feed                                            | 400 bad cursor          |
-| `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
-| `/:username/:id`  | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
-| `/:username/edit` | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
-| `/near`           | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
-| `/login`          | —     | `{ viewer }`                                                                  |                         |
-| `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                              |                         |
-| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
-| `/settings`       | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
-| `/admin/reports`  | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
-| `/about`          | —     | `{ viewer, contact }`                                                         |                         |
-| `/terms`          | —     | `{ viewer, contact }`                                                         |                         |
-| `/privacy`        | —     | `{ viewer, contact }`                                                         |                         |
+| Path               | Auth  | JSON                                                                          | Errors                  |
+| ------------------ | ----- | ----------------------------------------------------------------------------- | ----------------------- |
+| `/`                | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }` | 400 bad cursor          |
+| `/everyone`        | —     | the same, always the everyone feed                                            | 400 bad cursor          |
+| `/:username/`      | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
+| `/:username/:id`   | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
+| `/:username/edit`  | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
+| `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
+| `/login`           | —     | `{ viewer }`                                                                  |                         |
+| `/createUser`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
+| `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
+| `/settings`        | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
+| `/settings/delete` | yes   | `{ viewer }`                                                                  | 401                     |
+| `/admin/reports`   | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
+| `/about`           | —     | `{ viewer, contact }`                                                         |                         |
+| `/terms`           | —     | `{ viewer, contact }`                                                         |                         |
+| `/privacy`         | —     | `{ viewer, contact }`                                                         |                         |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -87,6 +88,7 @@ carry `Vary: Accept`.
   is how many entries are still waiting. `/createUser?invite=<code>` fills in the form's
   invite code (`inviteCode`, or `null`), so a shared link is all an invitee needs.
 - `activeSessions` is how many browsers and devices the viewer is logged in on.
+  `/settings` also links to `/settings/delete` (see Deleting an account).
 - `location` is the viewer's own `{ lat, lon }` or `null` (see Location below). It is
   only on `/:username/edit` and `/near`, which only the owner sees, never on profiles.
 - `/near?radius=<km>` is "blurts near you": top-level blurts (with their latest two
@@ -133,6 +135,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
+| `/settings/delete`           | yes           | `password`                           | 303 → `/`                   | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
@@ -177,6 +180,40 @@ Plain forms, so all of it works without JS. Code in `src/routes/blurts.ts`,
   ```
 
   The flag is read from the database on each admin request, so taking it away works at once.
+
+## Deleting an account
+
+`/settings` links to `/settings/delete`, a confirmation page that says what happens and
+asks for the password again (there is no other proof it's the owner: no email, no reset).
+`POST /settings/delete` with the right `password` deletes the account; a wrong or
+missing one is a 400 on `password` and deletes nothing. It is rate limited per account
+(`DELETE_ACCOUNT`), since it runs Argon2 like login. Code: `deleteAccount` in
+`src/routes/state.ts`, the route in `src/routes/users.ts`.
+
+- One transaction. The user's blurts go through `deleteBlurts`, so one that others
+  replied to stays as an authorless placeholder and their replies stay. Then the
+  `users` row goes, and with it (`ON DELETE CASCADE`) the profile (avatar, location),
+  sessions, follows both ways, the user's own invite codes (so "Invited by" disappears
+  from their invitees' profiles) and the reports they made. The code they signed up with
+  stays used (`used_at`) with `used_by_user_id` set `NULL`. Their waitlist entry is
+  deleted.
+- **The username is retired, not freed**: it goes into `retired_usernames` (lower case,
+  nothing else), and sign-up and the waitlist treat it as taken, in any letter case.
+  Freeing it would let someone sign up as the old account and pass for it, with
+  replies and links still pointing at that name. Free one by hand if ever needed:
+  `DELETE FROM retired_usernames WHERE username = lower('...');`
+- `signup_counter` doesn't go down: it counts sign-ups, not accounts, so deleting
+  accounts can't be used to reopen sign-up past its limits.
+- Both cookies are cleared, and the account's sessions are gone, so its refresh tokens
+  fail everywhere. Its access tokens (checked by signature alone) are also refused by
+  this app instance until they run out (5 minutes), from an in-memory list of the
+  deleted session ids. With several instances, another one could still show the user
+  as logged in for up to 5 minutes, but there is nothing left to read or change: every
+  write checks that the user exists.
+- A test checks every table afterwards, by every foreign key to `users` and by the
+  username anywhere in a row, and that the old cookies are rejected.
+- Known edge: a sign-up with the same name committing in the very instant the deletion
+  commits could slip past the retired check; deletion is rare and that window tiny.
 
 ## Location
 
@@ -274,7 +311,8 @@ node db/mint-invites.ts <username> <count> [days until they expire]
 `POST /waitlist` only works in the `waitlist` state (403 otherwise). It takes a username
 and nothing else, so no personal data is stored and nobody is contacted: people check
 back at `/waitlist?username=<name>`, which says when sign-up has opened again. Joining
-twice does nothing; a username that already has a profile is a 400. Signing up with a
+twice does nothing; a username that already has a profile, or belonged to a deleted
+account, is a 400. Signing up with a
 waitlisted username marks its entry `joined`. A waitlisted username isn't reserved.
 
 ## Sessions
@@ -322,6 +360,7 @@ error table below.
 | `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
+| `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |
 
 - `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
   them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).

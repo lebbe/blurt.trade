@@ -2,14 +2,16 @@ import { Router, type Request } from 'express'
 import { hash, verify } from '@node-rs/argon2'
 import { z } from 'zod'
 import {
+  clearSessionCookies,
   countActiveSessions,
   endAllSessions,
+  endDeletedAccountSessions,
   endSession,
   getViewer,
   requireAuth,
   startSession,
 } from '../middleware/auth.ts'
-import { rateLimit, sendTooManyRequests, take } from '../middleware/rate-limit.ts'
+import { accountKey, rateLimit, sendTooManyRequests, take } from '../middleware/rate-limit.ts'
 import {
   inviteCodeMaxLength,
   passwordMaxLength,
@@ -20,15 +22,18 @@ import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } fr
 import {
   addUser,
   countWaiting,
+  deleteAccount,
   getSignupState,
   getUserByUsername,
   getWaitlistEntry,
+  isUsernameRetired,
   joinWaitlist,
   normalizeInviteCode,
   type SignupState,
 } from './state.ts'
 import {
   renderCreateUserPage,
+  renderDeleteAccountPage,
   renderLoginPage,
   renderSettingsPage,
   renderWaitlistPage,
@@ -36,6 +41,7 @@ import {
 } from '../templates/index.ts'
 import {
   createUserMarkdown,
+  deleteAccountMarkdown,
   loginMarkdown,
   settingsMarkdown,
   waitlistMarkdown,
@@ -268,6 +274,59 @@ usersRouter.post('/api/logout-everywhere', requireAuth, async (request, response
   sendFormSuccess(request, response, { redirect: '/login' })
 })
 
+// Account deletion: a confirmation page that asks for the password again, since there is
+// no other way to be sure it's the owner (no email, no password reset). The deletion
+// itself is deleteAccount in src/routes/state.ts.
+const deleteAccountSchema = z.object({
+  password: z
+    .string()
+    .min(1, 'Password is required')
+    .max(passwordMaxLength, 'Password is too long'),
+})
+
+usersRouter.get('/settings/delete', requireAuth, (request, response) => {
+  represent(
+    request,
+    response,
+    { viewer: response.locals.authenticatedUser },
+    { html: (data) => renderDeleteAccountPage(data), markdown: deleteAccountMarkdown },
+  )
+})
+
+usersRouter.post(
+  '/settings/delete',
+  requireAuth,
+  rateLimit('deleteAccount', accountKey),
+  async (request, response) => {
+    const viewer = response.locals.authenticatedUser
+    const rerender = (validationError: string) =>
+      renderDeleteAccountPage({ viewer }, validationError)
+    const result = deleteAccountSchema.safeParse(request.body ?? {})
+    if (!result.success) {
+      await sendFormErrors(request, response, fieldErrors(result.error), rerender)
+      return
+    }
+
+    const user = await getUserByUsername(viewer.username)
+    if (!user || user.id !== viewer.id) {
+      clearSessionCookies(response) // a still-valid token for an account that is gone
+      sendError(request, response, 401, 'Authentication required')
+      return
+    }
+    if (!(await verify(user.passwordHash, result.data.password))) {
+      const errors = [
+        { field: 'password', message: 'Wrong password. Your account was not deleted.' },
+      ]
+      await sendFormErrors(request, response, errors, rerender)
+      return
+    }
+
+    const sessionIds = (await deleteAccount(user.id)) ?? []
+    endDeletedAccountSessions(sessionIds, response)
+    sendFormSuccess(request, response, { redirect: '/' })
+  },
+)
+
 // Once sign-up is full, people leave the username they'd like here and check back on this
 // page, with ?username=, which also says when sign-up has opened again. No email, so
 // nobody is contacted. See db/migrations/*_signup-limits.sql.
@@ -316,7 +375,7 @@ usersRouter.post('/waitlist', rateLimit('waitlistIp'), async (request, response)
   }
 
   const { username } = result.data
-  if (await getUserByUsername(username)) {
+  if ((await getUserByUsername(username)) || (await isUsernameRetired(username))) {
     const errors = [{ field: 'username', message: 'Username is already taken' }]
     await sendFormErrors(request, response, errors, rerender)
     return

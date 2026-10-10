@@ -173,16 +173,17 @@ migrations run as the normal app user.
 
 ## Tables
 
-| table            | contents                                                          |
-| ---------------- | ----------------------------------------------------------------- |
-| `users`          | `id`, `username` (unique), `password_hash` (Argon2id)             |
-| `user_profiles`  | one row per user: homepage, social handles, bio, `location`       |
-| `blurts`         | `user_id`, `text` (1–280 chars), `parent_id` (reply), `embedding` |
-| `follows`        | `user_id` follows `followed_user_id`                              |
-| `sessions`       | one row per login: refresh token generation, last use, revoked    |
-| `signup_counter` | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
-| `waitlist`       | usernames that asked to be let in while sign-up was full          |
-| `invite_codes`   | single-use sign-up codes: owner `user_id`, `used_by_user_id`      |
+| table               | contents                                                          |
+| ------------------- | ----------------------------------------------------------------- |
+| `users`             | `id`, `username` (unique), `password_hash` (Argon2id)             |
+| `user_profiles`     | one row per user: homepage, social handles, bio, `location`       |
+| `blurts`            | `user_id`, `text` (1–280 chars), `parent_id` (reply), `embedding` |
+| `follows`           | `user_id` follows `followed_user_id`                              |
+| `sessions`          | one row per login: refresh token generation, last use, revoked    |
+| `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
+| `waitlist`          | usernames that asked to be let in while sign-up was full          |
+| `invite_codes`      | single-use sign-up codes: owner `user_id`, `used_by_user_id`      |
+| `retired_usernames` | usernames of deleted accounts, lower case, nothing else           |
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
 `sessions` is `UNLOGGED`: a crash empties it, which only logs everyone out. The server
@@ -194,7 +195,12 @@ deletes revoked and expired rows at startup and every hour.
 UPDATE signup_counter SET soft_limit = 2000, hard_limit = 20000;
 ```
 
-`current_count` counts sign-ups, not current users: it never goes down.
+`current_count` counts sign-ups, not current users: it never goes down, also not when
+an account is deleted.
+
+Deleting an account (`deleteAccount` in `src/routes/state.ts`, docs/routes.md, Deleting an
+account) removes every row that refers to the user, in one transaction, and puts the
+username in `retired_usernames` so it can never be signed up for again.
 `waitlist` stores only a username and a status (`waiting`, or `joined` once it signs
 up), no email. See docs/routes.md, Sign-up limits.
 

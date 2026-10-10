@@ -3,6 +3,7 @@ import type { Contact } from '../config.ts'
 import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
 import { blurtMaxLength, isWebUrl } from '../limits.ts'
 import {
+  accountDeletionEffects,
   blurtActions,
   blurtUrl,
   deleteBlurtPath,
@@ -19,6 +20,7 @@ import {
   plural,
   type AdminReportsData,
   type BlurtPageData,
+  type DeleteAccountData,
   type DiscoverySection,
   type FeedData,
   type FormPageData,
@@ -420,6 +422,8 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     The waitlist stores only the username you'd like, whether you've signed up since, and when you joined it.
 
+    For deleted accounts, only the username is kept, in lower case and with nothing else, so it can't be taken again.
+
     Public: your username, profile, avatar, blurts, follower counts and who invited you. Everything else is private, though admins see who reported what.
 
     ## What is not stored
@@ -442,7 +446,9 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Deleting your account
 
-    Deleting your account deletes everything above that belongs to it. A blurt someone replied to stays as an empty placeholder, with no text and no author, so the thread still reads.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, your blurts and their embeddings, who you follow and who follows you, your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+
+    What stays: a blurt someone replied to stays as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still hold the account until they expire, 30 days at most.
 
     ## Your rights
 
@@ -587,5 +593,21 @@ export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Mark
 
     Send ${code('POST /api/logout-everywhere')} to log out everywhere, this client included.
     Other devices are logged out within 5 minutes.
+
+    ## Delete account
+
+    Deletes your profile and your blurts for good: see ${link('Delete my account', '/settings/delete')}.
+  `
+}
+
+export function deleteAccountMarkdown({ viewer }: DeleteAccountData): Markdown {
+  return md`
+    # Delete account: ${viewer.username}
+
+    ${link('Back to settings', '/settings')}
+
+    ${accountDeletionEffects.map((effect) => md`- ${effect}`)}
+
+    Send ${code('POST /settings/delete')} as a form or as JSON with your ${code('password')} to confirm.
   `
 }
