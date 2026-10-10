@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- blurt.trade favicon: a speech bubble with an exclamation mark. -->
+<path d="M8 6h48a4 4 0 0 1 4 4v32a4 4 0 0 1-4 4H26L12 58V46H8a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" fill="#201d1a"/>
+<path d="M29 13h6l-1 18h-4z" fill="#f4f0e8"/>
+<circle cx="32" cy="37" r="3.2" fill="#f4f0e8"/>
+</svg>

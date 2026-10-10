@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import type { ZodError } from 'zod'
 import type { Markdown } from './templates/markdown.ts'
+import { renderErrorPage } from './templates/layout.ts'
 
 // One path per resource; the Accept header picks the representation. HTML comes first so
 // browsers and `*/*` (fetch's default) get the page. See docs/routes.md.
@@ -56,6 +57,11 @@ export function sendError(
   response.vary('Accept').status(status)
   if (wantsJson(request)) {
     response.type('json').send(toJson({ error: message, field }))
+  } else if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    request.accepts(['html', 'text/plain', 'text/markdown']) === 'html'
+  ) {
+    response.type('html').send(renderErrorPage({ status, message }))
   } else {
     response.type('text').send(message)
   }

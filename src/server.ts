@@ -23,6 +23,7 @@ import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
 import { usersRouter } from './routes/users.ts'
+import { crawlRouter } from './routes/crawl.ts'
 import { stylesheet } from './templates/styles.ts'
 
 export const app = express()
@@ -40,6 +41,7 @@ app.use(healthRouter)
 app.get('/static/style.css', (_request, response) => {
   response.type('css').set('Cache-Control', 'public, max-age=31536000, immutable').send(stylesheet)
 })
+app.use(crawlRouter)
 // Static files (the world map) from public/, before auth: they're the same for everyone.
 app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
 app.use(express.urlencoded({ extended: false, limit: bodyLimit }))

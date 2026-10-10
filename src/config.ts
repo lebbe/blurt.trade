@@ -54,6 +54,12 @@ export function configProblems(env: Env = process.env): ConfigProblems {
     )
   }
 
+  if (set('PUBLIC_URL') && !publicUrlPattern.test(env.PUBLIC_URL as string)) {
+    errors.push(
+      `PUBLIC_URL must be an http(s):// origin without a path, like https://blurt.trade, not "${env.PUBLIC_URL}"`,
+    )
+  }
+
   if (set('MIGRATE_ON_START') && !['true', 'false'].includes(env.MIGRATE_ON_START as string)) {
     errors.push('MIGRATE_ON_START must be true or false')
   }
@@ -118,6 +124,16 @@ export function contact(env: Env = process.env): Contact {
     issuesUrl: repo && `${repo}/issues`,
     securityUrl: repo && `${repo}/security/advisories/new`,
   }
+}
+
+const publicUrlPattern = /^https?:\/\/[^\s/?#]+$/
+
+// The site's own origin, for absolute URLs in share previews (og:url, og:image) and
+// canonical links. Read per request, like contact().
+export const defaultPublicUrl = 'https://blurt.trade'
+
+export function publicUrl(env: Env = process.env): string {
+  return env.PUBLIC_URL && publicUrlPattern.test(env.PUBLIC_URL) ? env.PUBLIC_URL : defaultPublicUrl
 }
 
 // Logs warnings, and throws with every error at once.

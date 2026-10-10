@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { NextFunction, Request, Response } from 'express'
+import { renderErrorPage } from './templates/layout.ts'
 
 // Structured logs: one JSON object per line on stdout (info) or stderr (warn, error),
 // which systemd hands to journald (docs/deploy.md, Logs and monitoring).
@@ -161,6 +162,8 @@ export function serverErrorHandler(
   response.vary('Accept').status(500).set('Cache-Control', 'no-store')
   if (request.accepts(['html', 'json']) === 'json') {
     response.type('json').send(JSON.stringify({ error: message, requestId: id }))
+  } else if (request.accepts(['html', 'text/plain', 'text/markdown']) === 'html') {
+    response.type('html').send(renderErrorPage({ status: 500, message, requestId: id }))
   } else {
     response.type('text').send(message)
   }

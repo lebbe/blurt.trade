@@ -66,8 +66,11 @@ export const reservedUsernames = new Set([
   'login',
   'near',
   'privacy',
+  'robots.txt',
+  'robots',
   'search',
   'settings',
+  'sitemap.xml',
   'static',
   'terms',
   // likely future pages

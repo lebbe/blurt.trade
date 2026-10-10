@@ -1,12 +1,11 @@
 import { h } from 'preact'
 import htm from 'htm'
-import { renderToString } from 'preact-render-to-string'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import type { Contact } from '../config.ts'
 import { avatarLabels, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
 import { AvatarSvg } from './avatar.ts'
-import { stylesheetUrl } from './styles.ts'
+import { preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
 import {
   bioMaxLength,
   blurtMaxLength,
@@ -15,7 +14,6 @@ import {
   passwordMaxLength,
   passwordMinLength,
   reportReasonMaxLength,
-  searchQueryMaxLength,
   usernameMaxLength,
 } from '../limits.ts'
 import type {
@@ -1501,85 +1499,81 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
   `
 }
 
-// On every page, above the page's own header: a plain GET form, so it works without JS.
-function SiteSearch({ query = '' }: { query?: string }) {
-  return html`
-    <form method="get" action="/search" role="search" class="site-search">
-      <label for="site-search-q">Search</label>
-      <input
-        id="site-search-q"
-        type="search"
-        name="q"
-        value=${query}
-        maxlength=${searchQueryMaxLength}
-        placeholder="Usernames and blurts"
-      />
-      <button type="submit">Search</button>
-    </form>
-  `
+const metaDescriptionMax = 160
+const shareTitleMax = 70
+
+function profilePageMeta({ profile }: ProfilePageData): PageMeta {
+  const description =
+    profile.bio.trim() === ''
+      ? `${profile.username} on blurt.trade`
+      : preview(profile.bio, metaDescriptionMax)
+  return {
+    title: profile.username,
+    description,
+    canonical: `/${profile.username}/`,
+    share: {
+      type: 'profile',
+      title: preview(`${profile.username} on blurt.trade`, shareTitleMax),
+      description,
+    },
+  }
 }
 
-function Footer() {
-  return html`
-    <footer>
-      <nav aria-label="About this site">
-        <a href="/about">About</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
-      </nav>
-    </footer>
-  `
+function blurtPageMeta({ blurt }: BlurtPageData): PageMeta {
+  const canonical = blurtUrl(blurt)
+  const deleted = blurt.deleted || blurt.username === null
+  const description = deleted ? 'This blurt was deleted.' : preview(blurt.text, metaDescriptionMax)
+  const title = deleted ? 'Deleted blurt' : preview(blurt.text, shareTitleMax)
+  return {
+    title,
+    description,
+    canonical,
+    share: { type: 'article', title, description },
+  }
 }
 
-function IndexDocument({ children, query }: { children: unknown; query?: string }) {
-  return html`<!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>blurt.trade</title>
-        <link rel="stylesheet" href=${stylesheetUrl} />
-      </head>
-      <body>
-        <${SiteSearch} query=${query} />
-        ${children}
-        <${Footer} />
-      </body>
-    </html>`
+function searchCanonical(query: string): string {
+  return `/search?q=${encodeURIComponent(query)}`
+}
+
+function nearCanonical(radius: number): string {
+  return `/near?radius=${radius}`
+}
+
+function feedMeta(data: FeedData): PageMeta {
+  const path = feedPath(data)
+  return {
+    title: data.feed === 'following' ? 'Following' : undefined,
+    canonical: path,
+  }
 }
 
 export function renderAboutPage(data: InfoPageData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(AboutPage, data) }))
+  return renderDocument(h(AboutPage, data), { title: 'About' })
 }
 
 export function renderTermsPage(data: InfoPageData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(TermsPage, data) }))
+  return renderDocument(h(TermsPage, data), { title: 'Terms' })
 }
 
 export function renderPrivacyPage(data: InfoPageData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(PrivacyPage, data) }))
+  return renderDocument(h(PrivacyPage, data), { title: 'Privacy' })
 }
 
 export function renderFeedPage(data: FeedData, composer?: ComposerProps): string {
-  return (
-    '<!doctype html>' +
-    renderToString(h(IndexDocument, { children: h(FeedPage, { ...data, composer }) }))
-  )
+  return renderDocument(h(FeedPage, { ...data, composer }), feedMeta(data))
 }
 
 export function renderLoginPage(props: LoginProps = {}): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(LoginForm, props) }))
+  return renderDocument(h(LoginForm, props), { title: 'Log in', noindex: true })
 }
 
 export function renderCreateUserPage(props: CreateUserProps): string {
-  return (
-    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(CreateUserPage, props) }))
-  )
+  return renderDocument(h(CreateUserPage, props), { title: 'Create a profile', noindex: true })
 }
 
 export function renderWaitlistPage(data: WaitlistData, form?: FormProps): string {
-  return (
-    '<!doctype html>' +
-    renderToString(h(IndexDocument, { children: h(WaitlistPage, { ...data, form }) }))
-  )
+  return renderDocument(h(WaitlistPage, { ...data, form }), { title: 'Waitlist', noindex: true })
 }
 
 export function renderBlurtPage(
@@ -1587,48 +1581,52 @@ export function renderBlurtPage(
   composer?: ComposerProps,
   reportError?: string,
 ): string {
-  return (
-    '<!doctype html>' +
-    renderToString(h(IndexDocument, { children: h(BlurtPage, { ...data, composer, reportError }) }))
-  )
+  return renderDocument(h(BlurtPage, { ...data, composer, reportError }), blurtPageMeta(data))
 }
 
 export function renderAdminReportsPage(data: AdminReportsData): string {
-  return (
-    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(AdminReportsPage, data) }))
-  )
+  return renderDocument(h(AdminReportsPage, data), { title: 'Reports', noindex: true })
 }
 
 export function renderProfilePage(data: ProfilePageData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(ProfilePage, data) }))
+  return renderDocument(h(ProfilePage, data), profilePageMeta(data))
 }
 
 export function renderSettingsPage(data: SettingsData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(SettingsPage, data) }))
+  return renderDocument(h(SettingsPage, data), { title: 'Settings', noindex: true })
 }
 
 export function renderDeleteAccountPage(data: DeleteAccountData, validationError?: string): string {
-  return (
-    '<!doctype html>' +
-    renderToString(
-      h(IndexDocument, { children: h(DeleteAccountPage, { ...data, validationError }) }),
-    )
-  )
+  return renderDocument(h(DeleteAccountPage, { ...data, validationError }), {
+    title: 'Delete account',
+    noindex: true,
+  })
 }
 
 export function renderSearchPage(data: SearchData): string {
-  return (
-    '<!doctype html>' +
-    renderToString(h(IndexDocument, { children: h(SearchPage, data), query: data.query }))
+  const title = data.query === '' ? 'Search' : preview(data.query, shareTitleMax)
+  const description =
+    data.query === ''
+      ? 'Search usernames and blurts.'
+      : `Search results for “${preview(data.query, 80)}”.`
+  return renderDocument(
+    h(SearchPage, data),
+    { title, description, canonical: searchCanonical(data.query), noindex: true },
+    data.query,
   )
 }
 
 export function renderNearPage(data: NearData): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(NearPage, data) }))
+  return renderDocument(h(NearPage, data), {
+    title: 'Blurts near you',
+    description: siteDescription,
+    canonical: nearCanonical(data.radius),
+    noindex: true,
+  })
 }
 
 export function renderProfileEditPage(props: ProfileEditProps): string {
-  return (
-    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(ProfileEditForm, props) }))
-  )
+  return renderDocument(h(ProfileEditForm, props), {
+    title: `Edit profile: ${props.profile.username}`,
+  })
 }

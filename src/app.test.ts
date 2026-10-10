@@ -592,6 +592,64 @@ test('returns 404 for a blurt under the wrong username', async () => {
   assert.equal(response.statusCode, 404)
 })
 
+test('shows styled error pages for HTML and keeps plain text for non-HTML clients', async () => {
+  const html404 = await request('GET', '/no/such/page/here')
+  assert.equal(html404.statusCode, 404)
+  assert.match(html404.contentType ?? '', /^text\/html/)
+  assert.match(html404.body, /<h1>Not found<\/h1>/)
+  assert.match(html404.body, /Back to blurt\.trade/)
+
+  const text404 = await request('GET', '/no/such/page/here', '', { accept: 'text/plain' })
+  assert.equal(text404.statusCode, 404)
+  assert.match(text404.contentType ?? '', /^text\/plain/)
+  assert.equal(text404.body, 'Not found')
+})
+
+test('serves robots.txt and sitemap.xml for crawlers', async () => {
+  const robots = await request('GET', '/robots.txt')
+  assert.equal(robots.statusCode, 200)
+  assert.match(robots.contentType ?? '', /^text\/plain/)
+  for (const path of ['/login', '/createUser', '/settings', '/api/']) {
+    assert.match(robots.body, new RegExp(`Disallow: ${path.replace('/', '\\/')}`))
+  }
+  assert.match(robots.body, /Sitemap: https:\/\/blurt\.trade\/sitemap\.xml/)
+
+  const sitemap = await request('GET', '/sitemap.xml')
+  assert.equal(sitemap.statusCode, 200)
+  assert.match(sitemap.contentType ?? '', /^application\/xml/)
+  assert.match(sitemap.body, /<loc>https:\/\/blurt\.trade\/<\/loc>/)
+  assert.match(sitemap.body, /<loc>https:\/\/blurt\.trade\/everyone<\/loc>/)
+})
+
+test('profile and blurt pages include share metadata and canonical links', async () => {
+  const cookie = await createSession('Lars')
+  await request('POST', '/api/blurts', 'text=Hello+%3Cb%3Eworld%3C%2Fb%3E+++from+++blurt', {
+    cookie,
+  })
+  const id = await blurtIdByText('Hello <b>world</b>   from   blurt')
+
+  const profile = await request('GET', '/Lars/')
+  assert.match(profile.body, /<meta property="og:type" content="profile"\/>/)
+  assert.match(profile.body, /<meta property="og:title" content="Lars on blurt\.trade"\/>/)
+  assert.match(profile.body, /<link rel="canonical" href="https:\/\/blurt\.trade\/Lars\/"\/>/)
+  assert.match(
+    profile.body,
+    /<link rel="icon" href="\/static\/favicon\.svg" type="image\/svg\+xml"\/>/,
+  )
+
+  const blurt = await request('GET', `/Lars/${id}`)
+  assert.match(blurt.body, /<meta property="og:type" content="article"\/>/)
+  assert.match(blurt.body, /<meta name="twitter:card" content="summary_large_image"\/>/)
+  assert.match(
+    blurt.body,
+    /<meta property="og:title" content="Hello &lt;b>world&lt;\/b> from blurt"\/>/,
+  )
+  assert.match(
+    blurt.body,
+    new RegExp(`<link rel="canonical" href="https://blurt\\.trade/Lars/${id}"\\/>`),
+  )
+})
+
 test('every top-level route is a reserved username, and every POST has a page or lives under /api/', () => {
   type Layer = {
     route?: { path: string; methods: Record<string, boolean> }
@@ -932,6 +990,21 @@ test('pages through the feed newest first, with and without JS', async () => {
 
   const markdown = await request('GET', '/', '', { accept: 'text/markdown' })
   assert.match(markdown.body, /\[Older blurts\]\(<\/\?before=[\w-]+>\)/)
+})
+
+test('adds canonical links on paginated feed and profile pages', async () => {
+  await createSession('Lars')
+  await insertBlurts(130)
+
+  const feedFirst = JSON.parse((await request('GET', '/', '', json)).body)
+  const feedPage = await request('GET', `/?before=${feedFirst.next}`)
+  assert.match(feedPage.body, /<link rel="canonical" href="https:\/\/blurt\.trade\/"\/>/)
+  assert.doesNotMatch(feedPage.body, /canonical[^>]+before=/)
+
+  const profileFirst = JSON.parse((await request('GET', '/Lars/', '', json)).body)
+  const profilePage = await request('GET', `/Lars/?before=${profileFirst.next}`)
+  assert.match(profilePage.body, /<link rel="canonical" href="https:\/\/blurt\.trade\/Lars\/"\/>/)
+  assert.doesNotMatch(profilePage.body, /canonical[^>]+before=/)
 })
 
 test('a page boundary inside blurts with the same created_at loses nothing', async () => {
@@ -3353,9 +3426,10 @@ test('an unexpected error is logged with its request id and answered with a gene
 
   const page = await request('GET', '/everyone')
   assert.equal(page.statusCode, 500)
-  assert.equal(page.contentType, 'text/plain; charset=utf-8')
+  assert.match(page.contentType ?? '', /^text\/html/)
   const id = String(page.headers['x-request-id'])
   assert.match(page.body, /Something went wrong/)
+  assert.match(page.body, /<h1>Something went wrong<\/h1>/)
   assert.ok(page.body.includes(id), 'the request id is shown')
   assert.doesNotMatch(page.body, /forced failure|at |\.ts/)
 
@@ -3374,6 +3448,11 @@ test('an unexpected error is logged with its request id and answered with a gene
   const body = JSON.parse(api.body)
   assert.equal(body.requestId, api.headers['x-request-id'])
   assert.doesNotMatch(body.error, /forced failure/)
+
+  const plain = await request('GET', '/everyone', '', { accept: 'text/plain' })
+  assert.equal(plain.statusCode, 500)
+  assert.match(plain.contentType ?? '', /^text\/plain/)
+  assert.match(plain.body, /Something went wrong/)
   resetServerErrorCount()
 })
 
