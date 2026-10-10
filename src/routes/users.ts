@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { hash, verify } from '@node-rs/argon2'
 import { z } from 'zod'
 import {
@@ -10,9 +10,28 @@ import {
   startSession,
 } from '../middleware/auth.ts'
 import { fieldErrors, represent, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
-import { addUser, getUserByUsername } from './state.ts'
-import { renderCreateUserPage, renderLoginPage, renderSettingsPage } from '../templates/index.ts'
-import { createUserMarkdown, loginMarkdown, settingsMarkdown } from '../templates/pages.md.ts'
+import {
+  addUser,
+  countWaiting,
+  getSignupState,
+  getUserByUsername,
+  getWaitlistEntry,
+  joinWaitlist,
+  type SignupState,
+} from './state.ts'
+import {
+  renderCreateUserPage,
+  renderLoginPage,
+  renderSettingsPage,
+  renderWaitlistPage,
+  type WaitlistData,
+} from '../templates/index.ts'
+import {
+  createUserMarkdown,
+  loginMarkdown,
+  settingsMarkdown,
+  waitlistMarkdown,
+} from '../templates/pages.md.ts'
 
 export const usersRouter = Router()
 
@@ -61,16 +80,17 @@ const password = z
   .min(8, 'Password must be at least 8 characters')
   .max(200, 'Password is too long')
 
-const createUserSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(1, 'Username is required')
-    .max(40, 'Username is too long')
-    .regex(/^[A-Za-z0-9_]+$/, 'Username can only contain letters, numbers and underscores')
-    .refine((name) => !reservedUsernames.has(name.toLowerCase()), 'That username is reserved'),
-  password,
-})
+const newUsername = z
+  .string()
+  .trim()
+  .min(1, 'Username is required')
+  .max(40, 'Username is too long')
+  .regex(/^[A-Za-z0-9_]+$/, 'Username can only contain letters, numbers and underscores')
+  .refine((name) => !reservedUsernames.has(name.toLowerCase()), 'That username is reserved')
+
+const createUserSchema = z.object({ username: newUsername, password })
+
+const waitlistSchema = z.object({ username: newUsername })
 
 // Login only checks the shape; the database decides whether the user exists.
 const loginSchema = z.object({
@@ -83,12 +103,19 @@ function submittedUsername(body: unknown): string {
   return typeof username === 'string' ? username : ''
 }
 
+// Why sign-up was refused, for each state where it is closed to a plain sign-up.
+const signupClosedMessages: Record<SignupState, string> = {
+  open: 'Sign-up just changed. Please try again.', // the limits were raised mid-request
+  invite: 'blurt.trade is invite-only right now. You need an invite code to sign up.',
+  waitlist: 'Sign-up is full right now. Join the waitlist instead.',
+}
+
 usersRouter.get('/createUser', async (request, response) => {
   represent(
     request,
     response,
-    { viewer: getViewer(request) },
-    { html: () => renderCreateUserPage(), markdown: createUserMarkdown },
+    { viewer: getViewer(request), signup: await getSignupState() },
+    { html: renderCreateUserPage, markdown: createUserMarkdown },
   )
 })
 
@@ -103,18 +130,29 @@ usersRouter.get('/login', async (request, response) => {
 
 usersRouter.post('/createUser', async (request, response) => {
   const result = createUserSchema.safeParse(request.body ?? {})
-  const rerender = (validationError: string) =>
-    renderCreateUserPage({ username: submittedUsername(request.body), validationError })
+  const rerender = async (validationError: string) =>
+    renderCreateUserPage({
+      viewer: getViewer(request),
+      signup: await getSignupState(),
+      username: submittedUsername(request.body),
+      validationError,
+    })
   if (!result.success) {
     await sendFormErrors(request, response, fieldErrors(result.error), rerender)
     return
   }
 
+  // Hashed before claiming a slot, so the slot's row lock is held as briefly as possible.
   const { username, password } = result.data
   const user = await addUser(username, await hash(password))
-  if (!user) {
+  if (user === 'taken') {
     const errors = [{ field: 'username', message: 'Username is already taken' }]
     await sendFormErrors(request, response, errors, rerender)
+    return
+  }
+  if (user === 'full') {
+    const errors = [{ message: signupClosedMessages[await getSignupState()] }]
+    await sendFormErrors(request, response, errors, rerender, 403)
     return
   }
 
@@ -169,4 +207,59 @@ usersRouter.get('/settings', requireAuth, async (request, response) => {
 usersRouter.post('/api/logout-everywhere', requireAuth, async (request, response) => {
   await endAllSessions(response.locals.authenticatedUser.id, response)
   sendFormSuccess(request, response, { redirect: '/login' })
+})
+
+// Once sign-up is full, people leave the username they'd like here and check back on this
+// page, with ?username=, which also says when sign-up has opened again. No email, so
+// nobody is contacted. See db/migrations/*_signup-limits.sql.
+async function getWaitlistData(request: Request, username: string | null): Promise<WaitlistData> {
+  return {
+    viewer: getViewer(request),
+    signup: await getSignupState(),
+    waiting: await countWaiting(),
+    username,
+    entry: (username && (await getWaitlistEntry(username))) || null,
+  }
+}
+
+usersRouter.get('/waitlist', async (request, response) => {
+  const username = typeof request.query.username === 'string' ? request.query.username : ''
+  represent(request, response, await getWaitlistData(request, username.trim() || null), {
+    html: (data) => renderWaitlistPage(data),
+    markdown: waitlistMarkdown,
+  })
+})
+
+usersRouter.post('/waitlist', async (request, response) => {
+  const result = waitlistSchema.safeParse(request.body ?? {})
+  const rerender = async (validationError: string) =>
+    renderWaitlistPage(await getWaitlistData(request, null), {
+      username: submittedUsername(request.body),
+      validationError,
+    })
+  if (!result.success) {
+    await sendFormErrors(request, response, fieldErrors(result.error), rerender)
+    return
+  }
+
+  const signup = await getSignupState()
+  if (signup !== 'waitlist') {
+    const message =
+      signup === 'open'
+        ? 'Sign-up is open, so there is no waitlist. Create a profile instead.'
+        : signupClosedMessages.invite
+    await sendFormErrors(request, response, [{ message }], rerender, 403)
+    return
+  }
+
+  const { username } = result.data
+  if (await getUserByUsername(username)) {
+    const errors = [{ field: 'username', message: 'Username is already taken' }]
+    await sendFormErrors(request, response, errors, rerender)
+    return
+  }
+
+  const entry = await joinWaitlist(username)
+  const location = `/waitlist?username=${encodeURIComponent(entry.username)}`
+  sendFormSuccess(request, response, { redirect: location, data: entry, status: 201, location })
 })

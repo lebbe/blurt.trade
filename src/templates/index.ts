@@ -2,7 +2,14 @@ import { h } from 'preact'
 import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
-import type { Blurt, FeedItem, FollowStats, UserProfile } from '../routes/state.ts'
+import type {
+  Blurt,
+  FeedItem,
+  FollowStats,
+  SignupState,
+  UserProfile,
+  WaitlistEntry,
+} from '../routes/state.ts'
 
 const html = htm.bind(h)
 
@@ -53,8 +60,21 @@ export type ProfilePageData = {
 
 export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
 
-// Login and sign-up have no data of their own.
+// Login has no data of its own.
 export type FormPageData = { viewer: Viewer }
+
+// `signup` says whether the sign-up form is open, needs an invite code, or is full.
+export type SignupPageData = { viewer: Viewer; signup: SignupState }
+
+// `waiting`: how many are on the waitlist. `username` is the one looked up with
+// ?username=, and `entry` its waitlist entry (null if it has none).
+export type WaitlistData = {
+  viewer: Viewer
+  signup: SignupState
+  waiting: number
+  username: string | null
+  entry: WaitlistEntry | null
+}
 
 // `activeSessions`: how many browsers and devices the viewer is logged in on.
 export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
@@ -67,12 +87,14 @@ type ComposerProps = {
   button?: string
 }
 
-type CreateUserProps = {
+type FormProps = {
   username?: string
   validationError?: string
 }
 
-type LoginProps = CreateUserProps
+type CreateUserProps = SignupPageData & FormProps
+
+type LoginProps = FormProps
 
 type ProfileEditProps = ProfileEditData & { validationError?: string }
 
@@ -93,7 +115,91 @@ function Composer({
   `
 }
 
-function CreateUserForm({ username = '', validationError }: CreateUserProps) {
+function ValidationError({ message }: { message?: string }) {
+  return message ? html`<p class="validation-error" role="alert">${message}</p>` : null
+}
+
+// The sign-up page in each state. Invite-only shows no form until invite codes exist.
+function CreateUserPage({ signup, username, validationError }: CreateUserProps) {
+  if (signup === 'open') {
+    return html`<${CreateUserForm} username=${username} validationError=${validationError} />`
+  }
+  if (signup === 'invite') {
+    return html`
+      <section class="signup-closed" aria-label="Invite only">
+        <${ValidationError} message=${validationError} />
+        <h2>Invite only</h2>
+        <p>
+          blurt.trade is invite-only right now. You need an invite code from someone who's already
+          here to sign up.
+        </p>
+        <p>Already have a profile? <a href="/login">Log in</a>.</p>
+      </section>
+    `
+  }
+  return html`
+    <section class="signup-closed" aria-label="Waitlist">
+      <h2>Sign-up is full</h2>
+      <p>
+        blurt.trade isn't taking new profiles right now. Leave the username you'd like and check
+        back on the <a href="/waitlist">waitlist page</a>: it says when sign-up opens again.
+      </p>
+      <${WaitlistForm} username=${username} validationError=${validationError} />
+      <p>Already have a profile? <a href="/login">Log in</a>.</p>
+    </section>
+  `
+}
+
+// Only a username: no email, so we never store anything personal or contact anyone.
+function WaitlistForm({ username = '', validationError }: FormProps) {
+  return html`
+    <form method="post" action="/waitlist">
+      <${ValidationError} message=${validationError} />
+      <label>Username <input name="username" maxlength="40" required value=${username} /></label>
+      <button type="submit">Join the waitlist</button>
+    </form>
+  `
+}
+
+function WaitlistPage({
+  signup,
+  waiting,
+  username: lookedUp,
+  entry,
+  form,
+}: WaitlistData & { form?: FormProps }) {
+  const status = entry
+    ? entry.status === 'joined'
+      ? html`<p><a href="/${entry.username}/">${entry.username}</a> has signed up.</p>`
+      : html`<p>${entry.username} is on the waitlist.</p>`
+    : lookedUp && html`<p>${lookedUp} isn't on the waitlist.</p>`
+  const opening =
+    signup === 'open'
+      ? html`<p>Sign-up is open again: <a href="/createUser">create your profile</a>.</p>`
+      : signup === 'invite'
+        ? html`<p>Sign-up has reopened, with an invite code: <a href="/createUser">sign up</a>.</p>`
+        : html`<p>Sign-up is full. When it opens again, this page will say so.</p>`
+  return html`
+    <header>
+      <h1>Waitlist</h1>
+      <p><a href="/">Back to blurt.trade</a></p>
+    </header>
+    <main>
+      ${status} ${opening}
+      <p>${plural(waiting, 'person', 'people')} waiting.</p>
+      ${
+        signup === 'waitlist' &&
+        html`<${WaitlistForm} ...${form ?? {}} />
+          <p>
+            We don't take an email address, so we can't tell you when you're in. Bookmark this page
+            after joining and check back.
+          </p>`
+      }
+    </main>
+  `
+}
+
+function CreateUserForm({ username = '', validationError }: FormProps) {
   return html`
     <form method="post" action="/createUser">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
@@ -663,9 +769,16 @@ export function renderLoginPage(props: LoginProps = {}): string {
   return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(LoginForm, props) }))
 }
 
-export function renderCreateUserPage(props: CreateUserProps = {}): string {
+export function renderCreateUserPage(props: CreateUserProps): string {
   return (
-    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(CreateUserForm, props) }))
+    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(CreateUserPage, props) }))
+  )
+}
+
+export function renderWaitlistPage(data: WaitlistData, form?: FormProps): string {
+  return (
+    '<!doctype html>' +
+    renderToString(h(IndexDocument, { children: h(WaitlistPage, { ...data, form }) }))
   )
 }
 

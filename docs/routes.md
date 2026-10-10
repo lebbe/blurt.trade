@@ -2,12 +2,12 @@
 
 One path per resource. The `Accept` header picks the representation, not the URL:
 
-| `Accept`                        | Response                                          |
-| ------------------------------- | ------------------------------------------------- |
-| `text/html`, `*/*`, none        | The HTML page                                     |
-| `application/json`              | The data the page is rendered from, as is         |
-| `text/markdown` or `text/plain` | The same data as Markdown (forms are described)   |
-| anything else                   | `406 Not Acceptable`                              |
+| `Accept`                        | Response                                        |
+| ------------------------------- | ----------------------------------------------- |
+| `text/html`, `*/*`, none        | The HTML page                                   |
+| `application/json`              | The data the page is rendered from, as is       |
+| `text/markdown` or `text/plain` | The same data as Markdown (forms are described) |
+| anything else                   | `406 Not Acceptable`                            |
 
 Each GET route fetches its data once and hands it to `represent()` in
 `src/negotiate.ts`, which sends it as JSON or renders it with the page's HTML template
@@ -29,7 +29,8 @@ carry `Vary: Accept`.
 | `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                | 400, 404 no such blurt  |
 | `/:username/edit` | owner | `{ viewer, profile }`                                              | 401, 403 not owner, 404 |
 | `/login`          | —     | `{ viewer }`                                                       |                         |
-| `/createUser`     | —     | `{ viewer }`                                                       |                         |
+| `/createUser`     | —     | `{ viewer, signup }`                                               |                         |
+| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                     |                         |
 | `/settings`       | yes   | `{ viewer, activeSessions }`                                       | 401                     |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
@@ -53,6 +54,10 @@ carry `Vary: Accept`.
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,
   linkedin, bio }`. Empty fields are `''`.
+- `signup` is `'open'`, `'invite'` or `'waitlist'` (see Sign-up limits below).
+  `/waitlist?username=<name>` looks that name up: `username` echoes it (or `null`), and
+  `entry` is `{ username, status: 'waiting' | 'joined', createdAt }` or `null`. `waiting`
+  is how many entries are still waiting.
 - `activeSessions` is how many browsers and devices the viewer is logged in on.
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
 
@@ -62,31 +67,54 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path                     | Auth  | Body                               | Form success      | JSON success                                   |
-| ------------------------ | ----- | ---------------------------------- | ----------------- | ---------------------------------------------- |
-| `/createUser`            | —     | `username`, `password`             | 303 → `/`         | 201 `{ id, username }`, Location `/:username/` |
-| `/login`                 | —     | `username`, `password`             | 303 → `/`         | 200 `{ id, username }`                         |
-| `/:username/edit`        | owner | profile fields (missing → cleared) | 303 → profile     | 200 the updated `profile`                      |
-| `/api/blurts`            | yes   | `text`, optional `parentId`        | 303 → feed/parent | 201 the new `Blurt`, Location `/:username/:id` |
-| `/api/follow`            | yes   | `username`                         | 303 → profile     | 200 their `follows`                            |
-| `/api/unfollow`          | yes   | `username`                         | 303 → profile     | 200 their `follows`                            |
-| `/api/logout`            | —     | —                                  | 303 → `/`         | 204                                            |
-| `/api/logout-everywhere` | yes   | —                                  | 303 → `/login`    | 204                                            |
+| Path                     | Auth  | Body                               | Form success                | JSON success                                   |
+| ------------------------ | ----- | ---------------------------------- | --------------------------- | ---------------------------------------------- |
+| `/createUser`            | —     | `username`, `password`             | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/waitlist`              | —     | `username`                         | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
+| `/login`                 | —     | `username`, `password`             | 303 → `/`                   | 200 `{ id, username }`                         |
+| `/:username/edit`        | owner | profile fields (missing → cleared) | 303 → profile               | 200 the updated `profile`                      |
+| `/api/blurts`            | yes   | `text`, optional `parentId`        | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/follow`            | yes   | `username`                         | 303 → profile               | 200 their `follows`                            |
+| `/api/unfollow`          | yes   | `username`                         | 303 → profile               | 200 their `follows`                            |
+| `/api/logout`            | —     | —                                  | 303 → `/`                   | 204                                            |
+| `/api/logout-everywhere` | yes   | —                                  | 303 → `/login`              | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the session cookies, for JSON callers too.
 
+## Sign-up limits
+
+One row in `signup_counter` holds the number of sign-ups so far and two limits. The
+sign-up page (`signup` in its data) is in one of three states:
+
+| State      | When                            | `/createUser` shows                 | `POST /createUser` |
+| ---------- | ------------------------------- | ----------------------------------- | ------------------ |
+| `open`     | count below `soft_limit`        | the sign-up form                    | creates the user   |
+| `invite`   | `soft_limit` up to `hard_limit` | "invite-only", no form (codes: 011) | 403                |
+| `waitlist` | count at `hard_limit`           | "full", and the waitlist form       | 403                |
+
+Sign-up claims a slot with one `UPDATE ... WHERE current_count < limit RETURNING` in the
+same transaction as creating the user, so concurrent sign-ups never pass the limit. A
+taken username rolls the transaction back, releasing the slot. The 403 carries
+`{ errors: [{ message }] }` for JSON, or the page in its current state for forms.
+
+`POST /waitlist` only works in the `waitlist` state (403 otherwise). It takes a username
+and nothing else, so no personal data is stored and nobody is contacted: people check
+back at `/waitlist?username=<name>`, which says when sign-up has opened again. Joining
+twice does nothing; a username that already has a profile is a 400. Signing up with a
+waitlisted username marks its entry `joined`. A waitlisted username isn't reserved.
+
 ## Sessions
 
 Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 `Secure` in production). The code and the reasoning are in `src/middleware/auth.ts`.
 
-| Cookie          | Lifetime | Checked by                                                    |
-| --------------- | -------- | ------------------------------------------------------------- |
-| `access_token`  | 5 min    | its signature only, no database                               |
-| `refresh_token` | 400 days | one row in `sessions`, then rotated to the next generation    |
+| Cookie          | Lifetime | Checked by                                                 |
+| --------------- | -------- | ---------------------------------------------------------- |
+| `access_token`  | 5 min    | its signature only, no database                            |
+| `refresh_token` | 400 days | one row in `sessions`, then rotated to the next generation |
 
 - When the access token is missing or expired, any request (page load, form POST,
   `fetch()`) with a valid refresh token gets a new pair, transparently. Each refresh
@@ -100,10 +128,10 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 
 ## Errors
 
-| Case                    | Form / HTML                         | JSON                                           |
-| ----------------------- | ----------------------------------- | ---------------------------------------------- |
-| Validation (400)        | The form page again, with the error | `{ errors: [{ field?, message }] }`            |
-| 401, 403, 404, bad JSON | Plain-text message                  | `{ error: message }`                           |
+| Case                    | Form / HTML                         | JSON                                |
+| ----------------------- | ----------------------------------- | ----------------------------------- |
+| Validation (400)        | The form page again, with the error | `{ errors: [{ field?, message }] }` |
+| 401, 403, 404, bad JSON | Plain-text message                  | `{ error: message }`                |
 
 `field` names the input the error is about (`username`, `text`, `homepage`, ...). It is
 left out when the error is about the whole form, e.g. a wrong username or password.

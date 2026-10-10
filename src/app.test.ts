@@ -90,8 +90,22 @@ setEmbedder(async (texts) =>
 test.before(() => migrate(process.env.DATABASE_URL))
 
 test.beforeEach(async () => {
-  await db().query('TRUNCATE users, user_profiles, blurts RESTART IDENTITY CASCADE')
+  await db().query('TRUNCATE users, user_profiles, blurts, waitlist RESTART IDENTITY CASCADE')
+  await setSignupLimits(1000, 10000)
 })
+
+// Also resets the count, so the limits apply from zero sign-ups.
+async function setSignupLimits(softLimit: number, hardLimit: number): Promise<void> {
+  await db().query(
+    'UPDATE signup_counter SET current_count = 0, soft_limit = $1, hard_limit = $2',
+    [softLimit, hardLimit],
+  )
+}
+
+async function signupCount(): Promise<number> {
+  const { rows } = await db().query('SELECT current_count FROM signup_counter')
+  return rows[0].current_count
+}
 
 test.after(async () => {
   await embedPendingBlurts()
@@ -612,7 +626,14 @@ test('serves every GET page as JSON with the data the HTML is rendered from', as
     [`/Lars/${replyId}`, (data) => assert.equal(data.parent.text, 'Original blurt')],
     ['/Lars/edit', (data) => assert.equal(data.profile.bio, '')],
     ['/login', (data) => assert.deepEqual(Object.keys(data), ['viewer'])],
-    ['/createUser', (data) => assert.deepEqual(Object.keys(data), ['viewer'])],
+    ['/createUser', (data) => assert.equal(data.signup, 'open')],
+    [
+      '/waitlist',
+      (data) => {
+        assert.deepEqual(Object.keys(data), ['viewer', 'signup', 'waiting', 'username', 'entry'])
+        assert.equal(data.waiting, 0)
+      },
+    ],
   ]
 
   for (const [path, check] of pages) {
@@ -641,6 +662,7 @@ test('serves every GET page as Markdown', async () => {
     ['/Lars/edit', /^# Edit profile: Lars\n[^]*`POST \/Lars\/edit`/],
     ['/login', /^# Log in\n[^]*`POST \/login`/],
     ['/createUser', /^# Create a profile\n[^]*`POST \/createUser`/],
+    ['/waitlist', /^# Waitlist\n[^]*0 people waiting/],
   ]
 
   for (const [path, expected] of pages) {
@@ -1266,4 +1288,115 @@ test('refuses to start in production without a strong JWT_SECRET', () => {
     assert.match(result.stderr, /JWT_SECRET/)
   }
   assert.equal(load('x'.repeat(32)).status, 0)
+})
+
+test('sign-up is open below the soft limit, and counts every sign-up', async () => {
+  const form = await request('GET', '/createUser')
+  assert.match(form.body, /action="\/createUser"/)
+  assert.doesNotMatch(form.body, /action="\/waitlist"/)
+
+  await createSession('Lars')
+  assert.equal(await signupCount(), 1)
+})
+
+test('a taken username releases the slot it claimed', async () => {
+  // One slot left after Lars. Ada only gets it if the taken name gave it back.
+  await setSignupLimits(2, 2)
+  await createSession('Lars')
+  const taken = await sendJson('/createUser', { username: 'lars', password: 'correct-horse' })
+  assert.equal(taken.statusCode, 400)
+  assert.equal(await signupCount(), 1)
+
+  const created = await sendJson('/createUser', { username: 'Ada', password: 'correct-horse' })
+  assert.equal(created.statusCode, 201)
+  assert.equal(await signupCount(), 2)
+})
+
+test('at the soft limit, sign-up needs an invite', async () => {
+  await setSignupLimits(1, 10)
+  await createSession('Lars')
+
+  const form = await request('GET', '/createUser')
+  assert.match(form.body, /invite-only/)
+  assert.doesNotMatch(form.body, /action="\/createUser"/)
+  const data = JSON.parse((await request('GET', '/createUser', '', json)).body)
+  assert.equal(data.signup, 'invite')
+  const markdown = await request('GET', '/createUser', '', { accept: 'text/markdown' })
+  assert.match(markdown.body, /invite-only/)
+
+  const refused = await request('POST', '/createUser', 'username=Ada&password=correct-horse')
+  assert.equal(refused.statusCode, 403)
+  assert.match(refused.body, /role="alert">blurt\.trade is invite-only/)
+  const refusedJson = await sendJson('/createUser', { username: 'Ada', password: 'correct-horse' })
+  assert.equal(refusedJson.statusCode, 403)
+  assert.match(JSON.parse(refusedJson.body).errors[0].message, /invite-only/)
+  assert.equal(await getUserByUsername('Ada'), undefined)
+  assert.equal(await signupCount(), 1)
+
+  const waitlist = await request('POST', '/waitlist', 'username=Ada')
+  assert.equal(waitlist.statusCode, 403)
+})
+
+test('at the hard limit, sign-up closes and the waitlist takes a username only', async () => {
+  await setSignupLimits(1, 1)
+  await createSession('Lars')
+
+  const form = await request('GET', '/createUser')
+  assert.match(form.body, /Sign-up is full/)
+  assert.match(form.body, /action="\/waitlist"/)
+  assert.doesNotMatch(form.body, /action="\/createUser"/)
+  const refused = await request('POST', '/createUser', 'username=Ada&password=correct-horse')
+  assert.equal(refused.statusCode, 403)
+  assert.match(refused.body, /Join the waitlist instead/)
+  assert.match(refused.body, /action="\/waitlist"/)
+
+  const joined = await request('POST', '/waitlist', 'username=Ada')
+  assert.equal(joined.statusCode, 303)
+  assert.equal(joined.location, '/waitlist?username=Ada')
+  const again = await sendJson('/waitlist', { username: 'ada' })
+  assert.equal(again.statusCode, 201)
+  assert.equal(JSON.parse(again.body).username, 'Ada')
+  assert.equal(JSON.parse(again.body).status, 'waiting')
+
+  const page = await request('GET', '/waitlist?username=ada')
+  assert.match(page.body, /Ada is on the waitlist/)
+  assert.match(page.body, /1 person waiting/)
+  assert.match(page.body, /When it opens again/)
+  const unknown = await request('GET', '/waitlist?username=Bob')
+  assert.match(unknown.body, /Bob isn(&#39;|')t on the waitlist/)
+
+  const taken = await sendJson('/waitlist', { username: 'LARS' })
+  assert.equal(taken.statusCode, 400)
+  const reserved = await sendJson('/waitlist', { username: 'login' })
+  assert.equal(reserved.statusCode, 400)
+
+  // Raising the limits reopens sign-up, and the waitlist page says so.
+  await db().query('UPDATE signup_counter SET soft_limit = 10, hard_limit = 10')
+  assert.match((await request('GET', '/waitlist?username=Ada')).body, /Sign-up is open again/)
+  await createSession('Ada')
+  const done = JSON.parse((await request('GET', '/waitlist?username=Ada', '', json)).body)
+  assert.equal(done.entry.status, 'joined')
+  assert.equal(done.waiting, 0)
+})
+
+test('the waitlist is closed while sign-up is open', async () => {
+  const response = await sendJson('/waitlist', { username: 'Ada' })
+  assert.equal(response.statusCode, 403)
+  assert.match(JSON.parse(response.body).errors[0].message, /Sign-up is open/)
+})
+
+test('concurrent sign-ups never pass the hard limit', async () => {
+  await setSignupLimits(5, 5)
+  const responses = await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      sendJson('/createUser', { username: `racer${i}`, password: 'correct-horse' }),
+    ),
+  )
+
+  const statuses = responses.map((response) => response.statusCode)
+  assert.equal(statuses.filter((status) => status === 201).length, 5)
+  assert.equal(statuses.filter((status) => status === 403).length, 15)
+  const { rows } = await db().query('SELECT count(*)::int AS count FROM users')
+  assert.equal(rows[0].count, 5)
+  assert.equal(await signupCount(), 5)
 })

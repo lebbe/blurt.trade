@@ -70,14 +70,16 @@ export function fieldErrors(error: ZodError): FieldError[] {
   )
 }
 
-// A failed form POST: 400 with the errors as JSON, or the form page re-rendered with them.
+// A failed form POST: 400 (or `status`) with the errors as JSON, or the form page
+// re-rendered with them.
 export async function sendFormErrors(
   request: Request,
   response: Response,
   errors: FieldError[],
   renderPage: (message: string) => string | Promise<string>,
+  status = 400,
 ): Promise<void> {
-  response.vary('Accept').status(400)
+  response.vary('Accept').status(status)
   if (wantsJson(request)) {
     response.type('json').send(toJson({ errors }))
   } else {

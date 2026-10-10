@@ -214,21 +214,102 @@ export async function addBlurt(
   return rows[0]?.id
 }
 
-// Creates the user and an empty profile in one statement.
-// Returns undefined if the username is already taken.
-export async function addUser(username: string, passwordHash: string): Promise<User | undefined> {
-  const { rows } = await db().query<User>(
-    `WITH new_user AS (
-       INSERT INTO users (username, password_hash) VALUES ($1, $2)
-       ON CONFLICT DO NOTHING -- username taken, in any letter case
-       RETURNING id, username, password_hash
-     ), new_profile AS (
-       INSERT INTO user_profiles (user_id) SELECT id FROM new_user
-     )
-     SELECT id, username, password_hash AS "passwordHash" FROM new_user`,
-    [username, passwordHash],
+// Whether new people can sign up right now: 'open' below the soft limit, 'invite' (an
+// invite code is needed) from the soft limit up to the hard limit, 'waitlist' at the hard
+// limit. The limits live in the signup_counter row, so they can be raised without a deploy.
+export type SignupState = 'open' | 'invite' | 'waitlist'
+
+export async function getSignupState(): Promise<SignupState> {
+  const { rows } = await db().query<{ state: SignupState }>(
+    `SELECT CASE WHEN current_count < soft_limit THEN 'open'
+                 WHEN current_count < hard_limit THEN 'invite'
+                 ELSE 'waitlist' END AS state
+     FROM signup_counter`,
+  )
+  return rows[0].state
+}
+
+// Claims a sign-up slot and creates the user and an empty profile, in one transaction.
+// `limit` is the limit the slot must be under: the soft limit for open sign-up, the hard
+// limit for sign-up with an invite code. Returns 'taken' if the username is taken and
+// 'full' if there was no slot left; in both cases nothing is claimed.
+export async function addUser(
+  username: string,
+  passwordHash: string,
+  limit: 'soft_limit' | 'hard_limit' = 'soft_limit',
+): Promise<User | 'taken' | 'full'> {
+  const client = await db().connect()
+  try {
+    await client.query('BEGIN')
+    // Concurrent sign-ups queue on this row's lock, and each re-checks the WHERE once the
+    // one before it commits, so the count never passes the limit. The lock is held until
+    // COMMIT, so nothing slow (like hashing the password) happens inside this transaction.
+    const slot = await client.query(
+      `UPDATE signup_counter SET current_count = current_count + 1
+       WHERE current_count < ${limit === 'hard_limit' ? 'hard_limit' : 'soft_limit'}
+       RETURNING current_count`,
+    )
+    if (slot.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return 'full'
+    }
+
+    const { rows } = await client.query<User>(
+      `WITH new_user AS (
+         INSERT INTO users (username, password_hash) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING -- username taken, in any letter case
+         RETURNING id, username, password_hash
+       ), new_profile AS (
+         INSERT INTO user_profiles (user_id) SELECT id FROM new_user
+       ), joined AS (
+         UPDATE waitlist SET status = 'joined'
+         WHERE lower(username) = lower($1) AND EXISTS (SELECT 1 FROM new_user)
+       )
+       SELECT id, username, password_hash AS "passwordHash" FROM new_user`,
+      [username, passwordHash],
+    )
+    if (!rows[0]) {
+      await client.query('ROLLBACK') // releases the slot
+      return 'taken'
+    }
+    await client.query('COMMIT')
+    return rows[0]
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Someone who asked to be let in once sign-up was full. No personal data: only the
+// username they'd like, which isn't reserved for them.
+export type WaitlistEntry = {
+  username: string
+  status: 'waiting' | 'joined'
+  createdAt: Date
+}
+
+// Adds the username to the waitlist. Joining twice, in any letter case, does nothing.
+export async function joinWaitlist(username: string): Promise<WaitlistEntry> {
+  await db().query('INSERT INTO waitlist (username) VALUES ($1) ON CONFLICT DO NOTHING', [username])
+  return (await getWaitlistEntry(username))!
+}
+
+export async function getWaitlistEntry(username: string): Promise<WaitlistEntry | undefined> {
+  const { rows } = await db().query<WaitlistEntry>(
+    `SELECT username, status, created_at AS "createdAt" FROM waitlist
+     WHERE lower(username) = lower($1)`,
+    [username],
   )
   return rows[0]
+}
+
+export async function countWaiting(): Promise<number> {
+  const { rows } = await db().query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM waitlist WHERE status = 'waiting'`,
+  )
+  return rows[0].count
 }
 
 export async function getUserByUsername(username: string): Promise<User | undefined> {

@@ -12,7 +12,9 @@ import {
   type ProfileEditData,
   type ProfilePageData,
   type SettingsData,
+  type SignupPageData,
   type Viewer,
+  type WaitlistData,
 } from './index.ts'
 import { code, join, link, md, raw, type Markdown } from './markdown.ts'
 
@@ -203,13 +205,63 @@ export function loginMarkdown({ viewer }: FormPageData): Markdown {
   return formMarkdown('Log in', '/login', md`${code('username')} and ${code('password')}`, viewer)
 }
 
-export function createUserMarkdown({ viewer }: FormPageData): Markdown {
+const usernameRules = md`${code('username')} (letters, numbers and ${code('_')})`
+
+export function createUserMarkdown({ viewer, signup }: SignupPageData): Markdown {
+  if (signup === 'invite') {
+    return md`
+      # Create a profile
+
+      ${home}
+
+      blurt.trade is invite-only right now. You need an invite code from someone who's already
+      here to sign up.
+    `
+  }
+  if (signup === 'waitlist') {
+    return md`
+      # Create a profile
+
+      ${home}
+
+      Sign-up is full right now. Join the ${link('waitlist', '/waitlist')} instead.
+    `
+  }
   return formMarkdown(
     'Create a profile',
     '/createUser',
-    md`${code('username')} (letters, numbers and ${code('_')}) and ${code('password')} (at least 8 characters)`,
+    md`${usernameRules} and ${code('password')} (at least 8 characters)`,
     viewer,
   )
+}
+
+export function waitlistMarkdown({ signup, waiting, username, entry }: WaitlistData): Markdown {
+  const status = entry
+    ? entry.status === 'joined'
+      ? md`${link(entry.username, `/${entry.username}/`)} has signed up.`
+      : md`${entry.username} is on the waitlist.`
+    : username && md`${username} isn't on the waitlist.`
+  const opening =
+    signup === 'open'
+      ? md`Sign-up is open again: ${link('create your profile', '/createUser')}.`
+      : signup === 'invite'
+        ? md`Sign-up has reopened, with an invite code: ${link('sign up', '/createUser')}.`
+        : md`
+Sign-up is full. When it opens again, this page will say so.
+          `
+  return md`
+    # Waitlist
+
+    ${home}
+
+    ${status}
+
+    ${opening}
+
+    ${plural(waiting, 'person', 'people')} waiting.
+
+    ${signup === 'waitlist' && md`Send ${code('POST /waitlist')} as a form or as JSON with ${usernameRules}. No email: check back at ${code('/waitlist?username=<username>')}.`}
+  `
 }
 
 export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Markdown {
