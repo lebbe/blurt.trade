@@ -42,6 +42,10 @@ export type UserProfileInput = Omit<UserProfile, 'userId' | 'username'>
 
 const pageSize = 100
 const feedRepliesPerBlurt = 2
+// Following more than this many accounts makes / the following feed. Up to it, / is the
+// everyone feed with the latest few blurts from followed accounts on top.
+export const followingFeedThreshold = 10
+const followedHighlightsLimit = 5
 const relatedLimit = 5
 // Cosine distance (0 = same meaning, 1 = unrelated). With all-MiniLM-L6-v2, short blurts on
 // the same topic land around 0.6-0.7 and unrelated ones above 0.8.
@@ -88,9 +92,10 @@ async function listPage(
   params: unknown[],
   cursor: Cursor | null,
   order: 'newest first' | 'oldest first',
+  size = pageSize,
 ): Promise<Page<Blurt>> {
   const [direction, comparison] = order === 'newest first' ? ['DESC', '<'] : ['ASC', '>']
-  const values = [...params, pageSize + 1]
+  const values = [...params, size + 1]
   const limit = `$${values.length}`
   let keyset = ''
   if (cursor) {
@@ -103,8 +108,8 @@ async function listPage(
      ORDER BY b.created_at ${direction}, b.id ${direction} LIMIT ${limit}`,
     values,
   )
-  const items = rows.slice(0, pageSize)
-  const last = rows.length > pageSize ? items.at(-1) : undefined
+  const items = rows.slice(0, size)
+  const last = rows.length > size ? items.at(-1) : undefined
   const next = last?.cursorAt ? encodeCursor({ createdAt: last.cursorAt, id: last.id }) : null
   for (const item of items) {
     delete item.cursorAt
@@ -115,9 +120,38 @@ async function listPage(
 const profileColumns = `p.user_id AS "userId", u.username, p.homepage, p.x, p.instagram,
   p.tiktok, p.youtube, p.github, p.linkedin, p.bio`
 
+// Top-level blurts from accounts the user follows. The planner walks each followed user's
+// (user_id, created_at DESC, id DESC) index.
+const followedWhere = `b.parent_id IS NULL
+  AND b.user_id IN (SELECT followed_user_id FROM follows WHERE user_id = $1)`
+
 // Top-level blurts older than `before`, newest first, each with its latest replies.
-export async function listFeed(before: Cursor | null = null): Promise<Page<FeedItem>> {
-  const { items: blurts, next } = await listPage('b.parent_id IS NULL', [], before, 'newest first')
+// With `followedBy`, only blurts from accounts that user follows (the following feed).
+export async function listFeed(
+  before: Cursor | null = null,
+  followedBy: number | null = null,
+): Promise<Page<FeedItem>> {
+  const page =
+    followedBy === null
+      ? await listPage('b.parent_id IS NULL', [], before, 'newest first')
+      : await listPage(followedWhere, [followedBy], before, 'newest first')
+  return { items: await withReplies(page.items), next: page.next }
+}
+
+// The latest few blurts from accounts the user follows, for the top of the everyone feed.
+export async function listFollowedHighlights(userId: number): Promise<FeedItem[]> {
+  const { items } = await listPage(
+    followedWhere,
+    [userId],
+    null,
+    'newest first',
+    followedHighlightsLimit,
+  )
+  return withReplies(items)
+}
+
+// Adds each blurt's latest replies, oldest of those first.
+async function withReplies(blurts: Blurt[]): Promise<FeedItem[]> {
   const { rows: replies } = await db().query<Blurt>(
     `SELECT r.* FROM unnest($1::bigint[]) AS p(id) CROSS JOIN LATERAL (
        SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
@@ -125,13 +159,10 @@ export async function listFeed(before: Cursor | null = null): Promise<Page<FeedI
      ) r ORDER BY r."createdAt", r.id`,
     [blurts.map((blurt) => blurt.id), feedRepliesPerBlurt],
   )
-  return {
-    items: blurts.map((blurt) => ({
-      ...blurt,
-      replies: replies.filter((reply) => reply.parentId === blurt.id),
-    })),
-    next,
-  }
+  return blurts.map((blurt) => ({
+    ...blurt,
+    replies: replies.filter((reply) => reply.parentId === blurt.id),
+  }))
 }
 
 // Older than `before`, newest first, replies included.
@@ -242,4 +273,57 @@ export async function updateUserProfile(
     throw new Error(`Missing profile for user ${userId}`)
   }
   return rows[0]
+}
+
+export async function countFollowing(userId: number): Promise<number> {
+  const { rows } = await db().query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM follows WHERE user_id = $1',
+    [userId],
+  )
+  return rows[0]?.count ?? 0
+}
+
+// Follower and following counts for a profile, and whether the viewer follows it
+// (false for anonymous viewers and on your own profile).
+export type FollowStats = { followerCount: number; followingCount: number; viewerFollows: boolean }
+
+export async function getFollowStats(
+  userId: number,
+  viewerId: number | null,
+): Promise<FollowStats> {
+  const { rows } = await db().query<FollowStats>(
+    `SELECT
+       (SELECT count(*) FROM follows WHERE followed_user_id = $1)::int AS "followerCount",
+       (SELECT count(*) FROM follows WHERE user_id = $1)::int AS "followingCount",
+       EXISTS (SELECT 1 FROM follows WHERE user_id = $2 AND followed_user_id = $1)
+         AS "viewerFollows"`,
+    [userId, viewerId],
+  )
+  return rows[0] ?? { followerCount: 0, followingCount: 0, viewerFollows: false }
+}
+
+// Both are idempotent: following twice or unfollowing someone you don't follow is a no-op.
+// Returns false if the follower no longer exists (e.g. a still-valid token after a reset).
+export async function follow(userId: number, followedUserId: number): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `INSERT INTO follows (user_id, followed_user_id) SELECT id, $2 FROM users WHERE id = $1
+     ON CONFLICT DO NOTHING`,
+    [userId, followedUserId],
+  )
+  return rowCount === 1 || (await isFollowing(userId, followedUserId))
+}
+
+async function isFollowing(userId: number, followedUserId: number): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'SELECT 1 FROM follows WHERE user_id = $1 AND followed_user_id = $2',
+    [userId, followedUserId],
+  )
+  return rowCount === 1
+}
+
+export async function unfollow(userId: number, followedUserId: number): Promise<void> {
+  await db().query('DELETE FROM follows WHERE user_id = $1 AND followed_user_id = $2', [
+    userId,
+    followedUserId,
+  ])
 }

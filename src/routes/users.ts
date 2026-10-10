@@ -23,6 +23,7 @@ export const reservedUsernames = new Set([
   // current routes
   'api',
   'createuser',
+  'everyone',
   'login',
   // likely future pages
   'about',
@@ -32,6 +33,8 @@ export const reservedUsernames = new Set([
   'discover',
   'explore',
   'feed',
+  'followers',
+  'following',
   'help',
   'home',
   'invite',

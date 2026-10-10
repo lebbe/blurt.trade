@@ -137,6 +137,9 @@ test('serves the feed as JSON when requested', async () => {
   assert.equal(response.statusCode, 200)
   assert.deepEqual(JSON.parse(response.body), {
     viewer: null,
+    feed: 'everyone',
+    hasFollowingFeed: false,
+    followedBlurts: [],
     blurts: [
       {
         id: 1,
@@ -886,4 +889,167 @@ test('rejects malformed cursors', async () => {
   }
   const reply = await request('GET', '/Lars/1?after=nonsense', '', json)
   assert.equal(reply.statusCode, 400)
+})
+
+// Users without profiles or real passwords, each with one top-level blurt and one reply to
+// it, for feed tests that don't need to log them in.
+async function insertFollowees(count: number): Promise<void> {
+  await db().query(
+    `WITH new_users AS (
+       INSERT INTO users (username, password_hash)
+       SELECT 'user' || i, 'x' FROM generate_series(1, $1) AS i RETURNING id, username
+     ), top_level AS (
+       INSERT INTO blurts (user_id, text) SELECT id, 'top from ' || username FROM new_users
+       RETURNING id, user_id
+     )
+     INSERT INTO blurts (user_id, text, parent_id) SELECT user_id, 'reply', id FROM top_level`,
+    [count],
+  )
+}
+
+// `username` follows user1 to user<count>.
+async function followFirst(username: string, count: number): Promise<void> {
+  await db().query(
+    `INSERT INTO follows (user_id, followed_user_id)
+     SELECT f.id, u.id FROM users f, users u, generate_series(1, $2) AS i
+     WHERE f.username = $1 AND u.username = 'user' || i`,
+    [username, count],
+  )
+}
+
+test('follows and unfollows from the profile page without JS', async () => {
+  const larsCookie = await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+
+  const before = await request('GET', '/Lars/', '', { cookie: adaCookie })
+  assert.match(before.body, /0 followers · 0 following/)
+  assert.match(before.body, /action="\/api\/follow"[^]*name="username" value="Lars"[^]*>Follow</)
+
+  const followed = await request('POST', '/api/follow', 'username=lars', { cookie: adaCookie })
+  assert.equal(followed.statusCode, 303)
+  assert.equal(followed.location, '/Lars/')
+  // Following twice is harmless.
+  await request('POST', '/api/follow', 'username=Lars', { cookie: adaCookie })
+
+  const after = await request('GET', '/Lars/', '', { cookie: adaCookie })
+  assert.match(after.body, /1 follower · 0 following/)
+  assert.match(after.body, /action="\/api\/unfollow"[^]*>Unfollow</)
+  assert.match((await request('GET', '/Ada/')).body, /0 followers · 1 following/)
+
+  // No follow button on your own profile or for anonymous visitors.
+  const own = await request('GET', '/Lars/', '', { cookie: larsCookie })
+  assert.doesNotMatch(own.body, /api\/(un)?follow/)
+  assert.doesNotMatch((await request('GET', '/Lars/')).body, /api\/(un)?follow/)
+
+  const unfollowed = await request('POST', '/api/unfollow', 'username=Lars', { cookie: adaCookie })
+  assert.equal(unfollowed.statusCode, 303)
+  assert.equal(unfollowed.location, '/Lars/')
+  assert.match((await request('GET', '/Lars/')).body, /0 followers · 0 following/)
+})
+
+test('follow answers JSON callers with the follow stats, and rejects bad follows', async () => {
+  await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+
+  const followed = await request('POST', '/api/follow', 'username=Lars', {
+    ...json,
+    cookie: adaCookie,
+  })
+  assert.equal(followed.statusCode, 200)
+  const stats = { followerCount: 1, followingCount: 0, viewerFollows: true }
+  assert.deepEqual(JSON.parse(followed.body), stats)
+
+  const profile = await request('GET', '/Lars/', '', { ...json, cookie: adaCookie })
+  assert.deepEqual(JSON.parse(profile.body).follows, stats)
+
+  const cases: [string, string, Record<string, string>, number][] = [
+    ['/api/follow', 'username=Ada', { cookie: adaCookie }, 400],
+    ['/api/follow', 'username=nobody', { cookie: adaCookie }, 404],
+    ['/api/follow', 'text=no+username', { cookie: adaCookie }, 404],
+    ['/api/follow', 'username=Lars', {}, 401],
+    ['/api/unfollow', 'username=Lars', {}, 401],
+  ]
+  for (const [path, body, headers, status] of cases) {
+    const response = await request('POST', path, body, { ...json, ...headers })
+    assert.equal(response.statusCode, status, `${path} ${body}`)
+    assert.equal(typeof JSON.parse(response.body).error, 'string')
+  }
+})
+
+test('the front page is the following feed when following more than 10 accounts', async () => {
+  const cookie = await createSession('Ada')
+  await createSession('Zed')
+  await insertFollowees(12)
+  await followFirst('Ada', 11)
+  await insertBlurt('Ada', 'my own blurt', new Date())
+  await insertBlurt('Zed', 'not followed', new Date())
+  await insertBlurt('user12', 'also not followed', new Date())
+
+  const home = JSON.parse((await request('GET', '/', '', { ...json, cookie })).body)
+  assert.equal(home.feed, 'following')
+  assert.equal(home.hasFollowingFeed, true)
+  assert.deepEqual(home.followedBlurts, [])
+  assert.deepEqual(
+    home.blurts.map((blurt: { text: string }) => blurt.text).sort(),
+    Array.from({ length: 11 }, (_, i) => `top from user${i + 1}`).sort(),
+  )
+  // Replies stay inline, as on the everyone feed.
+  assert.deepEqual(
+    home.blurts[0].replies.map((reply: { text: string }) => reply.text),
+    ['reply'],
+  )
+
+  const html = await request('GET', '/', '', { cookie })
+  assert.match(html.body, /<a href="\/" aria-current="page">Following<\/a>/)
+  assert.match(html.body, /<a href="\/everyone">Everyone<\/a>/)
+  assert.doesNotMatch(html.body, /not followed|my own blurt/)
+
+  const everyone = JSON.parse((await request('GET', '/everyone', '', { ...json, cookie })).body)
+  assert.equal(everyone.feed, 'everyone')
+  assert.equal(everyone.blurts.length, 15)
+  const everyoneHtml = await request('GET', '/everyone', '', { cookie })
+  assert.match(everyoneHtml.body, /<a href="\/everyone" aria-current="page">Everyone<\/a>/)
+
+  // Anonymous visitors still get the everyone feed at /.
+  const anonymous = JSON.parse((await request('GET', '/', '', json)).body)
+  assert.equal(anonymous.feed, 'everyone')
+  assert.equal(anonymous.blurts.length, 15)
+})
+
+test('with 10 or fewer follows, the latest 5 from followed accounts top the everyone feed', async () => {
+  const cookie = await createSession('Ada')
+  await insertFollowees(12)
+  await followFirst('Ada', 10)
+  await insertBlurt('user1', 'newest from a followee', new Date(Date.now() + 60_000))
+  await insertBlurt('user12', 'newest of all, not followed', new Date(Date.now() + 120_000))
+
+  const home = JSON.parse((await request('GET', '/', '', { ...json, cookie })).body)
+  assert.equal(home.feed, 'everyone')
+  assert.equal(home.hasFollowingFeed, false)
+  assert.equal(home.blurts.length, 14)
+  assert.equal(home.followedBlurts.length, 5)
+  assert.equal(home.followedBlurts[0].text, 'newest from a followee')
+  for (const blurt of home.followedBlurts) {
+    assert.match(blurt.username, /^user([1-9]|10)$/)
+    assert.equal(blurt.parentId, null)
+  }
+
+  const html = await request('GET', '/', '', { cookie })
+  assert.match(html.body, /<h2>From people you follow<\/h2>[^]*newest from a followee/)
+  assert.doesNotMatch(html.body, /class="tabs"/)
+
+  const markdown = await request('GET', '/', '', { accept: 'text/markdown', cookie })
+  assert.match(markdown.body, /## From people you follow\n\n### user1\n/)
+
+  // Not without follows, and only on the first page.
+  const lars = await createSession('Lars')
+  const larsHome = await request('GET', '/', '', { ...json, cookie: lars })
+  assert.deepEqual(JSON.parse(larsHome.body).followedBlurts, [])
+  await insertBlurts(120)
+  const first = JSON.parse((await request('GET', '/', '', { ...json, cookie })).body)
+  const second = JSON.parse(
+    (await request('GET', `/?before=${first.next}`, '', { ...json, cookie })).body,
+  )
+  assert.equal(first.followedBlurts.length, 5)
+  assert.deepEqual(second.followedBlurts, [])
 })

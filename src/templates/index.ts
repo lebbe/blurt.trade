@@ -2,7 +2,7 @@ import { h } from 'preact'
 import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
-import type { Blurt, FeedItem, UserProfile } from '../routes/state.ts'
+import type { Blurt, FeedItem, FollowStats, UserProfile } from '../routes/state.ts'
 
 const html = htm.bind(h)
 
@@ -16,8 +16,23 @@ export function isWebUrl(value: string): boolean {
 // and as HTML or Markdown through the templates (see src/negotiate.ts).
 export type Viewer = AuthenticatedUser | null
 
-// `next` is the cursor for the page after this one, or null on the last page.
-export type FeedData = { viewer: Viewer; blurts: FeedItem[]; next: string | null }
+// `feed` says which feed `blurts` is. `hasFollowingFeed` is whether the viewer follows
+// enough accounts to get the following feed at `/` (and tabs between the two).
+// `followedBlurts` are the latest from followed accounts, shown on top of the everyone
+// feed until then. `next` is the cursor for the page after this one, or null on the last.
+export type FeedData = {
+  viewer: Viewer
+  feed: 'following' | 'everyone'
+  hasFollowingFeed: boolean
+  followedBlurts: FeedItem[]
+  blurts: FeedItem[]
+  next: string | null
+}
+
+// Where the feed in `data` lives, for its "Older blurts" link.
+export function feedPath({ feed, hasFollowingFeed }: FeedData): string {
+  return feed === 'everyone' && hasFollowingFeed ? '/everyone' : '/'
+}
 
 export type BlurtPageData = {
   viewer: Viewer
@@ -31,6 +46,7 @@ export type BlurtPageData = {
 export type ProfilePageData = {
   viewer: Viewer
   profile: UserProfile
+  follows: FollowStats
   blurts: Blurt[]
   next: string | null
 }
@@ -134,8 +150,8 @@ function NextPageLink({ href, label }: { href: string; label: string }) {
   return html`<p class="next-page"><a href=${href} rel="next">${label}</a></p>`
 }
 
-export function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? 'y' : 'ies'}`
+export function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count === 1 ? one : many}`
 }
 
 // `replies` are shown inline (the feed); the link below covers the rest of the thread.
@@ -153,8 +169,8 @@ function BlurtCard({
     hiddenReplies <= 0
       ? 'Reply'
       : replies.length > 0
-        ? plural(hiddenReplies, 'more repl')
-        : plural(hiddenReplies, 'repl')
+        ? plural(hiddenReplies, 'more reply', 'more replies')
+        : plural(hiddenReplies, 'reply', 'replies')
 
   return html`
     <article class="blurt">
@@ -353,8 +369,19 @@ ${profile.bio}</textarea>
   `
 }
 
-function FeedPage({ viewer, blurts, next, composer }: FeedData & { composer?: ComposerProps }) {
-  const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
+function FeedTabs({ feed }: { feed: FeedData['feed'] }) {
+  return html`
+    <nav class="tabs" aria-label="Feeds">
+      <a href="/" aria-current=${feed === 'following' ? 'page' : undefined}>Following</a>
+      <a href="/everyone" aria-current=${feed === 'everyone' ? 'page' : undefined}>Everyone</a>
+    </nav>
+  `
+}
+
+function FeedPage(data: FeedData & { composer?: ComposerProps }) {
+  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, next, composer } = data
+  const cards = (items: FeedItem[]) =>
+    items.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
 
   return html`
     <header>
@@ -363,16 +390,48 @@ function FeedPage({ viewer, blurts, next, composer }: FeedData & { composer?: Co
     </header>
     <main>
       ${viewer ? html`<${Composer} ...${composer ?? {}} />` : html`<${AnonymousActions} />`}
-      ${viewer && html`<${LogoutForm} />`}
+      ${viewer && html`<${LogoutForm} />`} ${hasFollowingFeed && html`<${FeedTabs} feed=${feed} />`}
+      ${
+        followedBlurts.length > 0 &&
+        html`<section aria-label="From people you follow" class="followed">
+          <h2>From people you follow</h2>
+          ${cards(followedBlurts)}
+        </section>`
+      }
       <section aria-label="Blurts">
-        ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
-        ${next && html`<${NextPageLink} href=${olderBlurtsUrl('/', next)} label="Older blurts" />`}
+        ${
+          blurts.length > 0
+            ? cards(blurts)
+            : html`<p class="empty">
+                ${
+                  feed === 'following'
+                    ? 'Nobody you follow has blurted yet.'
+                    : 'Nothing has been blurted yet.'
+                }
+              </p>`
+        }
+        ${
+          next &&
+          html`<${NextPageLink}
+            href=${olderBlurtsUrl(feedPath(data), next)}
+            label="Older blurts"
+          />`
+        }
       </section>
     </main>
   `
 }
 
-function ProfilePage({ viewer, profile, blurts, next }: ProfilePageData) {
+function FollowForm({ username, following }: { username: string; following: boolean }) {
+  return html`
+    <form method="post" action=${following ? '/api/unfollow' : '/api/follow'} class="follow-form">
+      <input type="hidden" name="username" value=${username} />
+      <button type="submit">${following ? 'Unfollow' : 'Follow'}</button>
+    </form>
+  `
+}
+
+function ProfilePage({ viewer, profile, follows, blurts, next }: ProfilePageData) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
 
   return html`
@@ -381,6 +440,14 @@ function ProfilePage({ viewer, profile, blurts, next }: ProfilePageData) {
       <p class="tagline"><a href="/">Back to blurt.trade</a></p>
     </header>
     <main>
+      <p class="follow-counts">
+        ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
+      </p>
+      ${
+        viewer &&
+        viewer.id !== profile.userId &&
+        html`<${FollowForm} username=${profile.username} following=${follows.viewerFollows} />`
+      }
       <${ProfileData} profile=${profile} canEdit=${viewer?.id === profile.userId} />
       <section aria-label="${profile.username} blurts">
         <h2>Blurts</h2>
@@ -524,6 +591,26 @@ function IndexDocument({ children }: { children: unknown }) {
           }
           section h2 {
             margin-top: 2rem;
+          }
+          .tabs {
+            display: flex;
+            gap: 1rem;
+            margin: 1.5rem 0 0;
+          }
+          .tabs a[aria-current='page'] {
+            font-weight: bold;
+            color: inherit;
+            text-decoration: none;
+          }
+          .follow-counts {
+            margin: 0 0 0.75rem;
+            color: #6d6258;
+          }
+          .follow-form {
+            display: inline-block;
+            border: 0;
+            background: none;
+            padding: 0;
           }
           .next-page {
             margin: 1.5rem 0 0;

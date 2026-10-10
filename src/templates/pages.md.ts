@@ -1,6 +1,7 @@
 import type { Blurt, UserProfile } from '../routes/state.ts'
 import {
   blurtUrl,
+  feedPath,
   isWebUrl,
   moreRepliesUrl,
   olderBlurtsUrl,
@@ -30,7 +31,7 @@ function blurtMarkdown(blurt: Blurt, replies: Blurt[] = []): Markdown {
   return md`
     ### ${blurt.username}
 
-    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'repl')}
+    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}
 
     ${blurt.text}
 
@@ -42,7 +43,8 @@ function blurtList(blurts: Blurt[]): Markdown {
   return md`${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt)) : 'Nothing here yet.'}`
 }
 
-export function feedMarkdown({ viewer, blurts, next }: FeedData): Markdown {
+export function feedMarkdown(data: FeedData): Markdown {
+  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, next } = data
   return md`
     # blurt.trade
 
@@ -50,15 +52,33 @@ export function feedMarkdown({ viewer, blurts, next }: FeedData): Markdown {
 
     ${viewerLine(viewer)}
 
-    ## Feed
+    ${
+      hasFollowingFeed &&
+      (feed === 'following'
+        ? md`Following · ${link('Everyone', '/everyone')}`
+        : md`${link('Following', '/')} · Everyone`)
+    }
+
+    ${
+      followedBlurts.length > 0 &&
+      md`
+        ## From people you follow
+
+        ${followedBlurts.map((blurt) => blurtMarkdown(blurt, blurt.replies))}
+      `
+    }
+
+    ## ${feed === 'following' ? 'Following' : 'Feed'}
 
     ${
       blurts.length > 0
         ? blurts.map((blurt) => blurtMarkdown(blurt, blurt.replies))
-        : 'Nothing has been blurted yet.'
+        : feed === 'following'
+          ? 'Nobody you follow has blurted yet.'
+          : 'Nothing has been blurted yet.'
     }
 
-    ${next && link('Older blurts', olderBlurtsUrl('/', next))}
+    ${next && link('Older blurts', olderBlurtsUrl(feedPath(data), next))}
   `
 }
 
@@ -112,14 +132,29 @@ const profileFields: [keyof UserProfile, string][] = [
   ['bio', 'Bio'],
 ]
 
-export function profilePageMarkdown({ viewer, profile, blurts, next }: ProfilePageData): Markdown {
+export function profilePageMarkdown({
+  viewer,
+  profile,
+  follows,
+  blurts,
+  next,
+}: ProfilePageData): Markdown {
   const fields = profileFields.map(
     ([key, label]) => md`- ${label}: ${profileValue(String(profile[key]))}`,
   )
+  const action = follows.viewerFollows ? '/api/unfollow' : '/api/follow'
   return md`
     # ${profile.username}
 
     ${home}
+
+    ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
+
+    ${
+      viewer &&
+      viewer.id !== profile.userId &&
+      md`${follows.viewerFollows ? 'You follow them. Unfollow' : 'Follow'} with ${code(`POST ${action}`)} and ${code('username')}.`
+    }
 
     ## Profile
 

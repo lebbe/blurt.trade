@@ -1,11 +1,21 @@
-import { Router } from 'express'
+import { Router, type RequestHandler } from 'express'
 import { z } from 'zod'
-import { getViewer, requireAuth } from '../middleware/auth.ts'
-import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
+import { clearAccessToken, getViewer, requireAuth } from '../middleware/auth.ts'
 import {
+  fieldErrors,
+  represent,
+  sendError,
+  sendFormErrors,
+  sendFormSuccess,
+  wantsJson,
+} from '../negotiate.ts'
+import {
+  follow,
+  getFollowStats,
   getUserProfileByUsername,
   listBlurtsByUserId,
   parseCursor,
+  unfollow,
   updateUserProfile,
 } from './state.ts'
 import { isWebUrl, renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
@@ -67,14 +77,15 @@ profilesRouter.get('/:username/', async (request, response) => {
     return
   }
 
-  const [viewer, { items: blurts, next }] = await Promise.all([
-    getViewer(request),
+  const viewer = await getViewer(request)
+  const [follows, { items: blurts, next }] = await Promise.all([
+    getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
   ])
   represent(
     request,
     response,
-    { viewer, profile, blurts, next },
+    { viewer, profile, follows, blurts, next },
     { html: renderProfilePage, markdown: profilePageMarkdown },
   )
 })
@@ -130,3 +141,43 @@ profilesRouter.post('/:username/edit', requireAuth, async (request, response) =>
   const updated = await updateUserProfile(profile.userId, result.data)
   sendFormSuccess(request, response, { redirect: `/${profile.username}/`, data: updated })
 })
+
+// Separate POSTs for follow and unfollow, so a plain form on the profile can send either.
+// Forms go back to the profile; JSON callers get its updated follow stats.
+function followAction(action: 'follow' | 'unfollow'): RequestHandler {
+  return async (request, response) => {
+    const viewer = response.locals.authenticatedUser
+    const username: unknown = request.body?.username
+    const profile =
+      typeof username === 'string' ? await getUserProfileByUsername(username) : undefined
+
+    if (!profile) {
+      sendError(request, response, 404, 'User not found')
+      return
+    }
+
+    if (action === 'unfollow') {
+      await unfollow(viewer.id, profile.userId)
+    } else if (profile.userId === viewer.id) {
+      sendError(request, response, 400, "You can't follow yourself")
+      return
+    } else if (!(await follow(viewer.id, profile.userId))) {
+      // A still-valid token for a user that no longer exists (e.g. after a database reset).
+      clearAccessToken(response)
+      if (wantsJson(request)) {
+        sendError(request, response, 401, 'Authentication required')
+      } else {
+        response.redirect(303, '/')
+      }
+      return
+    }
+
+    sendFormSuccess(request, response, {
+      redirect: `/${profile.username}/`,
+      data: await getFollowStats(profile.userId, viewer.id),
+    })
+  }
+}
+
+profilesRouter.post('/api/follow', requireAuth, followAction('follow'))
+profilesRouter.post('/api/unfollow', requireAuth, followAction('unfollow'))

@@ -21,15 +21,24 @@ carry `Vary: Accept`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path              | Auth  | JSON                                                | Errors                  |
-| ----------------- | ----- | --------------------------------------------------- | ----------------------- |
-| `/`               | —     | `{ viewer, blurts: FeedItem[], next }`              | 400 bad cursor          |
-| `/:username/`     | —     | `{ viewer, profile, blurts: Blurt[], next }`        | 400, 404 no such user   |
-| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }` | 400, 404 no such blurt  |
-| `/:username/edit` | owner | `{ viewer, profile }`                               | 401, 403 not owner, 404 |
-| `/login`          | —     | `{ viewer }`                                        |                         |
-| `/createUser`     | —     | `{ viewer }`                                        |                         |
+| Path              | Auth  | JSON                                                               | Errors                  |
+| ----------------- | ----- | ------------------------------------------------------------------ | ----------------------- |
+| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, next }` | 400 bad cursor          |
+| `/everyone`       | —     | the same, always the everyone feed                                 | 400 bad cursor          |
+| `/:username/`     | —     | `{ viewer, profile, follows, blurts: Blurt[], next }`              | 400, 404 no such user   |
+| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                | 400, 404 no such blurt  |
+| `/:username/edit` | owner | `{ viewer, profile }`                                              | 401, 403 not owner, 404 |
+| `/login`          | —     | `{ viewer }`                                                       |                         |
+| `/createUser`     | —     | `{ viewer }`                                                       |                         |
 
+- `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
+  follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
+  everyone feed (`feed: 'everyone'`), and if you follow anyone, `followedBlurts` holds
+  the latest 5 top-level blurts from them, shown on top of the first page (empty
+  otherwise). `hasFollowingFeed` says whether you get the following feed, and with it
+  Following / Everyone tabs. `/everyone` is the everyone feed for everybody.
+- `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
+  `false` for anonymous visitors and on your own profile.
 - `Blurt` is `{ id, username, text, createdAt, parentId, replyCount }`, with
   `createdAt` as an ISO 8601 string. A `FeedItem` is a top-level blurt plus `replies`, its
   latest two replies.
@@ -57,7 +66,12 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/login`          | —     | `username`, `password`              | 303 → `/`        | 200 `{ id, username }`                          |
 | `/:username/edit` | owner | profile fields (missing → cleared)  | 303 → profile    | 200 the updated `profile`                       |
 | `/api/blurts`     | yes   | `text`, optional `parentId`         | 303 → feed/parent| 201 the new `Blurt`, Location `/:username/:id`  |
+| `/api/follow`     | yes   | `username`                          | 303 → profile    | 200 their `follows`                             |
+| `/api/unfollow`   | yes   | `username`                          | 303 → profile    | 200 their `follows`                             |
 | `/api/logout`     | —     | —                                   | 303 → `/`        | 204                                             |
+
+Following yourself is a 400 and an unknown `username` a 404. Following twice, or
+unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the `access_token` cookie, for JSON callers too.
 
