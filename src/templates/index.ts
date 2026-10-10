@@ -15,6 +15,7 @@ import {
   passwordMaxLength,
   passwordMinLength,
   reportReasonMaxLength,
+  searchQueryMaxLength,
   usernameMaxLength,
 } from '../limits.ts'
 import type {
@@ -24,6 +25,7 @@ import type {
   InviteCode,
   ReportedBlurt,
   SignupState,
+  UserMatch,
   UserProfile,
   WaitlistEntry,
 } from '../routes/state.ts'
@@ -118,6 +120,20 @@ export const gridDescription = `a ${gridDegrees}° by ${gridDegrees}° square, a
 
 export function nearPageUrl(radius: number, next?: string): string {
   return `/near?radius=${radius}${next ? `&before=${next}` : ''}`
+}
+
+// /search: `query` as searched for ('' before a search), matching users (first page only)
+// and blurts, newest first. `next` is the cursor for older matching blurts.
+export type SearchData = {
+  viewer: Viewer
+  query: string
+  users: UserMatch[]
+  blurts: Blurt[]
+  next: string | null
+}
+
+export function searchUrl(query: string, next?: string): string {
+  return `/search?q=${encodeURIComponent(query)}${next ? `&before=${next}` : ''}`
 }
 
 // Login has no data of its own.
@@ -1439,6 +1455,70 @@ function PrivacyPage({ contact }: InfoPageData) {
   `
 }
 
+function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
+  return html`
+    <header>
+      <h1>Search</h1>
+      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
+    </header>
+    <main>
+      ${
+        query === ''
+          ? html`<p class="empty">Type a username or some words in the search box above.</p>`
+          : html`
+              <p>Results for <q>${query}</q></p>
+              ${
+                users.length > 0 &&
+                html`<section aria-label="People">
+                  <h2>People</h2>
+                  <ul class="user-matches">
+                    ${users.map(
+                      (user) =>
+                        html`<li>
+                          <a href="/${user.username}/"
+                            ><${AvatarSvg} avatar=${user.avatar} /> ${user.username}</a
+                          >
+                        </li>`,
+                    )}
+                  </ul>
+                </section>`
+              }
+              <section aria-label="Blurts">
+                <h2>Blurts</h2>
+                ${
+                  blurts.length > 0
+                    ? blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)
+                    : html`<p class="empty">No blurts match.</p>`
+                }
+                ${
+                  next &&
+                  html`<${NextPageLink} href=${searchUrl(query, next)} label="Older blurts" />`
+                }
+              </section>
+            `
+      }
+    </main>
+  `
+}
+
+// On every page, above the page's own header: a plain GET form, so it works without JS.
+function SiteSearch({ query = '' }: { query?: string }) {
+  return html`
+    <form method="get" action="/search" role="search" class="site-search">
+      <label for="site-search-q">Search</label>
+      <input
+        id="site-search-q"
+        type="search"
+        name="q"
+        value=${query}
+        maxlength=${searchQueryMaxLength}
+        placeholder="Usernames and blurts"
+      />
+      <button type="submit">Search</button>
+    </form>
+  `
+}
+
 function Footer() {
   return html`
     <footer>
@@ -1449,7 +1529,7 @@ function Footer() {
   `
 }
 
-function IndexDocument({ children }: { children: unknown }) {
+function IndexDocument({ children, query }: { children: unknown; query?: string }) {
   return html`<!doctype html>
     <html lang="en">
       <head>
@@ -1459,6 +1539,7 @@ function IndexDocument({ children }: { children: unknown }) {
         <link rel="stylesheet" href=${stylesheetUrl} />
       </head>
       <body>
+        <${SiteSearch} query=${query} />
         ${children}
         <${Footer} />
       </body>
@@ -1532,6 +1613,13 @@ export function renderDeleteAccountPage(data: DeleteAccountData, validationError
     renderToString(
       h(IndexDocument, { children: h(DeleteAccountPage, { ...data, validationError }) }),
     )
+  )
+}
+
+export function renderSearchPage(data: SearchData): string {
+  return (
+    '<!doctype html>' +
+    renderToString(h(IndexDocument, { children: h(SearchPage, data), query: data.query }))
   )
 }
 

@@ -21,6 +21,7 @@ import { homeRouter } from './routes/home.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
+import { searchRouter } from './routes/search.ts'
 import { usersRouter } from './routes/users.ts'
 import { stylesheet } from './templates/styles.ts'
 
@@ -52,6 +53,7 @@ app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(avatarRouter)
 app.use(adminRouter)
+app.use(searchRouter)
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.

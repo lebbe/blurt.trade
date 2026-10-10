@@ -18,6 +18,7 @@ import {
   noPasswordReset,
   olderBlurtsUrl,
   plural,
+  searchUrl,
   type AdminReportsData,
   type BlurtPageData,
   type DeleteAccountData,
@@ -28,6 +29,7 @@ import {
   type NearData,
   type ProfileEditData,
   type ProfilePageData,
+  type SearchData,
   type SettingsData,
   type SignupPageData,
   type Viewer,
@@ -337,6 +339,39 @@ export function nearMarkdown({ location, radius, radii, blurts, next }: NearData
             ${next && link('Older blurts', nearPageUrl(radius, next))}
           `
         : md`You haven't set a location. Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} first.`
+    }
+  `
+}
+
+export function searchMarkdown({ query, users, blurts, next }: SearchData): Markdown {
+  return md`
+    # Search
+
+    ${home}
+
+    Search usernames and blurts with ${code('GET /search?q=<words>')}.
+
+    ${
+      query === ''
+        ? 'Nothing searched for yet.'
+        : md`
+            Results for ${code(query)}
+
+            ${
+              users.length > 0 &&
+              md`
+                ## People
+
+                ${users.map((user) => md`- ${link(user.username, `/${user.username}/`)}`)}
+              `
+            }
+
+            ## Blurts
+
+            ${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt)) : 'No blurts match.'}
+
+            ${next && link('Older blurts', searchUrl(query, next))}
+          `
     }
   `
 }

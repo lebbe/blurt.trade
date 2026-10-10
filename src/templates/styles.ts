@@ -208,6 +208,26 @@ time {
 section h2 {
   margin-top: 2rem;
 }
+.site-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+  padding: 0.5rem;
+}
+.site-search input {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.3rem 0.6rem;
+}
+.user-matches {
+  list-style: none;
+  padding: 0;
+}
+.user-matches li {
+  margin: 0.4rem 0;
+}
 .tabs {
   display: flex;
   gap: 1rem;

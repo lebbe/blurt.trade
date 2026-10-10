@@ -34,6 +34,8 @@ const defaults = {
   like: '120/10m',
   // Checks the password with Argon2, like login.
   deleteAccount: '5/10m',
+  // Per IP, logged in or not: a text search costs more than a feed page.
+  search: '60/1m',
 } satisfies Record<string, string>
 
 export type LimitName = keyof typeof defaults

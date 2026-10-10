@@ -29,6 +29,7 @@ carry `Vary: Accept`.
 | `/:username/:id`   | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
 | `/:username/edit`  | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
+| `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
 | `/login`           | —     | `{ viewer }`                                                                  |                         |
 | `/createUser`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
 | `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
@@ -100,6 +101,20 @@ carry `Vary: Accept`.
   `radii` (50, 100, 250, 500, 1000, 2500), 250 when left out, anything else a 400. The
   HTML picks it with a `<select>` in a GET form. Without a location, `blurts` is empty
   and the page links to the edit page.
+- `/search?q=<words>` searches usernames and blurt text. Every HTML page has the search
+  box, a plain GET form (`role="search"`), above its own header, so it works without JS.
+  `users` is `[{ username, avatar }]`: usernames containing `q` (a leading `@` is
+  dropped), ignoring case, those starting with it first (shortest first, so an exact
+  match leads), then the rest, up to 20, on the first page only. `blurts` is blurts and
+  replies whose text matches, newest first, paged like the feed
+  (`/search?q=<words>&before=<next>`). The text search is Postgres full-text search with
+  the `simple` configuration (lower case, no stemming, no stop words, so Norwegian and
+  English work alike, but `cats` doesn't find `cat`) and `websearch_to_tsquery`: every
+  word must match, `"quoted phrases"`, `or` and `-word` work, punctuation alone matches
+  nothing. A GIN index on `to_tsvector('simple', text)` serves it. Deleted blurts never
+  match. A missing, empty or malformed `q` (`?q[]=`, `?q=a&q=b`) is an empty search
+  (`query: ''`, a friendly page); one over 200 characters is a 400. `query` is echoed
+  escaped and is never logged (request lines leave out the query string).
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
 - `/about`, `/terms` and `/privacy` are fixed text, linked from the footer of every HTML
   page. `/about` is the contact page: GitHub issues for anything public, and where not
@@ -391,6 +406,7 @@ error table below.
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
 | `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |
+| `SEARCH`               | `/search` (GET)                | IP                   | 60/1m   |
 
 - `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
   them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).
@@ -424,7 +440,7 @@ error table below.
 
 `field` names the input the error is about (`username`, `text`, `homepage`, ...). It is
 left out when the error is about the whole form, e.g. a wrong username or password. For a
-GET it is the query parameter (`before`, `after`, `radius`, `username`, `invite`).
+GET it is the query parameter (`before`, `after`, `radius`, `username`, `invite`, `q`).
 
 ## Input limits
 
@@ -444,6 +460,7 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 | `password`                                 | 8–200 characters (bounds Argon2's work)         |
 | `?before=` / `?after=` cursors             | 100 characters, and must decode                 |
 | `?radius=` on `/near`                      | one of the listed radii                         |
+| `?q=` on `/search`                         | 200 characters                                  |
 | `?invite=` on `/createUser`                | 40 characters                                   |
 | `?username=` on `/waitlist`                | 40 characters                                   |
 | Request body (form or JSON)                | 64 KB, else 413                                 |

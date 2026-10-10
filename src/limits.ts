@@ -15,6 +15,8 @@ export const passwordMinLength = 8
 export const passwordMaxLength = 200
 // An invite code is 12 characters; this leaves room for the spaces and dashes people type.
 export const inviteCodeMaxLength = 40
+// ?q= on /search: more than enough words for a search, and bounds the tsquery's work.
+export const searchQueryMaxLength = 200
 // A cursor is about 40 characters; anything much longer isn't one.
 export const cursorMaxLength = 100
 

@@ -219,3 +219,9 @@ GiST index backs the `ST_DWithin` radius queries. See docs/routes.md, Location.
 locally in Node (`src/embeddings.ts`). The model downloads once, about 23 MB. The
 server fills `embedding` in the background after a blurt is posted, and catches up on
 any it missed at startup. An HNSW index backs the "related blurts" lookup.
+
+Search (`/search`) uses a GIN index on `to_tsvector('simple', text)`, an expression index,
+not a stored column. The query must repeat that expression exactly (`blurtSearchWhere` in
+`src/routes/state.ts`); a test checks with `EXPLAIN` that the index is used. Username
+search is a substring match (`strpos`) that scans `users`; add a `pg_trgm` index if that
+ever gets slow.

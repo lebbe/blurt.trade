@@ -315,6 +315,38 @@ export async function listNearbyForUser(
   return rows
 }
 
+// A user found by /search.
+export type UserMatch = { username: string; avatar: Avatar }
+
+const userSearchLimit = 20
+
+// Usernames containing `query`, ignoring case: those starting with it first (the exact
+// name first of all, as the shortest), then the rest, alphabetically. strpos, not LIKE,
+// so `_` and `%` are plain characters. A sequential scan of users, which stays small
+// (signup_counter's hard limit); a trigram index would serve substrings if it grows.
+export async function searchUsers(query: string): Promise<UserMatch[]> {
+  const { rows } = await dbRead().query<UserMatch>(
+    `SELECT u.username, p.avatar FROM users u JOIN user_profiles p ON p.user_id = u.id
+     WHERE strpos(lower(u.username), lower($1)) > 0
+     ORDER BY strpos(lower(u.username), lower($1)) = 1 DESC, length(u.username),
+       lower(u.username)
+     LIMIT $2`,
+    [query, userSearchLimit],
+  )
+  return rows
+}
+
+// Must match the expression of blurts_text_search_idx exactly, or the index isn't used.
+// websearch_to_tsquery takes any input without a syntax error: words are ANDed, "quoted
+// phrases", `or` and `-word` work like a web search. Punctuation alone matches nothing.
+export const blurtSearchWhere = `to_tsvector('simple', b.text) @@ websearch_to_tsquery('simple', $1)
+  AND b.deleted_at IS NULL`
+
+// Blurts and replies whose text matches `query`, newest first, paged like the feeds.
+export function searchBlurts(query: string, before: Cursor | null = null): Promise<Page<Blurt>> {
+  return listPage(blurtSearchWhere, [query], before, 'newest first')
+}
+
 // Returns the new blurt's id, or undefined if the user no longer exists
 // (e.g. a still-valid token after a database reset).
 export async function addBlurt(
