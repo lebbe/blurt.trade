@@ -1,10 +1,16 @@
 import { Router } from 'express'
 import { hash, verify } from '@node-rs/argon2'
 import { z } from 'zod'
-import { clearAccessToken, createAccessToken, setAccessToken } from '../middleware/auth.ts'
-import { validate } from '../middleware/validate.ts'
+import {
+  clearAccessToken,
+  createAccessToken,
+  getViewer,
+  setAccessToken,
+} from '../middleware/auth.ts'
+import { fieldErrors, represent, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
 import { addUser, getUserByUsername } from './state.ts'
 import { renderCreateUserPage, renderLoginPage } from '../templates/index.ts'
+import { createUserMarkdown, loginMarkdown } from '../templates/pages.md.ts'
 
 export const usersRouter = Router()
 
@@ -67,47 +73,79 @@ const loginSchema = z.object({
   password,
 })
 
-usersRouter.get('/createUser', (_request, response) => {
-  response.type('html').send(renderCreateUserPage())
+function submittedUsername(body: unknown): string {
+  const username = (body as { username?: unknown } | undefined)?.username
+  return typeof username === 'string' ? username : ''
+}
+
+usersRouter.get('/createUser', async (request, response) => {
+  represent(
+    request,
+    response,
+    { viewer: await getViewer(request) },
+    { html: () => renderCreateUserPage(), markdown: createUserMarkdown },
+  )
 })
 
-usersRouter.get('/login', (_request, response) => {
-  response.type('html').send(renderLoginPage())
+usersRouter.get('/login', async (request, response) => {
+  represent(
+    request,
+    response,
+    { viewer: await getViewer(request) },
+    { html: () => renderLoginPage(), markdown: loginMarkdown },
+  )
 })
 
-usersRouter.post('/createUser', validate(createUserSchema), async (request, response) => {
-  const { username, password } = request.body as z.infer<typeof createUserSchema>
+usersRouter.post('/createUser', async (request, response) => {
+  const result = createUserSchema.safeParse(request.body ?? {})
+  const rerender = (validationError: string) =>
+    renderCreateUserPage({ username: submittedUsername(request.body), validationError })
+  if (!result.success) {
+    await sendFormErrors(request, response, fieldErrors(result.error), rerender)
+    return
+  }
 
+  const { username, password } = result.data
   const user = await addUser(username, await hash(password))
   if (!user) {
-    response
-      .status(400)
-      .type('html')
-      .send(renderCreateUserPage({ username, validationError: 'Username is already taken' }))
+    const errors = [{ field: 'username', message: 'Username is already taken' }]
+    await sendFormErrors(request, response, errors, rerender)
     return
   }
 
   setAccessToken(response, await createAccessToken(user))
-  response.redirect(303, '/')
+  sendFormSuccess(request, response, {
+    redirect: '/',
+    data: { id: user.id, username: user.username },
+    status: 201,
+    location: `/${user.username}/`,
+  })
 })
 
-usersRouter.post('/login', validate(loginSchema), async (request, response) => {
-  const { username, password } = request.body as z.infer<typeof loginSchema>
+usersRouter.post('/login', async (request, response) => {
+  const result = loginSchema.safeParse(request.body ?? {})
+  const rerender = (validationError: string) =>
+    renderLoginPage({ username: submittedUsername(request.body), validationError })
+  if (!result.success) {
+    await sendFormErrors(request, response, fieldErrors(result.error), rerender)
+    return
+  }
 
+  const { username, password } = result.data
   const user = await getUserByUsername(username)
   if (!user || !(await verify(user.passwordHash, password))) {
-    response
-      .status(400)
-      .type('html')
-      .send(renderLoginPage({ username, validationError: 'Invalid username or password' }))
+    await sendFormErrors(request, response, [{ message: 'Invalid username or password' }], rerender)
     return
   }
 
   setAccessToken(response, await createAccessToken(user))
-  response.redirect(303, '/')
+  sendFormSuccess(request, response, {
+    redirect: '/',
+    data: { id: user.id, username: user.username },
+  })
 })
 
-usersRouter.post('/api/logout', (_request, response) => {
+usersRouter.post('/api/logout', (request, response) => {
   clearAccessToken(response)
-  response.redirect(303, '/')
+  sendFormSuccess(request, response, { redirect: '/' })
 })

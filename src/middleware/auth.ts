@@ -1,5 +1,6 @@
 import { jwtVerify, SignJWT } from 'jose'
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
+import { sendError } from '../negotiate.ts'
 import type { User } from '../routes/state.ts'
 
 export const accessTokenCookie = 'access_token'
@@ -44,6 +45,11 @@ export async function getAuthenticatedUser(token: unknown): Promise<Authenticate
   }
 }
 
+// The logged-in user, or null (not undefined, so it survives JSON) for anonymous visitors.
+export async function getViewer(request: Request): Promise<AuthenticatedUser | null> {
+  return (await getAuthenticatedUser(readAccessToken(request.headers.cookie))) ?? null
+}
+
 export const requireAuth: RequestHandler = (
   request: Request,
   response: Response,
@@ -52,7 +58,7 @@ export const requireAuth: RequestHandler = (
   getAuthenticatedUser(readAccessToken(request.headers.cookie))
     .then((user) => {
       if (!user) {
-        response.status(401).send('Authentication required')
+        sendError(request, response, 401, 'Authentication required')
         return
       }
 

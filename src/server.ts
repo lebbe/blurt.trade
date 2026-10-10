@@ -2,62 +2,38 @@ import express from 'express'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
-import { ValidationError } from './middleware/validate.ts'
+import { sendError } from './negotiate.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
-import { renderCreateUserPage, renderLoginPage } from './templates/index.ts'
 
 export const app = express()
 app.use(express.urlencoded({ extended: false }))
+app.use(express.json())
 app.use(cookieParser())
 app.use(homeRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(profilesRouter)
+// Unknown paths, and /:username/:id URLs that matched no blurt.
+app.use((request: express.Request, response: express.Response) => {
+  sendError(request, response, 404, 'Not found')
+})
+// Client errors from middleware, e.g. a malformed JSON body.
 app.use(
   (
-    error: unknown,
+    error: { status?: unknown; message?: unknown },
     request: express.Request,
     response: express.Response,
     next: express.NextFunction,
   ) => {
-    if (!(error instanceof ValidationError)) {
+    if (typeof error.status !== 'number' || error.status < 400 || error.status >= 500) {
       next(error)
       return
     }
-
-    const input = typeof error.input === 'object' && error.input !== null ? error.input : {}
-    const values = input as Record<string, unknown>
-    if (request.path === '/login') {
-      response
-        .status(400)
-        .type('html')
-        .send(
-          renderLoginPage({
-            username: typeof values.username === 'string' ? values.username : '',
-            validationError: error.message,
-          }),
-        )
-      return
-    }
-
-    if (request.path === '/createUser') {
-      response
-        .status(400)
-        .type('html')
-        .send(
-          renderCreateUserPage({
-            username: typeof values.username === 'string' ? values.username : '',
-            validationError: error.message,
-          }),
-        )
-      return
-    }
-
-    response.status(400).type('text').send(error.message)
+    sendError(request, response, error.status, String(error.message))
   },
 )
 

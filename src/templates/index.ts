@@ -1,6 +1,7 @@
 import { h } from 'preact'
 import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
+import type { AuthenticatedUser } from '../middleware/auth.ts'
 import type { Blurt, FeedItem, UserProfile } from '../routes/state.ts'
 
 const html = htm.bind(h)
@@ -11,11 +12,26 @@ export function isWebUrl(value: string): boolean {
   return url?.protocol === 'http:' || url?.protocol === 'https:'
 }
 
-type PageProps = {
-  blurts: FeedItem[]
-  composer?: ComposerProps
-  isAuthenticated?: boolean
+// The data each page is rendered from. A route fetches it once; it goes out as JSON as is,
+// and as HTML or Markdown through the templates (see src/negotiate.ts).
+export type Viewer = AuthenticatedUser | null
+
+export type FeedData = { viewer: Viewer; blurts: FeedItem[] }
+
+export type BlurtPageData = {
+  viewer: Viewer
+  blurt: Blurt
+  parent: Blurt | null
+  replies: Blurt[]
+  related: Blurt[]
 }
+
+export type ProfilePageData = { viewer: Viewer; profile: UserProfile; blurts: Blurt[] }
+
+export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
+
+// Login and sign-up have no data of their own.
+export type FormPageData = { viewer: Viewer }
 
 type ComposerProps = {
   text?: string
@@ -32,16 +48,7 @@ type CreateUserProps = {
 
 type LoginProps = CreateUserProps
 
-type ProfilePageProps = {
-  blurts: Blurt[]
-  profile: UserProfile
-  canEdit: boolean
-}
-
-type ProfileEditProps = {
-  profile: UserProfile
-  validationError?: string
-}
+type ProfileEditProps = ProfileEditData & { validationError?: string }
 
 function Composer({
   text = '',
@@ -103,11 +110,11 @@ function LogoutForm() {
   `
 }
 
-function blurtUrl(blurt: Blurt): string {
+export function blurtUrl(blurt: Blurt): string {
   return `/${blurt.username}/${blurt.id}`
 }
 
-function plural(count: number, word: string): string {
+export function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? 'y' : 'ies'}`
 }
 
@@ -154,16 +161,9 @@ function BlurtCard({
   `
 }
 
-type BlurtPageProps = {
-  blurt: Blurt
-  parent?: Blurt
-  replies: Blurt[]
-  related: Blurt[]
-  composer?: ComposerProps
-  isAuthenticated: boolean
-}
+type BlurtPageProps = BlurtPageData & { composer?: ComposerProps }
 
-function BlurtPage({ blurt, parent, replies, related, composer, isAuthenticated }: BlurtPageProps) {
+function BlurtPage({ viewer, blurt, parent, replies, related, composer }: BlurtPageProps) {
   return html`
     <header>
       <h1>${blurt.username}</h1>
@@ -181,7 +181,7 @@ function BlurtPage({ blurt, parent, replies, related, composer, isAuthenticated 
       <section aria-label="Replies">
         <h2>Replies</h2>
         ${
-          isAuthenticated
+          viewer
             ? html`<${Composer}
                 ...${composer ?? {}}
                 parentId=${blurt.id}
@@ -332,7 +332,7 @@ ${profile.bio}</textarea>
   `
 }
 
-function FeedPage({ blurts, composer, isAuthenticated = false }: PageProps) {
+function FeedPage({ viewer, blurts, composer }: FeedData & { composer?: ComposerProps }) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
 
   return html`
@@ -341,8 +341,8 @@ function FeedPage({ blurts, composer, isAuthenticated = false }: PageProps) {
       <p class="tagline">Say the thing. Regret it later.</p>
     </header>
     <main>
-      ${isAuthenticated ? html`<${Composer} ...${composer ?? {}} />` : html`<${AnonymousActions} />`}
-      ${isAuthenticated && html`<${LogoutForm} />`}
+      ${viewer ? html`<${Composer} ...${composer ?? {}} />` : html`<${AnonymousActions} />`}
+      ${viewer && html`<${LogoutForm} />`}
       <section aria-label="Blurts">
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
       </section>
@@ -350,7 +350,7 @@ function FeedPage({ blurts, composer, isAuthenticated = false }: PageProps) {
   `
 }
 
-function ProfilePage({ blurts, profile, canEdit }: ProfilePageProps) {
+function ProfilePage({ viewer, profile, blurts }: ProfilePageData) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
 
   return html`
@@ -359,7 +359,7 @@ function ProfilePage({ blurts, profile, canEdit }: ProfilePageProps) {
       <p class="tagline"><a href="/">Back to blurt.trade</a></p>
     </header>
     <main>
-      <${ProfileData} profile=${profile} canEdit=${canEdit} />
+      <${ProfileData} profile=${profile} canEdit=${viewer?.id === profile.userId} />
       <section aria-label="${profile.username} blurts">
         <h2>Blurts</h2>
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
@@ -504,16 +504,10 @@ function IndexDocument({ children }: { children: unknown }) {
     </html>`
 }
 
-export function renderFeedPage(
-  blurts: FeedItem[],
-  composer?: ComposerProps,
-  isAuthenticated = false,
-): string {
+export function renderFeedPage(data: FeedData, composer?: ComposerProps): string {
   return (
     '<!doctype html>' +
-    renderToString(
-      h(IndexDocument, { children: h(FeedPage, { blurts, composer, isAuthenticated }) }),
-    )
+    renderToString(h(IndexDocument, { children: h(FeedPage, { ...data, composer }) }))
   )
 }
 
@@ -527,12 +521,15 @@ export function renderCreateUserPage(props: CreateUserProps = {}): string {
   )
 }
 
-export function renderBlurtPage(props: BlurtPageProps): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(BlurtPage, props) }))
+export function renderBlurtPage(data: BlurtPageData, composer?: ComposerProps): string {
+  return (
+    '<!doctype html>' +
+    renderToString(h(IndexDocument, { children: h(BlurtPage, { ...data, composer }) }))
+  )
 }
 
-export function renderProfilePage(props: ProfilePageProps): string {
-  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(ProfilePage, props) }))
+export function renderProfilePage(data: ProfilePageData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(ProfilePage, data) }))
 }
 
 export function renderProfileEditPage(props: ProfileEditProps): string {

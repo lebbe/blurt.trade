@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { getAuthenticatedUser, readAccessToken, requireAuth } from '../middleware/auth.ts'
+import { getViewer, requireAuth } from '../middleware/auth.ts'
+import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
 import { getUserProfileByUsername, listBlurtsByUserId, updateUserProfile } from './state.ts'
 import { isWebUrl, renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
+import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
 
 export const profilesRouter = Router()
 
@@ -47,72 +49,73 @@ function submittedFields(body: unknown): Partial<z.infer<typeof profileSchema>> 
 }
 
 profilesRouter.get('/:username/', async (request, response) => {
-  const { username } = request.params
-  const profile = await getUserProfileByUsername(username)
+  const profile = await getUserProfileByUsername(request.params.username)
 
   if (!profile) {
-    response.status(404).send('User not found')
+    sendError(request, response, 404, 'User not found')
     return
   }
 
-  const viewer = await getAuthenticatedUser(readAccessToken(request.headers.cookie))
-  const userBlurts = await listBlurtsByUserId(profile.userId)
-
-  response.type('html').send(
-    renderProfilePage({
-      blurts: userBlurts,
-      profile,
-      canEdit: viewer?.id === profile.userId,
-    }),
+  const [viewer, blurts] = await Promise.all([
+    getViewer(request),
+    listBlurtsByUserId(profile.userId),
+  ])
+  represent(
+    request,
+    response,
+    { viewer, profile, blurts },
+    { html: renderProfilePage, markdown: profilePageMarkdown },
   )
 })
 
 profilesRouter.get('/:username/edit', requireAuth, async (request, response) => {
-  const { username } = request.params
-  const authenticatedUser = response.locals.authenticatedUser
-  const profile = await getUserProfileByUsername(username)
-
-  if (!profile) {
-    response.status(404).send('User not found')
-    return
-  }
-
-  if (authenticatedUser.id !== profile.userId) {
-    response.status(403).send('Forbidden')
-    return
-  }
-
-  response.type('html').send(renderProfileEditPage({ profile }))
-})
-
-profilesRouter.post('/:username/edit', requireAuth, async (request, response) => {
-  const authenticatedUser = response.locals.authenticatedUser
+  const viewer = response.locals.authenticatedUser
   const profile = await getUserProfileByUsername(request.params.username)
 
   if (!profile) {
-    response.status(404).send('User not found')
+    sendError(request, response, 404, 'User not found')
     return
   }
 
-  if (authenticatedUser.id !== profile.userId) {
-    response.status(403).send('Forbidden')
+  if (viewer.id !== profile.userId) {
+    sendError(request, response, 403, 'Forbidden')
     return
   }
 
-  const result = profileSchema.safeParse(request.body)
+  represent(
+    request,
+    response,
+    { viewer, profile },
+    { html: renderProfileEditPage, markdown: profileEditMarkdown },
+  )
+})
+
+profilesRouter.post('/:username/edit', requireAuth, async (request, response) => {
+  const viewer = response.locals.authenticatedUser
+  const profile = await getUserProfileByUsername(request.params.username)
+
+  if (!profile) {
+    sendError(request, response, 404, 'User not found')
+    return
+  }
+
+  if (viewer.id !== profile.userId) {
+    sendError(request, response, 403, 'Forbidden')
+    return
+  }
+
+  const result = profileSchema.safeParse(request.body ?? {})
   if (!result.success) {
-    response
-      .status(400)
-      .type('html')
-      .send(
-        renderProfileEditPage({
-          profile: { ...profile, ...submittedFields(request.body) },
-          validationError: result.error.issues.map((issue) => issue.message).join(' '),
-        }),
-      )
+    await sendFormErrors(request, response, fieldErrors(result.error), (validationError) =>
+      renderProfileEditPage({
+        viewer,
+        profile: { ...profile, ...submittedFields(request.body) },
+        validationError,
+      }),
+    )
     return
   }
 
-  await updateUserProfile(profile.userId, result.data)
-  response.redirect(303, `/${profile.username}/`)
+  const updated = await updateUserProfile(profile.userId, result.data)
+  sendFormSuccess(request, response, { redirect: `/${profile.username}/`, data: updated })
 })

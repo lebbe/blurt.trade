@@ -8,4 +8,26 @@ Accept: application/json
 
 ### Feed as Markdown
 GET http://localhost:3000/
-Accept: text/plain
+Accept: text/markdown
+
+### Profile as JSON
+GET http://localhost:3000/lars/
+Accept: application/json
+
+### Profile as Markdown
+GET http://localhost:3000/lars/
+Accept: text/markdown
+
+### Log in from fetch() (JSON in, JSON out, sets the cookie)
+POST http://localhost:3000/login
+Accept: application/json
+Content-Type: application/json
+
+{ "username": "lars", "password": "correct-horse" }
+
+### Blurt from fetch()
+POST http://localhost:3000/api/blurts
+Accept: application/json
+Content-Type: application/json
+
+{ "text": "Hello from JSON" }

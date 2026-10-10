@@ -1,12 +1,15 @@
-import { Router, type Request, type Response } from 'express'
+import { Router, type Request } from 'express'
 import { z } from 'zod'
-import {
-  clearAccessToken,
-  getAuthenticatedUser,
-  readAccessToken,
-  requireAuth,
-} from '../middleware/auth.ts'
+import { clearAccessToken, getViewer, requireAuth } from '../middleware/auth.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
+import {
+  fieldErrors,
+  represent,
+  sendError,
+  sendFormErrors,
+  sendFormSuccess,
+  wantsJson,
+} from '../negotiate.ts'
 import {
   addBlurt,
   getBlurt,
@@ -15,7 +18,13 @@ import {
   listReplies,
   type Blurt,
 } from './state.ts'
-import { renderBlurtPage, renderFeedPage } from '../templates/index.ts'
+import {
+  blurtUrl,
+  renderBlurtPage,
+  renderFeedPage,
+  type BlurtPageData,
+} from '../templates/index.ts'
+import { blurtPageMarkdown } from '../templates/pages.md.ts'
 
 export const blurtsRouter = Router()
 
@@ -23,37 +32,20 @@ const blurtSchema = z.object({
   text: z.string().trim().min(1, 'Blurt is required').max(280, 'Blurt is too long'),
 })
 
+// From a URL segment, a form field (string) or a JSON body (number).
 function parseBlurtId(value: unknown): number | undefined {
-  return typeof value === 'string' && /^\d{1,15}$/.test(value) ? Number(value) : undefined
+  const text = typeof value === 'number' ? String(value) : value
+  return typeof text === 'string' && /^\d{1,15}$/.test(text) ? Number(text) : undefined
 }
 
-type Composer = { text: string; validationError: string }
-
-async function sendBlurtPage(
-  request: Request,
-  response: Response,
-  blurt: Blurt,
-  composer?: Composer,
-): Promise<void> {
-  const [parent, replies, related, viewer] = await Promise.all([
-    blurt.parentId === null ? undefined : getBlurt(blurt.parentId),
+async function getBlurtPageData(request: Request, blurt: Blurt): Promise<BlurtPageData> {
+  const [viewer, parent, replies, related] = await Promise.all([
+    getViewer(request),
+    blurt.parentId === null ? null : getBlurt(blurt.parentId).then((parent) => parent ?? null),
     listReplies(blurt.id),
     listRelatedBlurts(blurt.id),
-    getAuthenticatedUser(readAccessToken(request.headers.cookie)),
   ])
-  response
-    .status(composer ? 400 : 200)
-    .type('html')
-    .send(
-      renderBlurtPage({
-        blurt,
-        parent,
-        replies,
-        related,
-        composer,
-        isAuthenticated: Boolean(viewer),
-      }),
-    )
+  return { viewer, blurt, parent, replies, related }
 }
 
 blurtsRouter.get('/:username/:id', async (request, response, next) => {
@@ -64,47 +56,58 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
     next() // not a blurt URL (e.g. /:username/edit), or no such blurt
     return
   }
-  await sendBlurtPage(request, response, blurt)
+  represent(request, response, await getBlurtPageData(request, blurt), {
+    html: renderBlurtPage,
+    markdown: blurtPageMarkdown,
+  })
 })
 
-// A top-level blurt, or a reply when the form sends parentId.
+// A top-level blurt, or a reply when the body has parentId.
 blurtsRouter.post('/api/blurts', requireAuth, async (request, response) => {
   let parent: Blurt | undefined
   if (request.body?.parentId !== undefined) {
     const parentId = parseBlurtId(request.body.parentId)
     parent = parentId === undefined ? undefined : await getBlurt(parentId)
     if (!parent) {
-      response.status(404).send('Blurt not found')
+      sendError(request, response, 404, 'Blurt not found')
       return
     }
   }
 
-  const result = blurtSchema.safeParse(request.body)
+  const result = blurtSchema.safeParse(request.body ?? {})
 
   if (!result.success) {
-    const composer = {
-      text: typeof request.body?.text === 'string' ? request.body.text : '',
-      validationError: result.error.issues.map((issue) => issue.message).join(' '),
-    }
-    if (parent) {
-      await sendBlurtPage(request, response, parent, composer)
-    } else {
-      response
-        .status(400)
-        .type('html')
-        .send(renderFeedPage(await listFeed(), composer, true))
-    }
+    await sendFormErrors(request, response, fieldErrors(result.error), async (message) => {
+      const composer = {
+        text: typeof request.body?.text === 'string' ? request.body.text : '',
+        validationError: message,
+      }
+      return parent
+        ? renderBlurtPage(await getBlurtPageData(request, parent), composer)
+        : renderFeedPage({ viewer: await getViewer(request), blurts: await listFeed() }, composer)
+    })
     return
   }
 
   const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, parent?.id)
-  if (id === undefined) {
+  const blurt = id === undefined ? undefined : await getBlurt(id)
+  if (!blurt) {
     // A still-valid token for a user that no longer exists (e.g. after a database reset).
     clearAccessToken(response)
-    response.redirect(303, '/')
+    if (wantsJson(request)) {
+      sendError(request, response, 401, 'Authentication required')
+    } else {
+      response.redirect(303, '/')
+    }
     return
   }
 
   void embedPendingBlurts()
-  response.redirect(303, parent ? `/${parent.username}/${parent.id}` : '/')
+  // Forms go back to the page they were posted from; JSON callers get the new blurt.
+  sendFormSuccess(request, response, {
+    redirect: parent ? blurtUrl(parent) : '/',
+    data: blurt,
+    status: 201,
+    location: blurtUrl(blurt),
+  })
 })
