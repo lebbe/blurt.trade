@@ -1,7 +1,9 @@
 import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
 import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
 import {
+  blurtActions,
   blurtUrl,
+  deleteBlurtPath,
   discoveryAfter,
   discoveryTitles,
   feedPath,
@@ -12,6 +14,7 @@ import {
   nearPageUrl,
   olderBlurtsUrl,
   plural,
+  type AdminReportsData,
   type BlurtPageData,
   type DiscoverySection,
   type FeedData,
@@ -40,14 +43,36 @@ function viewerLine(viewer: Viewer): Markdown {
 // `replies` are quoted inline (the feed); the thread link covers the rest.
 function blurtMarkdown(blurt: Blurt, replies: Blurt[] = []): Markdown {
   return md`
-    ### ${blurt.username}
+    ### ${blurt.username ?? 'Deleted'}
 
     ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}
 
-    ${blurt.text}
+    ${blurt.deleted ? raw('_This blurt was deleted._') : blurt.text}
 
-    ${replies.map((reply) => md`> **${reply.username}**: ${reply.text}`)}
+    ${replies.map((reply) =>
+      reply.deleted
+        ? md`
+> _This blurt was deleted._
+          `
+        : md`> **${reply.username}**: ${reply.text}`,
+    )}
   `
+}
+
+// What the viewer can do to the blurt, as the requests to send.
+function blurtActionsMarkdown(viewer: Viewer, blurt: Blurt, reported: boolean): Markdown | null {
+  const action = blurtActions(viewer, blurt)
+  if (action === 'delete') {
+    return md`Delete it with ${code(`POST ${deleteBlurtPath(blurt)}`)}.`
+  }
+  if (action === 'report') {
+    return reported
+      ? md`
+You reported this blurt.
+        `
+      : md`Report it with ${code('POST /api/report')}, ${code('blurtId')} and an optional ${code('reason')}.`
+  }
+  return null
 }
 
 function blurtList(blurts: Blurt[]): Markdown {
@@ -112,14 +137,16 @@ export function feedMarkdown(data: FeedData): Markdown {
 }
 
 export function blurtPageMarkdown({
+  viewer,
   blurt,
   parent,
+  reported,
   replies,
   next,
   related,
 }: BlurtPageData): Markdown {
   return md`
-    # ${blurt.username}
+    # ${blurt.username ?? 'Deleted blurt'}
 
     ${home}
 
@@ -133,6 +160,8 @@ export function blurtPageMarkdown({
     }
 
     ${blurtMarkdown(blurt)}
+
+    ${blurtActionsMarkdown(viewer, blurt, reported)}
 
     ## Replies
 
@@ -367,6 +396,34 @@ Sign-up is full. When it opens again, this page will say so.
     ${plural(waiting, 'person', 'people')} waiting.
 
     ${signup === 'waitlist' && md`Send ${code('POST /waitlist')} as a form or as JSON with ${usernameRules}. No email: check back at ${code('/waitlist?username=<username>')}.`}
+  `
+}
+
+export function adminReportsMarkdown({ reports }: AdminReportsData): Markdown {
+  return md`
+    # Reports
+
+    ${home}
+
+    ${
+      reports.length > 0
+        ? reports.map(
+            ({ blurt, reports: open }) => md`
+              ${blurtMarkdown(blurt)}
+
+              ${join(
+                open.map(
+                  (report) =>
+                    md`- ${link(report.reporter, `/${report.reporter}/`)}: ${report.reason || raw('_no reason given_')}`,
+                ),
+                '\n',
+              )}
+
+              Delete it with ${code(`POST ${deleteBlurtPath(blurt)}`)}, or dismiss the reports with ${code('POST /api/admin/reports/dismiss')} and ${code(`blurtId=${blurt.id}`)}.
+            `,
+          )
+        : 'No open reports.'
+    }
   `
 }
 

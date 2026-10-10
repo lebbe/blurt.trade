@@ -4,14 +4,17 @@ import { db, dbRead } from '../db.ts'
 import type { GeoPoint } from '../geo.ts'
 import { randomAvatar, type Avatar } from '../avatar.ts'
 
+// A deleted blurt that had replies stays in its thread as a placeholder: `deleted` is true
+// and `username`, `text` and `avatar` are null (see deleteBlurts).
 export type Blurt = {
   id: number
-  username: string
-  text: string
+  username: string | null
+  text: string | null
   createdAt: Date
   parentId: number | null
   replyCount: number
-  avatar: Avatar // the blurter's
+  avatar: Avatar | null // the blurter's
+  deleted: boolean
 }
 
 // A top-level blurt on the main feed, with its latest few replies (oldest of those first).
@@ -60,7 +63,12 @@ const relatedMaxDistance = 0.75
 
 const blurtColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
   (SELECT count(*) FROM blurts r WHERE r.parent_id = b.id)::int AS "replyCount",
-  (SELECT a.avatar FROM user_profiles a WHERE a.user_id = b.user_id) AS avatar`
+  (SELECT a.avatar FROM user_profiles a WHERE a.user_id = b.user_id) AS avatar,
+  b.deleted_at IS NOT NULL AS deleted`
+
+// LEFT JOIN where deleted placeholders (no user) belong: threads. Lists of blurts by
+// someone, near someone or like something never match a placeholder anyway.
+const threadFrom = 'blurts b LEFT JOIN users u ON u.id = b.user_id'
 
 const cursorColumn = `to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
   AS "cursorAt"`
@@ -112,7 +120,7 @@ async function listPage(
     keyset = `AND (b.created_at, b.id) ${comparison} ($${values.length - 1}::timestamptz, $${values.length})`
   }
   const { rows } = await dbRead().query<Blurt & { cursorAt?: string }>(
-    `SELECT ${blurtColumns}, ${cursorColumn} FROM blurts b JOIN users u ON u.id = b.user_id
+    `SELECT ${blurtColumns}, ${cursorColumn} FROM ${threadFrom}
      WHERE ${where} ${keyset}
      ORDER BY b.created_at ${direction}, b.id ${direction} LIMIT ${limit}`,
     values,
@@ -142,7 +150,7 @@ export async function listFeed(
 ): Promise<Page<FeedItem>> {
   const page =
     followedBy === null
-      ? await listPage('b.parent_id IS NULL', [], before, 'newest first')
+      ? await listPage('b.parent_id IS NULL AND b.deleted_at IS NULL', [], before, 'newest first')
       : await listPage(followedWhere, [followedBy], before, 'newest first')
   return { items: await withReplies(page.items), next: page.next }
 }
@@ -163,7 +171,7 @@ export async function listFollowedHighlights(userId: number): Promise<FeedItem[]
 async function withReplies(blurts: Blurt[]): Promise<FeedItem[]> {
   const { rows: replies } = await dbRead().query<Blurt>(
     `SELECT r.* FROM unnest($1::bigint[]) AS p(id) CROSS JOIN LATERAL (
-       SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
+       SELECT ${blurtColumns} FROM ${threadFrom}
        WHERE b.parent_id = p.id ORDER BY b.created_at DESC, b.id DESC LIMIT $2
      ) r ORDER BY r."createdAt", r.id`,
     [blurts.map((blurt) => blurt.id), feedRepliesPerBlurt],
@@ -184,7 +192,7 @@ export function listBlurtsByUserId(
 
 export async function getBlurt(id: number): Promise<Blurt | undefined> {
   const { rows } = await db().query<Blurt>(
-    `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id WHERE b.id = $1`,
+    `SELECT ${blurtColumns} FROM ${threadFrom} WHERE b.id = $1`,
     [id],
   )
   return rows[0]
@@ -315,6 +323,120 @@ export async function addBlurt(
     [userId, text, parentId],
   )
   return rows[0]?.id
+}
+
+// Deletes blurts, in one transaction. A blurt without replies goes for good. One with
+// replies becomes a placeholder: text, embedding and author removed, so it refers to
+// nobody, and the replies stay readable under "This blurt was deleted". A placeholder
+// whose last reply is deleted goes too, and so on up the thread. Reports on the deleted
+// blurts go with them. Account deletion (025) passes all of a user's blurts, with its own
+// transaction's `client`; without one, this runs in a transaction of its own.
+export async function deleteBlurts(
+  ids: number[],
+  client?: Pick<pg.PoolClient, 'query'>,
+): Promise<void> {
+  if (!client) {
+    const own = await db().connect()
+    try {
+      await own.query('BEGIN')
+      await deleteBlurts(ids, own)
+      await own.query('COMMIT')
+    } catch (error) {
+      await own.query('ROLLBACK')
+      throw error
+    } finally {
+      own.release()
+    }
+    return
+  }
+  // Locks the blurts first. A reply being posted to one of them holds a key-share lock on
+  // it until it commits, so the reply is either in before this looks for replies (and the
+  // blurt stays as a placeholder) or waits and then finds its parent gone or deleted.
+  await client.query('SELECT 1 FROM blurts WHERE id = ANY($1::bigint[]) FOR UPDATE', [ids])
+  await client.query('DELETE FROM reports WHERE blurt_id = ANY($1::bigint[])', [ids])
+  await client.query(
+    `UPDATE blurts SET deleted_at = now(), user_id = NULL, text = NULL, embedding = NULL
+     WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+    [ids],
+  )
+  // Then removes placeholders left without replies, from the leaves up the thread.
+  let candidates = ids
+  while (candidates.length > 0) {
+    const { rows } = await client.query<{ parentId: number | null }>(
+      `DELETE FROM blurts b WHERE b.id = ANY($1::bigint[]) AND b.deleted_at IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM blurts r WHERE r.parent_id = b.id)
+       RETURNING b.parent_id AS "parentId"`,
+      [candidates],
+    )
+    candidates = rows.flatMap((row) => (row.parentId === null ? [] : [row.parentId]))
+  }
+}
+
+// Whether the user may moderate: see /admin/reports and delete anyone's blurt.
+export async function isAdmin(userId: number): Promise<boolean> {
+  const { rows } = await db().query<{ isAdmin: boolean }>(
+    'SELECT is_admin AS "isAdmin" FROM users WHERE id = $1',
+    [userId],
+  )
+  return rows[0]?.isAdmin ?? false
+}
+
+// Reports a blurt. One report per user and blurt: reporting it again does nothing, also
+// after the first report was dismissed. False if the user no longer exists.
+export async function addReport(userId: number, blurtId: number, reason: string): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `INSERT INTO reports (user_id, blurt_id, reason) SELECT id, $2, $3 FROM users WHERE id = $1
+     ON CONFLICT DO NOTHING`,
+    [userId, blurtId, reason],
+  )
+  return rowCount === 1 || (await hasReported(userId, blurtId))
+}
+
+export async function hasReported(userId: number, blurtId: number): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'SELECT 1 FROM reports WHERE user_id = $1 AND blurt_id = $2',
+    [userId, blurtId],
+  )
+  return rowCount === 1
+}
+
+export type Report = { reporter: string; reason: string; createdAt: Date }
+
+// A reported blurt and its open (not dismissed) reports, oldest first.
+export type ReportedBlurt = { blurt: Blurt; reports: Report[] }
+
+const reportedBlurtsLimit = 100
+
+// Blurts with open reports, the one waiting longest first.
+export async function listOpenReports(): Promise<ReportedBlurt[]> {
+  const { rows: blurts } = await db().query<Blurt>(
+    `SELECT ${blurtColumns} FROM ${threadFrom}
+     JOIN (SELECT blurt_id, min(created_at) AS first FROM reports WHERE dismissed_at IS NULL
+           GROUP BY blurt_id) o ON o.blurt_id = b.id
+     ORDER BY o.first, b.id LIMIT $1`,
+    [reportedBlurtsLimit],
+  )
+  const { rows: reports } = await db().query<Report & { blurtId: number }>(
+    `SELECT r.blurt_id AS "blurtId", u.username AS reporter, r.reason, r.created_at AS "createdAt"
+     FROM reports r JOIN users u ON u.id = r.user_id
+     WHERE r.dismissed_at IS NULL AND r.blurt_id = ANY($1::bigint[])
+     ORDER BY r.created_at, u.username`,
+    [blurts.map((blurt) => blurt.id)],
+  )
+  return blurts.map((blurt) => ({
+    blurt,
+    reports: reports
+      .filter((report) => report.blurtId === blurt.id)
+      .map(({ reporter, reason, createdAt }) => ({ reporter, reason, createdAt })),
+  }))
+}
+
+// Dismisses every open report on the blurt: it stays up.
+export async function dismissReports(blurtId: number): Promise<void> {
+  await db().query(
+    'UPDATE reports SET dismissed_at = now() WHERE blurt_id = $1 AND dismissed_at IS NULL',
+    [blurtId],
+  )
 }
 
 // Whether new people can sign up right now: 'open' below the soft limit, 'invite' (an

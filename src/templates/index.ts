@@ -10,6 +10,7 @@ import type {
   FeedItem,
   FollowStats,
   InviteCode,
+  ReportedBlurt,
   SignupState,
   UserProfile,
   WaitlistEntry,
@@ -64,10 +65,12 @@ export function feedPath({ feed, hasFollowingFeed }: FeedData): string {
   return feed === 'everyone' && hasFollowingFeed ? '/everyone' : '/'
 }
 
+// `reported`: whether the viewer has reported `blurt` (false for anonymous viewers).
 export type BlurtPageData = {
   viewer: Viewer
   blurt: Blurt
   parent: Blurt | null
+  reported: boolean
   replies: Blurt[]
   next: string | null // for replies
   related: Blurt[]
@@ -127,6 +130,9 @@ export type WaitlistData = {
   username: string | null
   entry: WaitlistEntry | null
 }
+
+// /admin/reports: blurts with open reports, the one waiting longest first.
+export type AdminReportsData = { viewer: AuthenticatedUser; reports: ReportedBlurt[] }
 
 // `activeSessions`: how many browsers and devices the viewer is logged in on.
 export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
@@ -347,8 +353,23 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
   `
 }
 
+// A deleted placeholder has no author, so it lives at /deleted/:id ('deleted' is a
+// reserved username). Its page also answers under the old author's name.
 export function blurtUrl(blurt: Blurt): string {
-  return `/${blurt.username}/${blurt.id}`
+  return `/${blurt.username ?? 'deleted'}/${blurt.id}`
+}
+
+export function deleteBlurtPath(blurt: Blurt): string {
+  return `/api/blurts/${blurt.id}/delete`
+}
+
+// Who may do what to a blurt, in every view: its author deletes it, anyone else logged in
+// can report it. Placeholders take neither.
+export function blurtActions(viewer: Viewer, blurt: Blurt): 'delete' | 'report' | null {
+  if (!viewer || blurt.deleted) {
+    return null
+  }
+  return viewer.username === blurt.username ? 'delete' : 'report'
 }
 
 // Where the next page of each list lives. Plain links, so paging works without JS.
@@ -368,23 +389,88 @@ export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
+// Two clicks, no JS: the <details> opens the form, its button deletes for good.
+function DeleteForm({ blurt }: { blurt: Blurt }) {
+  return html`
+    <details class="blurt-action">
+      <summary>Delete</summary>
+      <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
+        <span>Delete this blurt for good?</span>
+        <button type="submit">Delete</button>
+      </form>
+    </details>
+  `
+}
+
+function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
+  return html`
+    <details class="blurt-action" open=${Boolean(error)}>
+      <summary>Report</summary>
+      <form method="post" action="/api/report" class="inline-form">
+        <${ValidationError} message=${error} />
+        <input type="hidden" name="blurtId" value=${blurt.id} />
+        <label>Reason (optional) <input name="reason" maxlength="500" /></label>
+        <button type="submit">Report</button>
+      </form>
+    </details>
+  `
+}
+
 // `replies` are shown inline (the feed); the link below covers the rest of the thread.
+// `viewer` decides the Delete / Report actions; `reported` says the viewer already did.
 function BlurtCard({
   blurt,
+  viewer = null,
   replies = [],
   showActions = true,
+  reported = false,
+  reportError,
 }: {
   blurt: Blurt
+  viewer?: Viewer
   replies?: Blurt[]
   showActions?: boolean
+  reported?: boolean
+  reportError?: string
 }) {
   const hiddenReplies = blurt.replyCount - replies.length
   const threadLink =
     hiddenReplies <= 0
-      ? 'Reply'
+      ? blurt.deleted
+        ? 'Thread'
+        : 'Reply'
       : replies.length > 0
         ? plural(hiddenReplies, 'more reply', 'more replies')
         : plural(hiddenReplies, 'reply', 'replies')
+  const action = blurtActions(viewer, blurt)
+  const replyCards =
+    replies.length > 0 &&
+    html`<div class="replies">
+      ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} />`)}
+    </div>`
+
+  if (blurt.deleted) {
+    return html`
+      <article class="blurt deleted">
+        <div class="blurt-body">
+          <div class="blurt-meta">
+            <em>Deleted</em>
+            <a href=${blurtUrl(blurt)}
+              ><time datetime=${blurt.createdAt.toISOString()}
+                >${blurt.createdAt.toLocaleString()}</time
+              ></a
+            >
+          </div>
+          <p class="empty">This blurt was deleted.</p>
+          ${replyCards}
+          ${
+            showActions &&
+            html`<p class="blurt-actions"><a href=${blurtUrl(blurt)}>${threadLink}</a></p>`
+          }
+        </div>
+      </article>
+    `
+  }
 
   // The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
@@ -400,27 +486,38 @@ function BlurtCard({
           >
         </div>
         <p>${blurt.text}</p>
-        ${
-          replies.length > 0 &&
-          html`<div class="replies">
-            ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} />`)}
-          </div>`
-        }
-        ${
-          showActions &&
-          html`<p class="blurt-actions"><a href=${blurtUrl(blurt)}>${threadLink}</a></p>`
-        }
+        ${replyCards}
+        <div class="blurt-actions">
+          ${showActions && html`<a href=${blurtUrl(blurt)}>${threadLink}</a>`}
+          ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
+          ${
+            action === 'report' &&
+            (reported
+              ? html`<span class="empty">You reported this blurt.</span>`
+              : html`<${ReportForm} blurt=${blurt} error=${reportError} />`)
+          }
+        </div>
       </div>
     </article>
   `
 }
 
-type BlurtPageProps = BlurtPageData & { composer?: ComposerProps }
+type BlurtPageProps = BlurtPageData & { composer?: ComposerProps; reportError?: string }
 
-function BlurtPage({ viewer, blurt, parent, replies, next, related, composer }: BlurtPageProps) {
+function BlurtPage({
+  viewer,
+  blurt,
+  parent,
+  reported,
+  replies,
+  next,
+  related,
+  composer,
+  reportError,
+}: BlurtPageProps) {
   return html`
     <header>
-      <h1>${blurt.username}</h1>
+      <h1>${blurt.username ?? 'Deleted blurt'}</h1>
       <p class="tagline"><a href="/">Back to blurt.trade</a></p>
     </header>
     <main>
@@ -428,25 +525,33 @@ function BlurtPage({ viewer, blurt, parent, replies, next, related, composer }: 
         parent &&
         html`<section aria-label="In reply to">
           <h2>In reply to</h2>
-          <${BlurtCard} blurt=${parent} />
+          <${BlurtCard} blurt=${parent} viewer=${viewer} />
         </section>`
       }
-      <${BlurtCard} blurt=${blurt} showActions=${false} />
+      <${BlurtCard}
+        blurt=${blurt}
+        viewer=${viewer}
+        showActions=${false}
+        reported=${reported}
+        reportError=${reportError}
+      />
       <section aria-label="Replies">
         <h2>Replies</h2>
         ${
-          viewer
-            ? html`<${Composer}
-                ...${composer ?? {}}
-                parentId=${blurt.id}
-                label="Reply"
-                button="Reply"
-              />`
-            : html`<${AnonymousActions} />`
+          blurt.deleted
+            ? null
+            : viewer
+              ? html`<${Composer}
+                  ...${composer ?? {}}
+                  parentId=${blurt.id}
+                  label="Reply"
+                  button="Reply"
+                />`
+              : html`<${AnonymousActions} />`
         }
         ${
           replies.length > 0
-            ? replies.map((reply) => html`<${BlurtCard} blurt=${reply} />`)
+            ? replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} />`)
             : html`<p class="empty">No replies yet.</p>`
         }
         ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
@@ -455,10 +560,52 @@ function BlurtPage({ viewer, blurt, parent, replies, next, related, composer }: 
         <h2>Related blurts</h2>
         ${
           related.length > 0
-            ? related.map((other) => html`<${BlurtCard} blurt=${other} />`)
+            ? related.map((other) => html`<${BlurtCard} blurt=${other} viewer=${viewer} />`)
             : html`<p class="empty">Nothing related yet.</p>`
         }
       </section>
+    </main>
+  `
+}
+
+// Moderation: blurts with open reports, each with Delete and Dismiss buttons.
+function AdminReportsPage({ reports }: AdminReportsData) {
+  return html`
+    <header>
+      <h1>Reports</h1>
+      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
+    </header>
+    <main>
+      ${
+        reports.length > 0
+          ? reports.map(
+              ({ blurt, reports: open }) => html`
+                <section class="report" aria-label="Reported blurt ${blurt.id}">
+                  <${BlurtCard} blurt=${blurt} />
+                  <ul>
+                    ${open.map(
+                      (report) =>
+                        html`<li>
+                          <a href="/${report.reporter}/">${report.reporter}</a>${': '}${
+                            report.reason || html`<span class="empty">no reason given</span>`
+                          }
+                        </li>`,
+                    )}
+                  </ul>
+                  <div class="report-buttons">
+                    <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
+                      <button type="submit">Delete blurt</button>
+                    </form>
+                    <form method="post" action="/api/admin/reports/dismiss" class="inline-form">
+                      <input type="hidden" name="blurtId" value=${blurt.id} />
+                      <button type="submit">Dismiss</button>
+                    </form>
+                  </div>
+                </section>
+              `,
+            )
+          : html`<p class="empty">No open reports.</p>`
+      }
     </main>
   `
 }
@@ -748,13 +895,13 @@ function FeedTabs({ feed }: { feed: FeedData['feed'] }) {
   `
 }
 
-function Discovery({ section }: { section: DiscoverySection }) {
+function Discovery({ section, viewer }: { section: DiscoverySection; viewer: Viewer }) {
   const { title, description } = discoveryTitles[section.kind]
   return html`
     <section aria-label=${title} class="discovery">
       <h2>${title}</h2>
       <p class="discovery-description">${description}</p>
-      ${section.blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)}
+      ${section.blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)}
     </section>
   `
 }
@@ -762,9 +909,13 @@ function Discovery({ section }: { section: DiscoverySection }) {
 function FeedPage(data: FeedData & { composer?: ComposerProps }) {
   const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next, composer } = data
   const cards = (items: FeedItem[]) =>
-    items.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
+    items.map(
+      (blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} replies=${blurt.replies} />`,
+    )
   const discoverySections = (count: number) =>
-    discoveryAfter(discovery, count).map((section) => html`<${Discovery} section=${section} />`)
+    discoveryAfter(discovery, count).map(
+      (section) => html`<${Discovery} section=${section} viewer=${viewer} />`,
+    )
 
   return html`
     <header>
@@ -835,7 +986,12 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                 ${
                   blurts.length > 0
                     ? blurts.map(
-                        (blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`,
+                        (blurt) =>
+                          html`<${BlurtCard}
+                            blurt=${blurt}
+                            viewer=${viewer}
+                            replies=${blurt.replies}
+                          />`,
                       )
                     : html`<p class="empty">Nobody near you has blurted yet.</p>`
                 }
@@ -907,7 +1063,7 @@ function ProfilePage({
   blurts,
   next,
 }: ProfilePageData) {
-  const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
+  const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)
 
   return html`
     <header class="profile-header">
@@ -1111,8 +1267,43 @@ function IndexDocument({ children }: { children: unknown }) {
             padding: 0.6rem;
           }
           .blurt-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 1rem;
             margin: 0.5rem 0 0;
             font-size: 0.85rem;
+          }
+          .blurt-action summary {
+            cursor: pointer;
+            color: #6d6258;
+          }
+          .inline-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: end;
+            gap: 0.5rem;
+            margin: 0.5rem 0 0;
+            padding: 0.5rem;
+          }
+          .inline-form button,
+          .inline-form input {
+            padding: 0.3rem 0.6rem;
+          }
+          .blurt.deleted {
+            border-style: dashed;
+          }
+          .report ul {
+            margin: 0.5rem 0;
+          }
+          .report-buttons {
+            display: flex;
+            gap: 0.75rem;
+          }
+          .report-buttons .inline-form {
+            border: 0;
+            background: none;
+            padding: 0;
           }
           section h2 {
             margin-top: 2rem;
@@ -1213,10 +1404,20 @@ export function renderWaitlistPage(data: WaitlistData, form?: FormProps): string
   )
 }
 
-export function renderBlurtPage(data: BlurtPageData, composer?: ComposerProps): string {
+export function renderBlurtPage(
+  data: BlurtPageData,
+  composer?: ComposerProps,
+  reportError?: string,
+): string {
   return (
     '<!doctype html>' +
-    renderToString(h(IndexDocument, { children: h(BlurtPage, { ...data, composer }) }))
+    renderToString(h(IndexDocument, { children: h(BlurtPage, { ...data, composer, reportError }) }))
+  )
+}
+
+export function renderAdminReportsPage(data: AdminReportsData): string {
+  return (
+    '<!doctype html>' + renderToString(h(IndexDocument, { children: h(AdminReportsPage, data) }))
   )
 }
 

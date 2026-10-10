@@ -28,6 +28,8 @@ const defaults = {
   profileEdit: '30/10m',
   location: '30/10m',
   avatar: '60/10m',
+  report: '20/1h',
+  deleteBlurt: '60/10m',
 } satisfies Record<string, string>
 
 export type LimitName = keyof typeof defaults

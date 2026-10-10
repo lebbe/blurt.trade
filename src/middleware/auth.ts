@@ -3,6 +3,7 @@ import { jwtVerify, SignJWT, type JWTPayload } from 'jose'
 import type { CookieOptions, NextFunction, Request, RequestHandler, Response } from 'express'
 import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
+import { isAdmin } from '../routes/state.ts'
 
 // Two tokens, each in its own HttpOnly cookie:
 //
@@ -268,6 +269,26 @@ export const requireAuth: RequestHandler = (
   }
   response.locals.authenticatedUser = user
   next()
+}
+
+// For moderation pages and actions. The admin flag is read from the primary database on
+// each request, not kept in the token, so taking it away works at once.
+export const requireAdmin: RequestHandler = (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+) => {
+  requireAuth(request, response, () => {
+    isAdmin(response.locals.authenticatedUser.id)
+      .then((admin) => {
+        if (admin) {
+          next()
+        } else {
+          sendError(request, response, 403, 'Forbidden')
+        }
+      })
+      .catch(next)
+  })
 }
 
 // Login and sign-up. The session this browser had before, if any, ends.

@@ -8,7 +8,7 @@ import { migrate } from '../db/migrate.ts'
 import { closeDb, db, dbRead, poolSize } from './db.ts'
 import { embedPendingBlurts, setEmbedder } from './embeddings.ts'
 import { app } from './server.ts'
-import { getUserByUsername, getUserProfileByUsername } from './routes/state.ts'
+import { deleteBlurts, getUserByUsername, getUserProfileByUsername } from './routes/state.ts'
 import { reservedUsernames } from './routes/users.ts'
 import { mapHeight, mapUrl, mapWidth } from './geo.ts'
 import { recentWriteCookie } from './middleware/replica.ts'
@@ -207,6 +207,7 @@ test('serves the feed as JSON when requested', async () => {
         createdAt: createdAt.toISOString(),
         parentId: null,
         replyCount: 0,
+        deleted: false,
         replies: [],
       },
     ],
@@ -2464,4 +2465,302 @@ test('parses limit specs, trust proxy settings and client keys', () => {
   assert.equal(key('::ffff:203.0.113.7'), '203.0.113.7')
   assert.equal(key('2001:db8:1:2:3:4:5:6'), '2001:db8:1:2::/64')
   assert.equal(key('2001:db8::1'), '2001:db8:0:0::/64')
+})
+
+async function makeAdmin(username: string): Promise<void> {
+  await db().query('UPDATE users SET is_admin = true WHERE username = $1', [username])
+}
+
+async function blurtRow(id: number): Promise<Record<string, unknown> | undefined> {
+  const { rows } = await db().query(
+    'SELECT user_id, text, embedding, deleted_at IS NOT NULL AS deleted FROM blurts WHERE id = $1',
+    [id],
+  )
+  return rows[0]
+}
+
+test('the author deletes their blurt, without JS; nobody else can', async () => {
+  const larsCookie = await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+  await request('POST', '/api/blurts', 'text=Regret+this', { cookie: larsCookie })
+  const id = await blurtIdByText('Regret this')
+
+  const page = await request('GET', '/', '', { cookie: larsCookie })
+  assert.match(page.body, new RegExp(`action="/api/blurts/${id}/delete"`))
+  const othersView = await request('GET', '/', '', { cookie: adaCookie })
+  assert.doesNotMatch(othersView.body, /\/delete"/)
+  assert.match(othersView.body, /action="\/api\/report"/)
+
+  const anonymous = await request('POST', `/api/blurts/${id}/delete`)
+  assert.equal(anonymous.statusCode, 401)
+  const forbidden = await request('POST', `/api/blurts/${id}/delete`, '', { cookie: adaCookie })
+  assert.equal(forbidden.statusCode, 403)
+  const forbiddenJson = await sendJson(`/api/blurts/${id}/delete`, {}, { cookie: adaCookie })
+  assert.equal(forbiddenJson.statusCode, 403)
+  assert.equal(typeof JSON.parse(forbiddenJson.body).error, 'string')
+  assert.equal(await countBlurts(), 1)
+
+  // Back to the page the form was on, when that is on this site.
+  const deleted = await request('POST', `/api/blurts/${id}/delete`, '', {
+    cookie: larsCookie,
+    host: 'blurt.test',
+    referer: 'http://blurt.test/Lars/?before=x',
+  })
+  assert.equal(deleted.statusCode, 303)
+  assert.equal(deleted.location, '/Lars/?before=x')
+  assert.equal(await countBlurts(), 0)
+  assert.equal((await request('GET', `/Lars/${id}`)).statusCode, 404)
+  assert.doesNotMatch((await request('GET', '/')).body, /Regret this/)
+
+  const again = await request('POST', `/api/blurts/${id}/delete`, '', { cookie: larsCookie })
+  assert.equal(again.statusCode, 404)
+
+  // JSON callers get a 204. From its own page, or another site, a form goes to the feed.
+  await request('POST', '/api/blurts', 'text=Also+this', { cookie: larsCookie })
+  const second = await blurtIdByText('Also this')
+  assert.equal(
+    (await sendJson(`/api/blurts/${second}/delete`, {}, { cookie: larsCookie })).statusCode,
+    204,
+  )
+  await request('POST', '/api/blurts', 'text=And+this', { cookie: larsCookie })
+  const third = await blurtIdByText('And this')
+  const fromOwnPage = await request('POST', `/api/blurts/${third}/delete`, '', {
+    cookie: larsCookie,
+    host: 'blurt.test',
+    referer: `http://blurt.test/Lars/${third}`,
+  })
+  assert.equal(fromOwnPage.location, '/')
+  for (const referer of ['http://evil.test/somewhere', 'http://blurt.test//evil.test/x']) {
+    await request('POST', '/api/blurts', 'text=One+more', { cookie: larsCookie })
+    const id = await blurtIdByText('One more')
+    const fromElsewhere = await request('POST', `/api/blurts/${id}/delete`, '', {
+      cookie: larsCookie,
+      host: 'blurt.test',
+      referer,
+    })
+    assert.equal(fromElsewhere.location, '/', referer)
+  }
+})
+
+test('a deleted blurt with replies stays as a placeholder, its text and embedding gone', async () => {
+  const larsCookie = await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+  await request('POST', '/api/blurts', 'text=my+cat+opinion', { cookie: larsCookie })
+  const id = await blurtIdByText('my cat opinion')
+  await request('POST', '/api/blurts', `parentId=${id}&text=cat+reply`, { cookie: adaCookie })
+  const replyId = await blurtIdByText('cat reply')
+  await request('POST', '/api/report', `blurtId=${id}`, { cookie: adaCookie })
+  await embedPendingBlurts()
+  assert.notEqual((await blurtRow(id))?.embedding, null)
+
+  const deleted = await request('POST', `/api/blurts/${id}/delete`, '', { cookie: larsCookie })
+  assert.equal(deleted.statusCode, 303)
+  assert.equal(deleted.location, '/')
+
+  // Nothing of it is left but its place in the thread: no text, embedding, author or reports.
+  assert.deepEqual(await blurtRow(id), {
+    user_id: null,
+    text: null,
+    embedding: null,
+    deleted: true,
+  })
+  const { rows: reports } = await db().query('SELECT * FROM reports')
+  assert.deepEqual(reports, [])
+  await embedPendingBlurts()
+  assert.equal((await blurtRow(id))?.embedding, null)
+
+  // The thread still reads, under the old link and under /deleted/:id.
+  for (const path of [`/Lars/${id}`, `/deleted/${id}`]) {
+    const page = await request('GET', path, '', { cookie: adaCookie })
+    assert.equal(page.statusCode, 200, path)
+    assert.match(page.body, /This blurt was deleted\./)
+    assert.match(page.body, /cat reply/)
+    assert.doesNotMatch(page.body, /my cat opinion/)
+    assert.doesNotMatch(page.body, /name="parentId"/) // no replying to a placeholder
+  }
+  const data = JSON.parse((await request('GET', `/deleted/${id}`, '', json)).body)
+  assert.equal(data.blurt.deleted, true)
+  assert.equal(data.blurt.username, null)
+  assert.equal(data.blurt.text, null)
+  assert.equal(data.blurt.avatar, null)
+  assert.deepEqual(
+    data.replies.map((reply: { text: string }) => reply.text),
+    ['cat reply'],
+  )
+  const markdown = await request('GET', `/deleted/${id}`, '', { accept: 'text/markdown' })
+  assert.match(markdown.body, /^# Deleted blurt\n[^]*_This blurt was deleted\._[^]*cat reply/)
+
+  const replyPage = await request('GET', `/Ada/${replyId}`)
+  assert.match(replyPage.body, /In reply to[^]*This blurt was deleted\./)
+  assert.match(replyPage.body, new RegExp(`href="/deleted/${id}"`))
+
+  // Gone from the feed and the profile, and from related blurts.
+  for (const path of ['/', '/Lars/', `/Ada/${replyId}`]) {
+    assert.doesNotMatch((await request('GET', path)).body, /my cat opinion/, path)
+  }
+  const replyData = JSON.parse((await request('GET', `/Ada/${replyId}`, '', json)).body)
+  assert.deepEqual(replyData.related, [])
+
+  const reply = await request('POST', '/api/blurts', `parentId=${id}&text=late`, {
+    cookie: adaCookie,
+  })
+  assert.equal(reply.statusCode, 404)
+  const deleteAgain = await request('POST', `/api/blurts/${id}/delete`, '', { cookie: larsCookie })
+  assert.equal(deleteAgain.statusCode, 404)
+
+  // When its last reply goes, the placeholder goes too.
+  const lastReply = await request('POST', `/api/blurts/${replyId}/delete`, '', {
+    cookie: adaCookie,
+  })
+  assert.equal(lastReply.statusCode, 303)
+  assert.equal(await countBlurts(), 0)
+})
+
+test('deleting a whole thread at once leaves nothing behind', async () => {
+  const cookie = await createSession('Lars')
+  await request('POST', '/api/blurts', 'text=top', { cookie })
+  const top = await blurtIdByText('top')
+  await request('POST', '/api/blurts', `parentId=${top}&text=middle`, { cookie })
+  const middle = await blurtIdByText('middle')
+  await request('POST', '/api/blurts', `parentId=${middle}&text=bottom`, { cookie })
+  const bottom = await blurtIdByText('bottom')
+
+  // Account deletion (025) passes all of a user's blurts at once.
+  await deleteBlurts([top, middle, bottom])
+  assert.equal(await countBlurts(), 0)
+})
+
+test('the database keeps deleted blurts empty, and never drops replies with their parent', async () => {
+  const cookie = await createSession('Lars')
+  await request('POST', '/api/blurts', 'text=parent', { cookie })
+  const id = await blurtIdByText('parent')
+  await request('POST', '/api/blurts', `parentId=${id}&text=child`, { cookie })
+
+  await assert.rejects(
+    db().query('UPDATE blurts SET deleted_at = now() WHERE id = $1', [id]),
+    /blurts_deleted_removes_content/,
+  )
+  await assert.rejects(
+    db().query('DELETE FROM blurts WHERE id = $1', [id]),
+    /blurts_parent_id_fkey/,
+  )
+})
+
+test('reports a blurt once, with an optional reason, without JS', async () => {
+  const larsCookie = await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+  await request('POST', '/api/blurts', 'text=Spicy+take', { cookie: larsCookie })
+  const id = await blurtIdByText('Spicy take')
+
+  const anonymous = await request('POST', '/api/report', `blurtId=${id}`)
+  assert.equal(anonymous.statusCode, 401)
+  const own = await request('POST', '/api/report', `blurtId=${id}`, { cookie: larsCookie })
+  assert.equal(own.statusCode, 400)
+  const missing = await request('POST', '/api/report', 'blurtId=999', { cookie: adaCookie })
+  assert.equal(missing.statusCode, 404)
+  const tooLong = await request('POST', '/api/report', `blurtId=${id}&reason=${'x'.repeat(501)}`, {
+    cookie: adaCookie,
+  })
+  assert.equal(tooLong.statusCode, 400)
+  assert.match(tooLong.body, /Reason is too long/)
+
+  const reported = await request('POST', '/api/report', `blurtId=${id}&reason=Rude`, {
+    cookie: adaCookie,
+  })
+  assert.equal(reported.statusCode, 303)
+  assert.equal(reported.location, `/Lars/${id}`)
+  const page = await request('GET', `/Lars/${id}`, '', { cookie: adaCookie })
+  assert.match(page.body, /You reported this blurt\./)
+  const data = await request('GET', `/Lars/${id}`, '', { ...json, cookie: adaCookie })
+  assert.equal(JSON.parse(data.body).reported, true)
+
+  const twice = await sendJson(
+    '/api/report',
+    { blurtId: id, reason: 'Again' },
+    { cookie: adaCookie },
+  )
+  assert.equal(twice.statusCode, 204)
+  const { rows } = await db().query('SELECT reason FROM reports')
+  assert.deepEqual(rows, [{ reason: 'Rude' }])
+})
+
+test('the admin sees reported blurts and deletes or dismisses them', async () => {
+  const larsCookie = await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+  const ownerCookie = await createSession('Owner')
+  await makeAdmin('Owner')
+  await request('POST', '/api/blurts', 'text=Bad+blurt', { cookie: larsCookie })
+  await request('POST', '/api/blurts', 'text=Fine+blurt', { cookie: larsCookie })
+  const bad = await blurtIdByText('Bad blurt')
+  const fine = await blurtIdByText('Fine blurt')
+  await request('POST', '/api/report', `blurtId=${bad}&reason=Spam`, { cookie: adaCookie })
+  await request('POST', '/api/report', `blurtId=${bad}`, { cookie: ownerCookie })
+  await request('POST', '/api/report', `blurtId=${fine}&reason=Meh`, { cookie: adaCookie })
+
+  // Only for admins.
+  assert.equal((await request('GET', '/admin/reports')).statusCode, 401)
+  assert.equal((await request('GET', '/admin/reports', '', { cookie: adaCookie })).statusCode, 403)
+  const dismissByOther = await request('POST', '/api/admin/reports/dismiss', `blurtId=${fine}`, {
+    cookie: adaCookie,
+  })
+  assert.equal(dismissByOther.statusCode, 403)
+
+  const page = await request('GET', '/admin/reports', '', { cookie: ownerCookie })
+  assert.equal(page.statusCode, 200)
+  assert.match(page.body, /Bad blurt[^]*Ada<\/a>: Spam[^]*no reason given[^]*Fine blurt[^]*Meh/)
+  assert.match(page.body, new RegExp(`action="/api/blurts/${bad}/delete"`))
+  const data = await request('GET', '/admin/reports', '', { ...json, cookie: ownerCookie })
+  type Entry = { blurt: { text: string }; reports: { reporter: string; reason: string }[] }
+  assert.deepEqual(
+    JSON.parse(data.body).reports.map((entry: Entry) => [
+      entry.blurt.text,
+      entry.reports.map((report) => `${report.reporter}: ${report.reason}`),
+    ]),
+    [
+      ['Bad blurt', ['Ada: Spam', 'Owner: ']],
+      ['Fine blurt', ['Ada: Meh']],
+    ],
+  )
+  const markdown = await request('GET', '/admin/reports', '', {
+    accept: 'text/markdown',
+    cookie: ownerCookie,
+  })
+  assert.match(
+    markdown.body,
+    /^# Reports\n[^]*Bad blurt[^]*Spam[^]*`POST \/api\/admin\/reports\/dismiss`/,
+  )
+
+  // The admin may delete anyone's blurt; the form goes back to the reports.
+  const deleted = await request('POST', `/api/blurts/${bad}/delete`, '', {
+    cookie: ownerCookie,
+    host: 'blurt.test',
+    referer: 'http://blurt.test/admin/reports',
+  })
+  assert.equal(deleted.statusCode, 303)
+  assert.equal(deleted.location, '/admin/reports')
+  assert.equal(await blurtRow(bad), undefined)
+
+  const dismissed = await request('POST', '/api/admin/reports/dismiss', `blurtId=${fine}`, {
+    cookie: ownerCookie,
+  })
+  assert.equal(dismissed.statusCode, 303)
+  assert.equal(dismissed.location, '/admin/reports')
+  assert.notEqual(await blurtRow(fine), undefined)
+  const empty = await request('GET', '/admin/reports', '', { cookie: ownerCookie })
+  assert.match(empty.body, /No open reports\./)
+})
+
+test('reporting is limited per account', async () => {
+  await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+  await insertBlurts(21)
+  const { rows } = await db().query<{ id: number }>('SELECT id FROM blurts ORDER BY id')
+  await withRealRateLimits(async () => {
+    const statuses: number[] = []
+    for (const { id } of rows) {
+      const response = await request('POST', '/api/report', `blurtId=${id}`, { cookie: adaCookie })
+      statuses.push(response.statusCode)
+    }
+    assert.deepEqual(statuses, [...Array<number>(20).fill(303), 429])
+  })
 })

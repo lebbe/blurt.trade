@@ -44,8 +44,10 @@ export const usersRouter = Router()
 // Compared in lower case: Express routes ignore case.
 export const reservedUsernames = new Set([
   // current routes
+  'admin',
   'api',
   'createuser',
+  'deleted', // /deleted/:id, a deleted blurt's placeholder
   'everyone',
   'login',
   'near',
@@ -54,7 +56,6 @@ export const reservedUsernames = new Set([
   // likely future pages
   'about',
   'account',
-  'admin',
   'assets',
   'discover',
   'explore',

@@ -26,13 +26,14 @@ carry `Vary: Accept`.
 | `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }` | 400 bad cursor          |
 | `/everyone`       | —     | the same, always the everyone feed                                            | 400 bad cursor          |
 | `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
-| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                           | 400, 404 no such blurt  |
+| `/:username/:id`  | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
 | `/:username/edit` | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
 | `/near`           | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/login`          | —     | `{ viewer }`                                                                  |                         |
 | `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                              |                         |
 | `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
 | `/settings`       | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
+| `/admin/reports`  | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -53,9 +54,16 @@ carry `Vary: Accept`.
   HTML renders them as plain sections between the blurts, so they work without JS.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
-- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar }`, with
-  `createdAt` as an ISO 8601 string and `avatar` the blurter's (see Avatar below). A `FeedItem` is a top-level blurt plus `replies`, its
-  latest two replies.
+- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar, deleted }`,
+  with `createdAt` as an ISO 8601 string and `avatar` the blurter's (see Avatar below).
+  `deleted` is `true` for a deleted blurt's placeholder in a thread, whose `username`,
+  `text` and `avatar` are `null` (see Deleting and reporting). A `FeedItem` is a
+  top-level blurt plus `replies`, its latest two replies.
+- `reported` on a blurt page says whether the viewer has reported the blurt (`false`
+  for anonymous viewers).
+- `reports` on `/admin/reports` is `[{ blurt, reports: [{ reporter, reason, createdAt }] }]`:
+  blurts with open reports, the one reported first on top (up to 100), each with its
+  open reports, oldest first. `reason` is `''` when none was given.
 - Lists come in pages of 100. `next` is an opaque cursor for the page after this one, or
   `null` on the last page: `/?before=<next>` and `/:username/?before=<next>` for older
   blurts (newest first), `/:username/:id?after=<next>` for later replies (oldest first).
@@ -92,24 +100,66 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path                     | Auth  | Body                                 | Form success                | JSON success                                   |
-| ------------------------ | ----- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
-| `/createUser`            | —     | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
-| `/waitlist`              | —     | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
-| `/login`                 | —     | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
-| `/:username/edit`        | owner | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`            | yes   | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
-| `/api/follow`            | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/unfollow`          | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/location`          | yes   | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
-| `/api/avatar`            | yes   | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
-| `/api/logout`            | —     | —                                    | 303 → `/`                   | 204                                            |
-| `/api/logout-everywhere` | yes   | —                                    | 303 → `/login`              | 204                                            |
+| Path                         | Auth           | Body                                 | Form success                | JSON success                                   |
+| ---------------------------- | -------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
+| `/createUser`                | —              | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/waitlist`                  | —              | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
+| `/login`                     | —              | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
+| `/:username/edit`            | owner          | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
+| `/api/blurts`                | yes            | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/blurts/:id/delete`     | author, admin  | —                                    | 303 → back (see Deleting)   | 204                                            |
+| `/api/report`                | yes            | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
+| `/api/admin/reports/dismiss` | admin          | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
+| `/api/follow`                | yes            | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/unfollow`              | yes            | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/location`              | yes            | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
+| `/api/avatar`                | yes            | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
+| `/api/logout`                | —              | —                                    | 303 → `/`                   | 204                                            |
+| `/api/logout-everywhere`     | yes            | —                                    | 303 → `/login`              | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the session cookies, for JSON callers too.
+
+## Deleting and reporting
+
+Plain forms, so all of it works without JS. Code in `src/routes/blurts.ts`,
+`src/routes/admin.ts` and `deleteBlurts` in `src/routes/state.ts`.
+
+- Your own blurts have a "Delete" `<details>` on them, which opens a "Delete" button:
+  two clicks, no JS. `POST /api/blurts/:id/delete` deletes it. Anyone else's blurt is a
+  403 (unless you're an admin), an unknown or already deleted one a 404. Forms go back
+  to the page they came from (its `Referer`, same host only), unless that was the
+  deleted blurt's own page: then to the thread it replied to, or `/`.
+- A blurt nobody replied to is deleted for good. One with replies stays in its thread
+  as a placeholder, "This blurt was deleted": its text, embedding and author are
+  removed from the row (`NULL`, enforced by a `CHECK`), so the replies stay readable
+  and nothing refers to the author any more. Placeholders never show in feeds, profiles,
+  discovery or related blurts, can't be replied to, reported or deleted again, and live
+  at `/deleted/:id` (their old `/:username/:id` link still works). When a placeholder's
+  last reply is deleted, the placeholder goes too, up the thread.
+- `deleteBlurts(ids, client?)` does all of it in one transaction, or inside the
+  caller's: account deletion (025) passes all of a user's blurts. Deleting a blurt row
+  that still has replies any other way fails (the `parent_id` foreign key no longer
+  cascades), so other people's replies can't vanish with it.
+- Every blurt by someone else has a "Report" `<details>` with an optional reason (up to
+  500 characters) for logged-in viewers. `POST /api/report` with `blurtId` and `reason`:
+  one report per user and blurt, so reporting again does nothing (also after a dismissal).
+  Your own blurt is a 400, an unknown one a 404. The blurt page then says "You reported
+  this blurt".
+- Admins (`users.is_admin`) get `/admin/reports`: blurts with open reports, with the
+  reasons and who reported them, and two buttons each. "Delete blurt" is the same
+  `POST /api/blurts/:id/delete` (admins may delete any blurt); "Dismiss" is
+  `POST /api/admin/reports/dismiss` with `blurtId`, which closes every open report on it
+  and leaves the blurt up. Anyone else gets a 403 there. There is no UI for making an
+  admin; in psql:
+
+  ```sql
+  UPDATE users SET is_admin = true WHERE lower(username) = lower('lars');
+  ```
+
+  The flag is read from the database on each admin request, so taking it away works at once.
 
 ## Location
 
@@ -253,6 +303,8 @@ error table below.
 | `PROFILE_EDIT`         | `/:username/edit`              | account                | 30/10m  |
 | `LOCATION`             | `/api/location`                | account                | 30/10m  |
 | `AVATAR`               | `/api/avatar`                  | account                | 60/10m  |
+| `REPORT`               | `/api/report`                  | account                | 20/1h   |
+| `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account                | 60/10m  |
 
 - `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
   them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).

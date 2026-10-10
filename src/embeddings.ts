@@ -29,7 +29,7 @@ export function embedPendingBlurts(): Promise<void> {
 async function runPending(): Promise<void> {
   for (;;) {
     const { rows } = await db().query<{ id: number; text: string }>(
-      'SELECT id, text FROM blurts WHERE embedding IS NULL ORDER BY id LIMIT $1',
+      'SELECT id, text FROM blurts WHERE embedding IS NULL AND deleted_at IS NULL ORDER BY id LIMIT $1',
       [batchSize],
     )
     if (rows.length === 0) {
@@ -37,9 +37,11 @@ async function runPending(): Promise<void> {
     }
 
     const vectors = await embedder(rows.map((row) => row.text))
+    // A blurt deleted meanwhile stays without an embedding.
     await db().query(
       `UPDATE blurts b SET embedding = v.embedding::vector
-       FROM unnest($1::bigint[], $2::text[]) AS v(id, embedding) WHERE b.id = v.id`,
+       FROM unnest($1::bigint[], $2::text[]) AS v(id, embedding)
+       WHERE b.id = v.id AND b.deleted_at IS NULL`,
       [rows.map((row) => row.id), vectors.map((vector) => pgvector.toSql(vector))],
     )
   }
