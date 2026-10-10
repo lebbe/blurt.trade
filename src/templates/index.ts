@@ -287,6 +287,9 @@ export const noPasswordReset =
   "so there's no password reset: a lost password can't be recovered, and neither can the " +
   'account.'
 
+// On the login page, followed by a link to /privacy.
+export const forgotPassword = "Forgot your password? There's no password reset, see"
+
 function CreateUserForm({
   username = '',
   inviteCode = '',
@@ -347,6 +350,7 @@ function LoginForm({ username = '', validationError }: LoginProps) {
         >Password <input name="password" type="password" maxlength=${passwordMaxLength} required
       /></label>
       <button type="submit">Log in</button>
+      <p class="hint">${forgotPassword} <a href="/privacy">Privacy</a>.</p>
     </form>
   `
 }

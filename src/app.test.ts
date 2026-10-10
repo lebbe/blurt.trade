@@ -3347,6 +3347,19 @@ test('sign-up and the privacy page say a lost password cannot be recovered', asy
   assert.match(markdown.body, /no password reset/)
 })
 
+test('the login page says there is no password reset and links to /privacy', async () => {
+  const { body } = await request('GET', '/login')
+  assert.match(
+    body,
+    /Forgot your password\? There(&#39;|')s no password reset, see <a href="\/privacy">/,
+  )
+  const markdown = await request('GET', '/login', '', { accept: 'text/markdown' })
+  assert.match(
+    markdown.body,
+    /Forgot your password\? There's no password reset, see \[Privacy\]\(<\/privacy>\)/,
+  )
+})
+
 // The privacy page (/privacy) lists what is stored. If this fails, a migration added or
 // removed a column: update the page in src/templates/index.ts and pages.md.ts, then this.
 test('the privacy page is in step with the database columns', async () => {

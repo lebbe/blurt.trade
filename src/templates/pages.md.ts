@@ -9,6 +9,7 @@ import {
   discoveryAfter,
   discoveryTitles,
   feedPath,
+  forgotPassword,
   formatLocation,
   gridDescription,
   moreRepliesUrl,
@@ -30,7 +31,7 @@ import {
   type Viewer,
   type WaitlistData,
 } from './index.ts'
-import { code, join, link, md, raw, type Markdown } from './markdown.ts'
+import { code, join, link, md, raw, type Markdown, type MarkdownValue } from './markdown.ts'
 
 // The Markdown representation of each page: the same data as the HTML, for text/markdown
 // and text/plain clients (curl, LLMs, terminals). Forms are described instead of rendered.
@@ -454,7 +455,7 @@ function formMarkdown(
   path: string,
   fields: Markdown,
   viewer: Viewer,
-  note?: string,
+  note?: MarkdownValue,
 ): Markdown {
   return md`
     # ${title}
@@ -470,7 +471,13 @@ function formMarkdown(
 }
 
 export function loginMarkdown({ viewer }: FormPageData): Markdown {
-  return formMarkdown('Log in', '/login', md`${code('username')} and ${code('password')}`, viewer)
+  return formMarkdown(
+    'Log in',
+    '/login',
+    md`${code('username')} and ${code('password')}`,
+    viewer,
+    md`${forgotPassword} ${link('Privacy', '/privacy')}.`,
+  )
 }
 
 const usernameRules = md`${code('username')} (letters, numbers and ${code('_')})`

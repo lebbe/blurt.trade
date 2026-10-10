@@ -108,7 +108,8 @@ carry `Vary: Accept`.
 - Data minimisation is a standing rule: no email addresses, no analytics, no
   third-party scripts, fonts or embeds, no cookies beyond the session and `recent_write`
   cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
-  lost password can't be recovered, and sign-up says so.
+  lost password can't be recovered, and sign-up and the login page say so. This was
+  decided over email reset and recovery codes (ticket 024): don't add a reset route.
 
 ## Actions (POST)
 
