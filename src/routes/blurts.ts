@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express'
+import { Router, type Request, type RequestHandler } from 'express'
 import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
@@ -22,11 +22,14 @@ import {
   isAdmin,
   listRelatedBlurts,
   listReplies,
+  markViewerLikes,
   parseCursor,
+  setLike,
   type Blurt,
   type Cursor,
 } from './state.ts'
 import {
+  blurtAnchor,
   blurtUrl,
   renderBlurtPage,
   renderFeedPage,
@@ -61,6 +64,7 @@ async function getBlurtPageData(
     listReplies(blurt.id, after),
     listRelatedBlurts(blurt.id),
   ])
+  await markViewerLikes(viewer?.id ?? null, [blurt, parent, ...replies, ...related])
   return { viewer, blurt, parent, reported, replies, next, related }
 }
 
@@ -140,16 +144,55 @@ blurtsRouter.post(
   },
 )
 
+// The page a form was posted from (its Referer), if that is on this site. A path starting
+// with // would be another site to the browser.
+function localReferer(request: Request): URL | undefined {
+  const referer = URL.parse(request.get('referer') ?? '')
+  const local = referer?.host === request.get('host') && !referer?.pathname.startsWith('//')
+  return referer && local ? referer : undefined
+}
+
+// Separate POSTs for like and unlike, so a plain form on any blurt can send either. Forms
+// go back to the page they came from (at the blurt), or the blurt's page without a usable
+// Referer; JSON callers get `{ blurtId, likeCount, viewerLikes }`.
+function likeAction(likes: boolean): RequestHandler {
+  return async (request, response) => {
+    const blurtId = parseBlurtId(request.body?.blurtId)
+    const blurt = blurtId === undefined ? undefined : await getBlurt(blurtId)
+    const state =
+      blurt && !blurt.deleted
+        ? await setLike(response.locals.authenticatedUser.id, blurt.id, likes)
+        : 'not-found'
+    if (state === 'not-found' || !blurt) {
+      sendError(request, response, 404, 'Blurt not found')
+      return
+    }
+    if (state === 'no-user') {
+      // A still-valid token for a user that no longer exists (e.g. after a database reset).
+      clearSessionCookies(response)
+      sendError(request, response, 401, 'Authentication required')
+      return
+    }
+    const referer = localReferer(request)
+    sendFormSuccess(request, response, {
+      redirect: referer
+        ? `${referer.pathname}${referer.search}#${blurtAnchor(blurt)}`
+        : blurtUrl(blurt),
+      data: state,
+    })
+  }
+}
+
+blurtsRouter.post('/api/like', requireAuth, rateLimit('like', accountKey), likeAction(true))
+blurtsRouter.post('/api/unlike', requireAuth, rateLimit('like', accountKey), likeAction(false))
+
 // Where a form goes back to after deleting: the page it was posted from (Referer, same
 // host only), unless that was the deleted blurt's own page. Then the thread it replied
 // to, or the feed.
 async function afterDelete(request: Request, blurt: Blurt): Promise<string> {
-  const referer = URL.parse(request.get('referer') ?? '')
-  // /:username/:id, the blurt's own page, is gone or a placeholder now. A path starting
-  // with // would be another site to the browser.
-  const ownPage = referer?.pathname.split('/')[2] === String(blurt.id)
-  const local = referer?.host === request.get('host') && !referer?.pathname.startsWith('//')
-  if (referer && local && !ownPage) {
+  const referer = localReferer(request)
+  // /:username/:id, the blurt's own page, is gone or a placeholder now.
+  if (referer && referer.pathname.split('/')[2] !== String(blurt.id)) {
     return referer.pathname + referer.search
   }
   const parent = blurt.parentId === null ? undefined : await getBlurt(blurt.parentId)

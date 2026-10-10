@@ -18,6 +18,7 @@ import {
   getUserProfileByUsername,
   listInviteCodes,
   listBlurtsByUserId,
+  markViewerLikes,
   parseCursor,
   unfollow,
   updateUserProfile,
@@ -84,6 +85,7 @@ profilesRouter.get('/:username/', async (request, response) => {
     getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
   ])
+  await markViewerLikes(viewer?.id ?? null, blurts)
   represent(
     request,
     response,

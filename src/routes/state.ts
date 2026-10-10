@@ -16,6 +16,9 @@ export type Blurt = {
   replyCount: number
   avatar: Avatar | null // the blurter's
   deleted: boolean
+  likeCount: number
+  // Whether the viewer likes it: false for anonymous viewers (see markViewerLikes).
+  viewerLikes: boolean
 }
 
 // A top-level blurt on the main feed, with its latest few replies (oldest of those first).
@@ -65,7 +68,7 @@ const relatedMaxDistance = 0.75
 const blurtColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
   (SELECT count(*) FROM blurts r WHERE r.parent_id = b.id)::int AS "replyCount",
   (SELECT a.avatar FROM user_profiles a WHERE a.user_id = b.user_id) AS avatar,
-  b.deleted_at IS NOT NULL AS deleted`
+  b.deleted_at IS NOT NULL AS deleted, b.like_count AS "likeCount", false AS "viewerLikes"`
 
 // LEFT JOIN where deleted placeholders (no user) belong: threads. Lists of blurts by
 // someone, near someone or like something never match a placeholder anyway.
@@ -355,8 +358,10 @@ export async function deleteBlurts(
   // blurt stays as a placeholder) or waits and then finds its parent gone or deleted.
   await client.query('SELECT 1 FROM blurts WHERE id = ANY($1::bigint[]) FOR UPDATE', [ids])
   await client.query('DELETE FROM reports WHERE blurt_id = ANY($1::bigint[])', [ids])
+  await client.query('DELETE FROM likes WHERE blurt_id = ANY($1::bigint[])', [ids])
   await client.query(
-    `UPDATE blurts SET deleted_at = now(), user_id = NULL, text = NULL, embedding = NULL
+    `UPDATE blurts SET deleted_at = now(), user_id = NULL, text = NULL, embedding = NULL,
+       like_count = 0
      WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
     [ids],
   )
@@ -376,7 +381,8 @@ export async function deleteBlurts(
 // Deletes the account and everything that refers to it, in one transaction. The user's
 // blurts go through deleteBlurts (one with replies from others stays as an authorless
 // placeholder). Deleting the users row then cascades to the profile (avatar, location),
-// sessions, follows both ways, the user's own invite codes and the reports they made; the
+// sessions, follows both ways, the user's own invite codes and the reports they made. The
+// likes they gave are taken off each blurt's count and deleted before that. The
 // code they signed up with stays used (used_at) with used_by_user_id set NULL. Their
 // waitlist entry goes. The username is retired for good (retired_usernames), so nobody
 // can take it and pass for them. signup_counter is left alone: it counts sign-ups, so a
@@ -397,6 +403,20 @@ export async function deleteAccount(userId: number): Promise<string[] | undefine
       await client.query('ROLLBACK')
       return undefined
     }
+    // Locks the user's blurts and the blurts they liked, in id order, so two accounts
+    // deleted at once that liked each other's blurts can't deadlock.
+    await client.query(
+      `SELECT 1 FROM blurts WHERE user_id = $1
+         OR id IN (SELECT blurt_id FROM likes WHERE user_id = $1)
+       ORDER BY id FOR UPDATE`,
+      [userId],
+    )
+    await client.query(
+      `UPDATE blurts b SET like_count = b.like_count - 1
+       FROM likes l WHERE l.blurt_id = b.id AND l.user_id = $1`,
+      [userId],
+    )
+    await client.query('DELETE FROM likes WHERE user_id = $1', [userId])
     const blurts = await client.query<{ id: number }>('SELECT id FROM blurts WHERE user_id = $1', [
       userId,
     ])
@@ -796,4 +816,86 @@ export async function unfollow(userId: number, followedUserId: number): Promise<
     userId,
     followedUserId,
   ])
+}
+
+// Sets `viewerLikes` on the blurts the viewer likes, a feed item's replies included: one
+// query for a whole page. Does nothing for anonymous viewers.
+export async function markViewerLikes(
+  viewerId: number | null,
+  blurts: (Blurt | FeedItem | null)[],
+): Promise<void> {
+  const all = blurts.flatMap((blurt) =>
+    blurt === null ? [] : [blurt, ...('replies' in blurt ? blurt.replies : [])],
+  )
+  if (viewerId === null || all.length === 0) {
+    return
+  }
+  const { rows } = await dbRead().query<{ blurtId: number }>(
+    'SELECT blurt_id AS "blurtId" FROM likes WHERE user_id = $1 AND blurt_id = ANY($2::bigint[])',
+    [viewerId, all.map((blurt) => blurt.id)],
+  )
+  const liked = new Set(rows.map((row) => row.blurtId))
+  for (const blurt of all) {
+    blurt.viewerLikes = liked.has(blurt.id)
+  }
+}
+
+export type LikeState = { blurtId: number; likeCount: number; viewerLikes: boolean }
+
+// Likes (or with `likes` false, unlikes) a blurt. Liking twice, or unliking a blurt you
+// don't like, changes nothing. The blurt's row is locked first, so concurrent likes and
+// unlikes of one blurt queue: each sees the count the one before it left, and none is lost.
+// Deleted blurts and placeholders can't be liked. deleteBlurts takes the same lock, so a
+// like either lands first (and goes with the blurt) or waits and then finds it gone.
+// Returns the new state, 'not-found' for no such blurt, or 'no-user' if the user no longer
+// exists (e.g. a still-valid token after a database reset).
+export async function setLike(
+  userId: number,
+  blurtId: number,
+  likes: boolean,
+): Promise<LikeState | 'not-found' | 'no-user'> {
+  const client = await db().connect()
+  try {
+    await client.query('BEGIN')
+    // The user, then the blurt: the order deleteAccount locks them in.
+    const user = await client.query('SELECT 1 FROM users WHERE id = $1 FOR KEY SHARE', [userId])
+    if (user.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return 'no-user'
+    }
+    const blurt = await client.query<{ likeCount: number }>(
+      `SELECT like_count AS "likeCount" FROM blurts WHERE id = $1 AND deleted_at IS NULL
+       FOR NO KEY UPDATE`,
+      [blurtId],
+    )
+    if (blurt.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return 'not-found'
+    }
+    const changed = likes
+      ? await client.query(
+          'INSERT INTO likes (user_id, blurt_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [userId, blurtId],
+        )
+      : await client.query('DELETE FROM likes WHERE user_id = $1 AND blurt_id = $2', [
+          userId,
+          blurtId,
+        ])
+    let likeCount = blurt.rows[0].likeCount
+    if (changed.rowCount === 1) {
+      const updated = await client.query<{ likeCount: number }>(
+        `UPDATE blurts SET like_count = like_count + $2 WHERE id = $1
+         RETURNING like_count AS "likeCount"`,
+        [blurtId, likes ? 1 : -1],
+      )
+      likeCount = updated.rows[0].likeCount
+    }
+    await client.query('COMMIT')
+    return { blurtId, likeCount, viewerLikes: likes }
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }

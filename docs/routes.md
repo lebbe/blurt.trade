@@ -58,11 +58,14 @@ carry `Vary: Accept`.
   HTML renders them as plain sections between the blurts, so they work without JS.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
-- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar, deleted }`,
+- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar, deleted,
+  likeCount, viewerLikes }`,
   with `createdAt` as an ISO 8601 string and `avatar` the blurter's (see Avatar below).
   `deleted` is `true` for a deleted blurt's placeholder in a thread, whose `username`,
   `text` and `avatar` are `null` (see Deleting and reporting). A `FeedItem` is a
-  top-level blurt plus `replies`, its latest two replies.
+  top-level blurt plus `replies`, its latest two replies. `likeCount` is how many people
+  like it, `viewerLikes` whether you do (`false` for anonymous visitors), on every page
+  that lists blurts (see Likes).
 - `reported` on a blurt page says whether the viewer has reported the blurt (`false`
   for anonymous viewers).
 - `reports` on `/admin/reports` is `[{ blurt, reports: [{ reporter, reason, createdAt }] }]`:
@@ -131,6 +134,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
 | `/api/follow`                | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/like`                  | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
+| `/api/unlike`                | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
@@ -141,6 +146,29 @@ Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the session cookies, for JSON callers too.
+
+## Likes
+
+Every blurt shows its like count, and to logged-in viewers a Like (or Unlike) button: a
+plain form with `blurtId`, so it works without JS, on the feeds, profiles, `/near` and
+blurt pages. Code: `setLike` and `markViewerLikes` in `src/routes/state.ts`, the routes
+in `src/routes/blurts.ts`.
+
+- `POST /api/like` and `POST /api/unlike`, the same shape as follow and unfollow.
+  Liking twice, or unliking a blurt you don't like, does nothing. Your own blurts can be
+  liked. An unknown, deleted or placeholder blurt is a 404. Forms go back to the page
+  they came from (its `Referer`, same host only) at `#blurt-<id>`, the blurt's
+  `<article>`; without one, to the blurt's page. JSON callers get
+  `{ blurtId, likeCount, viewerLikes }`.
+- The count is a column, `blurts.like_count`, so lists never count likes. `setLike`
+  locks the blurt row, inserts or deletes the `likes` row and changes the count by one
+  only if that did something, in one transaction. Concurrent likes of one blurt queue on
+  the lock, so none is lost. `viewerLikes` is one query per page for all the blurts on
+  it (`markViewerLikes`), from the replica like the lists.
+- Who liked what is private: only counts are shown. Deleting a blurt (or turning it into
+  a placeholder) deletes its likes and zeroes its count; deleting an account takes its
+  likes off every count, then deletes them.
+- Rate limited per account, one budget for both (`LIKE`).
 
 ## Deleting and reporting
 
@@ -191,7 +219,8 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
 `src/routes/state.ts`, the route in `src/routes/users.ts`.
 
 - One transaction. The user's blurts go through `deleteBlurts`, so one that others
-  replied to stays as an authorless placeholder and their replies stay. Then the
+  replied to stays as an authorless placeholder and their replies stay. The likes they
+  gave are taken off each blurt's count and deleted. Then the
   `users` row goes, and with it (`ON DELETE CASCADE`) the profile (avatar, location),
   sessions, follows both ways, the user's own invite codes (so "Invited by" disappears
   from their invitees' profiles) and the reports they made. The code they signed up with
@@ -355,6 +384,7 @@ error table below.
 | `WAITLIST_IP`          | `/waitlist`                    | IP                   | 10/1h   |
 | `BLURT`                | `/api/blurts` (and replies)    | account              | 20/10m  |
 | `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget) | 60/10m  |
+| `LIKE`                 | `/api/like`, `/api/unlike`     | account (one budget) | 120/10m |
 | `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |
 | `LOCATION`             | `/api/location`                | account              | 30/10m  |
 | `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |

@@ -51,7 +51,7 @@ function blurtMarkdown(blurt: Blurt, replies: Blurt[] = []): Markdown {
   return md`
     ### ${blurt.username ?? 'Deleted'}
 
-    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}
+    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}${!blurt.deleted && ` · ${likesText(blurt)}`}
 
     ${blurt.deleted ? raw('_This blurt was deleted._') : blurt.text}
 
@@ -65,8 +65,24 @@ function blurtMarkdown(blurt: Blurt, replies: Blurt[] = []): Markdown {
   `
 }
 
+function likesText(blurt: Blurt): string {
+  return `${plural(blurt.likeCount, 'like')}${blurt.viewerLikes ? ' (you like it)' : ''}`
+}
+
 // What the viewer can do to the blurt, as the requests to send.
 function blurtActionsMarkdown(viewer: Viewer, blurt: Blurt, reported: boolean): Markdown | null {
+  const like =
+    viewer &&
+    !blurt.deleted &&
+    md`${blurt.viewerLikes ? 'Unlike' : 'Like'} it with ${code(`POST ${blurt.viewerLikes ? '/api/unlike' : '/api/like'}`)} and ${code(`blurtId=${blurt.id}`)}.`
+  return md`
+    ${like}
+
+    ${actionMarkdown(viewer, blurt, reported)}
+  `
+}
+
+function actionMarkdown(viewer: Viewer, blurt: Blurt, reported: boolean): Markdown | null {
   const action = blurtActions(viewer, blurt)
   if (action === 'delete') {
     return md`Delete it with ${code(`POST ${deleteBlurtPath(blurt)}`)}.`
@@ -416,6 +432,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - Who you follow.
+    - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
     - Your invite codes, and who signed up with them. Who invited you shows on your profile.
     - Blurts you report, with your reason and when.
     - Your sessions: one record per login, with when it started and was last used. No IP address and no browser details.
@@ -424,7 +441,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     For deleted accounts, only the username is kept, in lower case and with nothing else, so it can't be taken again.
 
-    Public: your username, profile, avatar, blurts, follower counts and who invited you. Everything else is private, though admins see who reported what.
+    Public: your username, profile, avatar, blurts, follower and like counts, and who invited you. Everything else is private, though admins see who reported what.
 
     ## What is not stored
 
@@ -446,7 +463,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Deleting your account
 
-    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, your blurts and their embeddings, who you follow and who follows you, your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, your blurts and their embeddings, who you follow and who follows you, your likes (and the likes on your blurts), your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
 
     What stays: a blurt someone replied to stays as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still hold the account until they expire, 30 days at most.
 

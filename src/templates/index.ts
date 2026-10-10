@@ -399,7 +399,7 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
 
 // What deleting an account does: on the confirmation page, in both views.
 export const accountDeletionEffects = [
-  'Your profile, avatar, location, follows (both ways), sessions, invite codes and reports are deleted.',
+  'Your profile, avatar, location, follows (both ways), likes, sessions, invite codes and reports are deleted.',
   'Your blurts and replies are deleted. One that someone replied to stays as an empty placeholder, with no text and no author, so their replies still read.',
   'Your username is retired: nobody can sign up with it again, so nobody can pass for you.',
   "You're logged out everywhere. It can't be undone; nightly backups still hold the account for up to 30 days.",
@@ -466,6 +466,28 @@ function NextPageLink({ href, label }: { href: string; label: string }) {
 
 export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
+}
+
+// The id of a blurt's <article>, so a like form's redirect lands back at the blurt.
+export function blurtAnchor(blurt: Blurt): string {
+  return `blurt-${blurt.id}`
+}
+
+// The count for everyone; logged-in viewers get it as a Like / Unlike button.
+function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
+  const count = plural(blurt.likeCount, 'like')
+  if (!viewer) {
+    return html`<span class="like-count">${count}</span>`
+  }
+  return html`
+    <form method="post" action=${blurt.viewerLikes ? '/api/unlike' : '/api/like'} class="like-form">
+      <input type="hidden" name="blurtId" value=${blurt.id} />
+      <button type="submit" aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}>
+        ${blurt.viewerLikes ? 'Unlike' : 'Like'}
+      </button>
+      <span class="like-count">${count}</span>
+    </form>
+  `
 }
 
 // Two clicks, no JS: the <details> opens the form, its button deletes for good.
@@ -553,7 +575,7 @@ function BlurtCard({
 
   // The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
-    <article class="blurt">
+    <article class="blurt" id=${blurtAnchor(blurt)}>
       <${AvatarSvg} avatar=${blurt.avatar} />
       <div class="blurt-body">
         <div class="blurt-meta">
@@ -567,6 +589,7 @@ function BlurtCard({
         <p>${blurt.text}</p>
         ${replyCards}
         <div class="blurt-actions">
+          <${Likes} blurt=${blurt} viewer=${viewer} />
           ${showActions && html`<a href=${blurtUrl(blurt)}>${threadLink}</a>`}
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
           ${
@@ -1330,6 +1353,10 @@ function PrivacyPage({ contact }: InfoPageData) {
         </li>
         <li>Who you follow.</li>
         <li>
+          Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
+          who liked it.
+        </li>
+        <li>
           Your invite codes, and who signed up with them. Who invited you shows on your profile.
         </li>
         <li>Blurts you report, with your reason and when.</li>
@@ -1347,8 +1374,8 @@ function PrivacyPage({ contact }: InfoPageData) {
         can't be taken again.
       </p>
       <p>
-        Public: your username, profile, avatar, blurts, follower counts and who invited you.
-        Everything else is private, though admins see who reported what.
+        Public: your username, profile, avatar, blurts, follower and like counts, and who invited
+        you. Everything else is private, though admins see who reported what.
       </p>
       <h2>What is not stored</h2>
       <ul>
@@ -1393,8 +1420,8 @@ function PrivacyPage({ contact }: InfoPageData) {
         <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It
         deletes at once, in one go, everything above that belongs to the account: your profile,
         avatar and location, your blurts and their embeddings, who you follow and who follows you,
-        your invite codes, your reports, your sessions and your waitlist entry. You're logged out
-        everywhere.
+        your likes (and the likes on your blurts), your invite codes, your reports, your sessions
+        and your waitlist entry. You're logged out everywhere.
       </p>
       <p>
         What stays: a blurt someone replied to stays as an empty placeholder, with no text and no

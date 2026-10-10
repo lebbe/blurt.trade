@@ -228,6 +228,21 @@ section h2 {
   background: none;
   padding: 0;
 }
+.like-form {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+}
+.like-form button {
+  padding: 0.15rem 0.5rem;
+}
+.like-form button[aria-pressed='true'] {
+  font-weight: bold;
+}
+.like-count {
+  color: #6d6258;
+}
 .discovery {
   margin: 1.5rem 0;
   padding: 0 1rem 1rem;

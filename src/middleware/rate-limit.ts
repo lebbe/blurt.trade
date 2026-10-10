@@ -30,6 +30,8 @@ const defaults = {
   avatar: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
+  // Like and unlike share it.
+  like: '120/10m',
   // Checks the password with Argon2, like login.
   deleteAccount: '5/10m',
 } satisfies Record<string, string>

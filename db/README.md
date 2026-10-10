@@ -177,8 +177,9 @@ migrations run as the normal app user.
 | ------------------- | ----------------------------------------------------------------- |
 | `users`             | `id`, `username` (unique), `password_hash` (Argon2id)             |
 | `user_profiles`     | one row per user: homepage, social handles, bio, `location`       |
-| `blurts`            | `user_id`, `text` (1–280 chars), `parent_id` (reply), `embedding` |
+| `blurts`            | `user_id`, `text`, `parent_id` (reply), `embedding`, `like_count` |
 | `follows`           | `user_id` follows `followed_user_id`                              |
+| `likes`             | `user_id` likes `blurt_id` (`blurts.like_count` is the count)     |
 | `sessions`          | one row per login: refresh token generation, last use, revoked    |
 | `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
 | `waitlist`          | usernames that asked to be let in while sign-up was full          |
