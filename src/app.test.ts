@@ -6,6 +6,7 @@ import { closeDb, db } from './db.ts'
 import { embedPendingBlurts, setEmbedder } from './embeddings.ts'
 import { app } from './server.ts'
 import { getUserByUsername, getUserProfileByUsername } from './routes/state.ts'
+import { reservedUsernames } from './routes/users.ts'
 
 // Never the dev database: every test wipes all tables.
 process.env.DATABASE_URL =
@@ -114,7 +115,7 @@ test('shows the empty feed', async () => {
 
   assert.equal(response.statusCode, 200)
   assert.match(response.body, /Nothing has been blurted yet/)
-  assert.doesNotMatch(response.body, /action="\/blurts"/)
+  assert.doesNotMatch(response.body, /action="\/api\/blurts"/)
   assert.match(response.body, /href="\/login"/)
   assert.match(response.body, /href="\/createUser"/)
 })
@@ -160,7 +161,7 @@ test('rejects unsupported feed representations', async () => {
 })
 
 test('rejects blurt submissions without authentication', async () => {
-  const response = await request('POST', '/blurts', 'text=Hello+world')
+  const response = await request('POST', '/api/blurts', 'text=Hello+world')
 
   assert.equal(response.statusCode, 401)
   assert.equal(await countBlurts(), 0)
@@ -168,7 +169,7 @@ test('rejects blurt submissions without authentication', async () => {
 
 test('creates a blurt and redirects back to the feed', async () => {
   const cookie = await createSession()
-  const response = await request('POST', '/blurts', 'text=Hello+world', { cookie })
+  const response = await request('POST', '/api/blurts', 'text=Hello+world', { cookie })
 
   assert.equal(response.statusCode, 303)
   assert.equal(response.location, '/')
@@ -178,7 +179,7 @@ test('creates a blurt and redirects back to the feed', async () => {
 
 test('renders submitted input and validation errors for an invalid blurt', async () => {
   const cookie = await createSession()
-  const response = await request('POST', '/blurts', 'text=', { cookie })
+  const response = await request('POST', '/api/blurts', 'text=', { cookie })
 
   assert.equal(response.statusCode, 400)
   assert.match(response.body, /Blurt is required/)
@@ -202,11 +203,11 @@ test('creates a user, logs them in, and redirects to the feed', async () => {
   const authenticatedFeed = await request('GET', '/', '', {
     cookie: response.setCookie?.[0]?.split(';', 1)[0] ?? '',
   })
-  assert.match(authenticatedFeed.body, /action="\/blurts"/)
+  assert.match(authenticatedFeed.body, /action="\/api\/blurts"/)
   assert.doesNotMatch(authenticatedFeed.body, /name="name"/)
-  assert.match(authenticatedFeed.body, /action="\/logout"/)
+  assert.match(authenticatedFeed.body, /action="\/api\/logout"/)
 
-  const logout = await request('GET', '/logout', '', {
+  const logout = await request('POST', '/api/logout', '', {
     cookie: response.setCookie?.[0]?.split(';', 1)[0] ?? '',
   })
   assert.equal(logout.statusCode, 303)
@@ -219,8 +220,8 @@ test('shows only one user feed and profile data on profile route', async () => {
   const larsCookie = await createSession('Lars')
   const adaCookie = await createSession('Ada')
 
-  await request('POST', '/blurts', 'text=Lars+post', { cookie: larsCookie })
-  await request('POST', '/blurts', 'text=Ada+post', { cookie: adaCookie })
+  await request('POST', '/api/blurts', 'text=Lars+post', { cookie: larsCookie })
+  await request('POST', '/api/blurts', 'text=Ada+post', { cookie: adaCookie })
 
   const response = await request('GET', '/Lars/', '', { cookie: larsCookie })
 
@@ -275,9 +276,19 @@ test('forbids profile edits from non-owners', async () => {
   await createSession('Lars')
   const adaCookie = await createSession('Ada')
 
-  const response = await request('POST', '/Lars/edit', 'homepage=https%3A%2F%2Fexample.com', {
+  const response = await request('POST', '/Lars/edit', 'bio=ada+was+here', {
     cookie: adaCookie,
   })
+
+  assert.equal(response.statusCode, 403)
+  assert.equal((await getUserProfileByUsername('Lars'))?.bio, '')
+})
+
+test('forbids opening the edit page of someone else', async () => {
+  await createSession('Lars')
+  const adaCookie = await createSession('Ada')
+
+  const response = await request('GET', '/Lars/edit', '', { cookie: adaCookie })
 
   assert.equal(response.statusCode, 403)
 })
@@ -320,10 +331,11 @@ test('logs out a valid token whose user no longer exists', async () => {
   const cookie = await createSession('Lars')
   await db().query('TRUNCATE users, user_profiles, blurts RESTART IDENTITY CASCADE')
 
-  const response = await request('POST', '/blurts', 'text=Hello+world', { cookie })
+  const response = await request('POST', '/api/blurts', 'text=Hello+world', { cookie })
 
   assert.equal(response.statusCode, 303)
-  assert.equal(response.location, '/logout')
+  assert.equal(response.location, '/')
+  assert.match(response.setCookie?.[0] ?? '', /Max-Age=0/i)
   assert.equal(await countBlurts(), 0)
 })
 
@@ -375,10 +387,10 @@ async function blurtIdByText(text: string): Promise<number> {
 test('replies to a blurt and shows the thread on the blurt page', async () => {
   const larsCookie = await createSession('Lars')
   const adaCookie = await createSession('Ada')
-  await request('POST', '/blurts', 'text=Original+blurt', { cookie: larsCookie })
+  await request('POST', '/api/blurts', 'text=Original+blurt', { cookie: larsCookie })
   const id = await blurtIdByText('Original blurt')
 
-  const reply = await request('POST', `/Lars/${id}/replies`, 'text=Nice+one', {
+  const reply = await request('POST', '/api/blurts', `parentId=${id}&text=Nice+one`, {
     cookie: adaCookie,
   })
   assert.equal(reply.statusCode, 303)
@@ -397,10 +409,10 @@ test('replies to a blurt and shows the thread on the blurt page', async () => {
 
 test('re-renders the blurt page with the error for an invalid reply', async () => {
   const cookie = await createSession('Lars')
-  await request('POST', '/blurts', 'text=Original+blurt', { cookie })
+  await request('POST', '/api/blurts', 'text=Original+blurt', { cookie })
   const id = await blurtIdByText('Original blurt')
 
-  const response = await request('POST', `/Lars/${id}/replies`, 'text=', { cookie })
+  const response = await request('POST', '/api/blurts', `parentId=${id}&text=`, { cookie })
 
   assert.equal(response.statusCode, 400)
   assert.match(response.body, /Blurt is required/)
@@ -410,10 +422,10 @@ test('re-renders the blurt page with the error for an invalid reply', async () =
 
 test('rejects replies without authentication', async () => {
   const cookie = await createSession('Lars')
-  await request('POST', '/blurts', 'text=Original+blurt', { cookie })
+  await request('POST', '/api/blurts', 'text=Original+blurt', { cookie })
   const id = await blurtIdByText('Original blurt')
 
-  const response = await request('POST', `/Lars/${id}/replies`, 'text=Hi')
+  const response = await request('POST', '/api/blurts', `parentId=${id}&text=Hi`)
 
   assert.equal(response.statusCode, 401)
   assert.equal(await countBlurts(), 1)
@@ -421,10 +433,10 @@ test('rejects replies without authentication', async () => {
 
 test('feed lists top-level blurts with their latest two replies', async () => {
   const cookie = await createSession('Lars')
-  await request('POST', '/blurts', 'text=Original+blurt', { cookie })
+  await request('POST', '/api/blurts', 'text=Original+blurt', { cookie })
   const id = await blurtIdByText('Original blurt')
   for (const text of ['first', 'second', 'third']) {
-    await request('POST', `/Lars/${id}/replies`, `text=${text}+reply`, { cookie })
+    await request('POST', '/api/blurts', `parentId=${id}&text=${text}+reply`, { cookie })
   }
 
   const json = await request('GET', '/', '', { accept: 'application/json' })
@@ -444,7 +456,7 @@ test('feed lists top-level blurts with their latest two replies', async () => {
 test('shows related blurts once embeddings are computed', async () => {
   const cookie = await createSession('Lars')
   for (const text of ['my cat is great', 'cat videos all day', 'stock market news']) {
-    await request('POST', '/blurts', `text=${encodeURIComponent(text)}`, { cookie })
+    await request('POST', '/api/blurts', `text=${encodeURIComponent(text)}`, { cookie })
   }
   await embedPendingBlurts()
   const id = await blurtIdByText('my cat is great')
@@ -460,10 +472,85 @@ test('shows related blurts once embeddings are computed', async () => {
 test('returns 404 for a blurt under the wrong username', async () => {
   await createSession('Ada')
   const cookie = await createSession('Lars')
-  await request('POST', '/blurts', 'text=Original+blurt', { cookie })
+  await request('POST', '/api/blurts', 'text=Original+blurt', { cookie })
   const id = await blurtIdByText('Original blurt')
 
   const response = await request('GET', `/Ada/${id}`)
 
   assert.equal(response.statusCode, 404)
+})
+
+test('every top-level route is a reserved username, and every POST has a page or lives under /api/', () => {
+  type Layer = {
+    route?: { path: string; methods: Record<string, boolean> }
+    handle: { stack?: Layer[] }
+  }
+  const layers = (app.router as unknown as { stack: Layer[] }).stack
+  const routes = layers.flatMap((layer) =>
+    layer.route ? [layer.route] : (layer.handle.stack ?? []).flatMap((inner) => inner.route ?? []),
+  )
+  assert.ok(routes.length > 5, 'could not read the route table')
+
+  for (const route of routes) {
+    const firstSegment = route.path.split('/')[1]
+    if (firstSegment && !firstSegment.startsWith(':')) {
+      assert.ok(
+        reservedUsernames.has(firstSegment.toLowerCase()),
+        `"${firstSegment}" (from ${route.path}) must be in reservedUsernames`,
+      )
+    }
+    if (route.methods.post && !route.path.startsWith('/api/')) {
+      assert.ok(
+        routes.some((other) => other.path === route.path && other.methods.get),
+        `POST ${route.path} has no GET page at the same path, so it must live under /api/`,
+      )
+    }
+  }
+})
+
+test('rejects reserved usernames in any letter case', async () => {
+  for (const username of ['login', 'Login', 'API', 'createUser', 'settings']) {
+    const response = await request(
+      'POST',
+      '/createUser',
+      `username=${username}&password=correct-horse`,
+    )
+    assert.equal(response.statusCode, 400, username)
+    assert.match(response.body, /That username is reserved/)
+  }
+  assert.equal(await getUserByUsername('login'), undefined)
+})
+
+test('rejects usernames that are not safe as a URL segment', async () => {
+  for (const username of ['a/b', 'favicon.ico', 'with space', 'x?y', 'æøå']) {
+    const response = await request(
+      'POST',
+      '/createUser',
+      `username=${encodeURIComponent(username)}&password=correct-horse`,
+    )
+    assert.equal(response.statusCode, 400, username)
+    assert.match(response.body, /letters, numbers and underscores/)
+  }
+})
+
+test('treats usernames as case-insensitive', async () => {
+  await createSession('Lars')
+
+  const taken = await request('POST', '/createUser', 'username=lars&password=other-horse')
+  assert.equal(taken.statusCode, 400)
+  assert.match(taken.body, /Username is already taken/)
+
+  const profile = await request('GET', '/lars/')
+  assert.equal(profile.statusCode, 200)
+  assert.match(profile.body, /<h1>Lars<\/h1>/)
+
+  const login = await request('POST', '/login', 'username=LARS&password=correct-horse')
+  assert.equal(login.statusCode, 303)
+})
+
+test('the database rejects unsafe usernames even if the app does not', async () => {
+  await assert.rejects(
+    db().query(`INSERT INTO users (username, password_hash) VALUES ('a/b', 'x')`),
+    /users_username_format/,
+  )
 })

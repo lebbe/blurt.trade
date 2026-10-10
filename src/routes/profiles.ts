@@ -86,9 +86,8 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
 })
 
 profilesRouter.post('/:username/edit', requireAuth, async (request, response) => {
-  const { username } = request.params
   const authenticatedUser = response.locals.authenticatedUser
-  const profile = await getUserProfileByUsername(username)
+  const profile = await getUserProfileByUsername(request.params.username)
 
   if (!profile) {
     response.status(404).send('User not found')
@@ -115,5 +114,5 @@ profilesRouter.post('/:username/edit', requireAuth, async (request, response) =>
   }
 
   await updateUserProfile(profile.userId, result.data)
-  response.redirect(303, `/${username}/`)
+  response.redirect(303, `/${profile.username}/`)
 })

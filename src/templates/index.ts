@@ -20,7 +20,7 @@ type PageProps = {
 type ComposerProps = {
   text?: string
   validationError?: string
-  action?: string
+  parentId?: number
   label?: string
   button?: string
 }
@@ -46,13 +46,14 @@ type ProfileEditProps = {
 function Composer({
   text = '',
   validationError,
-  action = '/blurts',
+  parentId,
   label = 'Blurt',
   button = 'Blurt it',
 }: ComposerProps) {
   return html`
-    <form method="post" action=${action}>
+    <form method="post" action="/api/blurts">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+      ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
       <label>${label} <textarea name="text" maxlength="280" required>${text}</textarea></label>
       <button type="submit">${button}</button>
     </form>
@@ -96,7 +97,7 @@ function LoginForm({ username = '', validationError }: LoginProps) {
 
 function LogoutForm() {
   return html`
-    <form method="get" action="/logout">
+    <form method="post" action="/api/logout">
       <button type="submit">Log out</button>
     </form>
   `
@@ -183,7 +184,7 @@ function BlurtPage({ blurt, parent, replies, related, composer, isAuthenticated 
           isAuthenticated
             ? html`<${Composer}
                 ...${composer ?? {}}
-                action=${`${blurtUrl(blurt)}/replies`}
+                parentId=${blurt.id}
                 label="Reply"
                 button="Reply"
               />`

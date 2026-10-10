@@ -128,7 +128,7 @@ export async function addUser(username: string, passwordHash: string): Promise<U
   const { rows } = await db().query<User>(
     `WITH new_user AS (
        INSERT INTO users (username, password_hash) VALUES ($1, $2)
-       ON CONFLICT (username) DO NOTHING
+       ON CONFLICT DO NOTHING -- username taken, in any letter case
        RETURNING id, username, password_hash
      ), new_profile AS (
        INSERT INTO user_profiles (user_id) SELECT id FROM new_user
@@ -141,7 +141,7 @@ export async function addUser(username: string, passwordHash: string): Promise<U
 
 export async function getUserByUsername(username: string): Promise<User | undefined> {
   const { rows } = await db().query<User>(
-    `SELECT id, username, password_hash AS "passwordHash" FROM users WHERE username = $1`,
+    `SELECT id, username, password_hash AS "passwordHash" FROM users WHERE lower(username) = lower($1)`,
     [username],
   )
   return rows[0]
@@ -150,7 +150,7 @@ export async function getUserByUsername(username: string): Promise<User | undefi
 export async function getUserProfileByUsername(username: string): Promise<UserProfile | undefined> {
   const { rows } = await db().query<UserProfile>(
     `SELECT ${profileColumns} FROM user_profiles p JOIN users u ON u.id = p.user_id
-     WHERE u.username = $1`,
+     WHERE lower(u.username) = lower($1)`,
     [username],
   )
   return rows[0]

@@ -4,12 +4,11 @@ import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
 import { ValidationError } from './middleware/validate.ts'
 import { blurtsRouter } from './routes/blurts.ts'
-import { listFeed } from './routes/state.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
-import { renderCreateUserPage, renderFeedPage, renderLoginPage } from './templates/index.ts'
+import { renderCreateUserPage, renderLoginPage } from './templates/index.ts'
 
 export const app = express()
 app.use(express.urlencoded({ extended: false }))
@@ -19,7 +18,7 @@ app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(profilesRouter)
 app.use(
-  async (
+  (
     error: unknown,
     request: express.Request,
     response: express.Response,
@@ -58,19 +57,7 @@ app.use(
       return
     }
 
-    response
-      .status(400)
-      .type('html')
-      .send(
-        renderFeedPage(
-          await listFeed(),
-          {
-            text: typeof values.text === 'string' ? values.text : '',
-            validationError: error.message,
-          },
-          true,
-        ),
-      )
+    response.status(400).type('text').send(error.message)
   },
 )
 
