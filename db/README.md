@@ -2,7 +2,7 @@
 
 ```
 db/
-  setup-wsl.sh     installs and configures PostgreSQL + pgvector + PostGIS in WSL (safe to re-run)
+  setup-wsl.sh     installs and configures PostgreSQL + pgvector + PostGIS + PgBouncer in WSL (safe to re-run)
   migrate.ts       applies every migration that has not run yet
   mint-invites.ts  mints invite codes in bulk (see docs/routes.md, Invite codes)
   migrations/      plain .sql files, applied in filename (timestamp) order
@@ -24,29 +24,60 @@ First time, from the repo root:
 wsl -d Ubuntu -u root -- bash db/setup-wsl.sh
 ```
 
-That installs PostgreSQL, pgvector and PostGIS, creates the `blurt` and `blurt_test`
-databases with the `vector` and `postgis` extensions, and creates the `blurt` role. `npm start` and `npm run dev`
-apply pending migrations before listening. `node db/migrate.ts` does it on its own.
-Connection string (also the default in `migrate.ts`):
+That installs PostgreSQL, pgvector, PostGIS and PgBouncer, creates the `blurt` and
+`blurt_test` databases with the `vector` and `postgis` extensions, creates the `blurt`
+role, and puts PgBouncer on **port 6433** in front of both databases. `npm start` and
+`npm run dev` apply pending migrations before listening. `node db/migrate.ts` does it on
+its own. Connection strings (the defaults in `db/migrate.ts`):
 
 ```
-postgres://blurt:blurt@localhost:5433/blurt
+postgres://blurt:blurt@localhost:6433/blurt   the app (DATABASE_URL), through PgBouncer
+postgres://blurt:blurt@localhost:5433/blurt   migrations (MIGRATION_DATABASE_URL), direct
 ```
 
-PostgreSQL is enabled in systemd, so it starts whenever the WSL distro starts.
-If you get "connection refused", the distro probably isn't running yet:
+PostgreSQL and PgBouncer are enabled in systemd, so they start whenever the WSL distro
+starts. If you get "connection refused", the distro probably isn't running yet:
 
 ```powershell
-wsl -d Ubuntu -u root -- systemctl start postgresql
+wsl -d Ubuntu -u root -- systemctl start postgresql pgbouncer
 ```
 
 A psql shell: `wsl -d Ubuntu -u postgres -- psql -p 5433 -d blurt`
 
+## Connection pooling (PgBouncer)
+
+The app talks to PgBouncer, not to PostgreSQL. PgBouncer keeps a few PostgreSQL
+connections open and lends them out, so a request never pays for a new connection.
+`db/setup-wsl.sh` writes `/etc/pgbouncer/pgbouncer.ini` and `userlist.txt` (re-run it
+after changing them there; edits in `/etc` are overwritten). Its log is
+`/var/log/postgresql/pgbouncer.log`.
+
+It runs in **transaction pooling** mode: a PostgreSQL connection belongs to a client for
+one transaction, then goes back to the pool. Code that uses `db()` must therefore not
+rely on session state between transactions: no session-level advisory locks,
+`LISTEN`/`NOTIFY`, plain `SET` (use `SET LOCAL` inside a transaction), or temporary
+tables. Several statements that belong together go on one client from `db().connect()`
+inside `BEGIN`…`COMMIT`, as `addUser` in `src/routes/state.ts` does. Parameterised queries are fine, and so are
+named prepared statements (`max_prepared_statements` is on).
+
+Pool sizes: PgBouncer opens at most `default_pool_size` = 20 PostgreSQL connections per
+database and user, and accepts up to 500 clients. The app's `pg.Pool` defaults to 20
+connections (`DB_POOL_SIZE`), so a single server never asks for more than PgBouncer will
+lend at once. With several app processes behind one PgBouncer, split it between them
+(e.g. `DB_POOL_SIZE=5` for four processes), or raise `default_pool_size` together with
+PostgreSQL's `max_connections` (100 by default).
+
+**Migrations bypass PgBouncer.** node-pg-migrate holds a session-level advisory lock
+while it runs, which transaction pooling can't keep. `migrate()` connects to
+`MIGRATION_DATABASE_URL`, else `DATABASE_URL`, else `localhost:5433`. When `DATABASE_URL`
+points at PgBouncer, always set `MIGRATION_DATABASE_URL` to PostgreSQL itself.
+
 ## Tests
 
-`npm test` uses the `blurt_test` database (override with `TEST_DATABASE_URL`) and
-wipes all tables before each test, so it never touches your dev data. Tests use a
-fake embedder, so they don't load the model.
+`npm test` uses the `blurt_test` database and wipes all tables before each test, so it
+never touches your dev data. Like the app, its queries go through PgBouncer (override
+with `TEST_DATABASE_URL`) and its migrations go straight to PostgreSQL (override with
+`TEST_MIGRATION_DATABASE_URL`). Tests use a fake embedder, so they don't load the model.
 
 ## Schema changes
 
@@ -72,7 +103,9 @@ DATABASE_URL=postgres://blurt:blurt@localhost:5433/blurt node node_modules/node-
 
 ## Production
 
-Set `DATABASE_URL` and start the server. `src/server.ts` runs `migrate()` before it
+Set `DATABASE_URL` (PgBouncer in transaction mode, or PostgreSQL itself) and, when it
+points at PgBouncer, `MIGRATION_DATABASE_URL` (PostgreSQL directly). Size `DB_POOL_SIZE`
+to PgBouncer's pool as described above. Then start the server. `src/server.ts` runs `migrate()` before it
 starts listening, so migrations that haven't run yet are applied on every deploy. If
 nothing is pending, it does nothing.
 

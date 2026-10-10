@@ -5,16 +5,19 @@ import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { migrate } from '../db/migrate.ts'
-import { closeDb, db } from './db.ts'
+import { closeDb, db, poolSize } from './db.ts'
 import { embedPendingBlurts, setEmbedder } from './embeddings.ts'
 import { app } from './server.ts'
 import { getUserByUsername, getUserProfileByUsername } from './routes/state.ts'
 import { reservedUsernames } from './routes/users.ts'
 import { mapHeight, mapUrl, mapWidth } from './geo.ts'
 
-// Never the dev database: every test wipes all tables.
+// Never the dev database: every test wipes all tables. Like the app, queries go through
+// PgBouncer (6433) and migrations straight to PostgreSQL (5433).
 process.env.DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? 'postgres://blurt:blurt@localhost:5433/blurt_test'
+  process.env.TEST_DATABASE_URL ?? 'postgres://blurt:blurt@localhost:6433/blurt_test'
+const testMigrationDatabaseUrl =
+  process.env.TEST_MIGRATION_DATABASE_URL ?? 'postgres://blurt:blurt@localhost:5433/blurt_test'
 
 function request(
   method: string,
@@ -88,7 +91,7 @@ setEmbedder(async (texts) =>
   }),
 )
 
-test.before(() => migrate(process.env.DATABASE_URL))
+test.before(() => migrate(testMigrationDatabaseUrl))
 
 test.beforeEach(async () => {
   await db().query(
@@ -1871,4 +1874,27 @@ test('open sign-up takes an optional invite code', async () => {
   })
   assert.equal(created.statusCode, 201)
   assert.equal(JSON.parse((await request('GET', '/Ada/', '', json)).body).invitedBy, 'Lars')
+})
+
+test('transactions work through PgBouncer with more callers than connections', async () => {
+  // PgBouncer's default_pool_size in db/setup-wsl.sh. A bigger app pool would queue in it.
+  assert.ok(poolSize <= 20)
+  const results = await Promise.all(
+    Array.from({ length: poolSize * 3 }, async (_, index) => {
+      const client = await db().connect()
+      try {
+        await client.query('BEGIN')
+        await client.query('SELECT pg_sleep(0.01)')
+        const { rows } = await client.query<{ value: number }>('SELECT $1::int AS value', [index])
+        await client.query('COMMIT')
+        return rows[0].value
+      } finally {
+        client.release()
+      }
+    }),
+  )
+  assert.deepEqual(
+    results,
+    Array.from({ length: poolSize * 3 }, (_, index) => index),
+  )
 })

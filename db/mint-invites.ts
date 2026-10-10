@@ -4,7 +4,7 @@
 //
 //   node db/mint-invites.ts <username> <count> [days until they expire]
 //
-// Uses DATABASE_URL, like migrate.ts.
+// Uses DATABASE_URL, like the app (PgBouncer on port 6433 by default).
 import { closeDb } from '../src/db.ts'
 import { getUserByUsername, mintInviteCodes } from '../src/routes/state.ts'
 
