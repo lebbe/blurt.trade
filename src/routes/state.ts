@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto'
+import type pg from 'pg'
 import { db } from '../db.ts'
 
 export type Blurt = {
@@ -229,15 +231,16 @@ export async function getSignupState(): Promise<SignupState> {
   return rows[0].state
 }
 
-// Claims a sign-up slot and creates the user and an empty profile, in one transaction.
-// `limit` is the limit the slot must be under: the soft limit for open sign-up, the hard
-// limit for sign-up with an invite code. Returns 'taken' if the username is taken and
-// 'full' if there was no slot left; in both cases nothing is claimed.
+// Claims a sign-up slot and creates the user, an empty profile and the user's own invite
+// codes, in one transaction. Without an invite code the slot must be under the soft limit;
+// with one, under the hard limit, and the code is redeemed. Returns 'taken' if the username
+// is taken, 'full' if there was no slot left, and 'invalid-code' if the code doesn't exist,
+// is used or has expired. In all three cases nothing is claimed or redeemed.
 export async function addUser(
   username: string,
   passwordHash: string,
-  limit: 'soft_limit' | 'hard_limit' = 'soft_limit',
-): Promise<User | 'taken' | 'full'> {
+  inviteCode?: string,
+): Promise<User | 'taken' | 'full' | 'invalid-code'> {
   const client = await db().connect()
   try {
     await client.query('BEGIN')
@@ -246,7 +249,7 @@ export async function addUser(
     // COMMIT, so nothing slow (like hashing the password) happens inside this transaction.
     const slot = await client.query(
       `UPDATE signup_counter SET current_count = current_count + 1
-       WHERE current_count < ${limit === 'hard_limit' ? 'hard_limit' : 'soft_limit'}
+       WHERE current_count < ${inviteCode ? 'hard_limit' : 'soft_limit'}
        RETURNING current_count`,
     )
     if (slot.rowCount === 0) {
@@ -268,18 +271,108 @@ export async function addUser(
        SELECT id, username, password_hash AS "passwordHash" FROM new_user`,
       [username, passwordHash],
     )
-    if (!rows[0]) {
+    const user = rows[0]
+    if (!user) {
       await client.query('ROLLBACK') // releases the slot
       return 'taken'
     }
+
+    if (inviteCode) {
+      // Single use even at the same moment: a second sign-up with this code waits on the
+      // row's lock, re-checks `used_at IS NULL` once the first commits, and matches nothing.
+      const redeemed = await client.query(
+        `UPDATE invite_codes SET used_by_user_id = $1, used_at = now()
+         WHERE code = $2 AND used_at IS NULL AND (expires_at IS NULL OR expires_at > now())`,
+        [user.id, inviteCode],
+      )
+      if (redeemed.rowCount === 0) {
+        await client.query('ROLLBACK') // releases the slot and the username
+        return 'invalid-code'
+      }
+    }
+
+    await mintInviteCodes(user.id, invitesPerUser, null, client)
     await client.query('COMMIT')
-    return rows[0]
+    return user
   } catch (error) {
     await client.query('ROLLBACK')
     throw error
   } finally {
     client.release()
   }
+}
+
+// How many invite codes each new user gets to share, at sign-up.
+export const invitesPerUser = 3
+
+// No look-alikes (no 0/O, 1/I/L). 31 symbols, so 12 of them are about 59 random bits: far
+// too many to guess. Must match the CHECK in db/migrations/*_invite-codes.sql.
+const inviteAlphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+const inviteCodeLength = 12
+
+function generateInviteCode(): string {
+  return Array.from(
+    { length: inviteCodeLength },
+    () => inviteAlphabet[randomInt(inviteAlphabet.length)],
+  ).join('')
+}
+
+// A code as people type or paste it: any letter case, with spaces or dashes. Returns the
+// code as stored, or undefined if it can't be one.
+export function normalizeInviteCode(input: string): string | undefined {
+  const code = input.replace(/[\s-]/g, '').toUpperCase()
+  const valid =
+    code.length === inviteCodeLength && [...code].every((c) => inviteAlphabet.includes(c))
+  return valid ? code : undefined
+}
+
+// Creates `count` new codes owned by the user. `client` lets addUser do it inside its
+// transaction. Admins mint in bulk with `node db/mint-invites.ts`.
+export async function mintInviteCodes(
+  userId: number,
+  count: number,
+  expiresAt: Date | null = null,
+  client: Pick<pg.PoolClient, 'query'> = db(),
+): Promise<string[]> {
+  const codes = Array.from({ length: count }, generateInviteCode)
+  await client.query(
+    'INSERT INTO invite_codes (code, user_id, expires_at) SELECT unnest($1::text[]), $2, $3',
+    [codes, userId, expiresAt],
+  )
+  return codes
+}
+
+// One of the user's own codes, as listed on their profile. `usedBy` is the username of
+// whoever signed up with it.
+export type InviteCode = {
+  code: string
+  usedBy: string | null
+  usedAt: Date | null
+  expiresAt: Date | null
+  createdAt: Date
+}
+
+// Unused codes first, so the ones left to share are on top.
+export async function listInviteCodes(userId: number): Promise<InviteCode[]> {
+  const { rows } = await db().query<InviteCode>(
+    `SELECT i.code, u.username AS "usedBy", i.used_at AS "usedAt",
+       i.expires_at AS "expiresAt", i.created_at AS "createdAt"
+     FROM invite_codes i LEFT JOIN users u ON u.id = i.used_by_user_id
+     WHERE i.user_id = $1
+     ORDER BY i.used_at IS NOT NULL, i.used_at DESC, i.created_at, i.code`,
+    [userId],
+  )
+  return rows
+}
+
+// The username of whoever invited the user, or null if they signed up without a code.
+export async function getInvitedBy(userId: number): Promise<string | null> {
+  const { rows } = await db().query<{ username: string }>(
+    `SELECT u.username FROM invite_codes i JOIN users u ON u.id = i.user_id
+     WHERE i.used_by_user_id = $1`,
+    [userId],
+  )
+  return rows[0]?.username ?? null
 }
 
 // Someone who asked to be let in once sign-up was full. No personal data: only the

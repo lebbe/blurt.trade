@@ -17,6 +17,7 @@ import {
   getUserByUsername,
   getWaitlistEntry,
   joinWaitlist,
+  normalizeInviteCode,
   type SignupState,
 } from './state.ts'
 import {
@@ -88,7 +89,25 @@ const newUsername = z
   .regex(/^[A-Za-z0-9_]+$/, 'Username can only contain letters, numbers and underscores')
   .refine((name) => !reservedUsernames.has(name.toLowerCase()), 'That username is reserved')
 
-const createUserSchema = z.object({ username: newUsername, password })
+const invalidInviteCode = "That invite code doesn't exist, has been used or has expired"
+
+// Optional: needed only once sign-up is invite-only. Empty counts as no code.
+const inviteCode = z
+  .string()
+  .optional()
+  .transform((value, context) => {
+    if (!value?.trim()) {
+      return undefined
+    }
+    const code = normalizeInviteCode(value)
+    if (!code) {
+      context.addIssue({ code: 'custom', message: invalidInviteCode })
+      return z.NEVER
+    }
+    return code
+  })
+
+const createUserSchema = z.object({ username: newUsername, password, inviteCode })
 
 const waitlistSchema = z.object({ username: newUsername })
 
@@ -103,6 +122,11 @@ function submittedUsername(body: unknown): string {
   return typeof username === 'string' ? username : ''
 }
 
+function submittedInviteCode(body: unknown): string {
+  const code = (body as { inviteCode?: unknown } | undefined)?.inviteCode
+  return typeof code === 'string' ? code : ''
+}
+
 // Why sign-up was refused, for each state where it is closed to a plain sign-up.
 const signupClosedMessages: Record<SignupState, string> = {
   open: 'Sign-up just changed. Please try again.', // the limits were raised mid-request
@@ -110,11 +134,13 @@ const signupClosedMessages: Record<SignupState, string> = {
   waitlist: 'Sign-up is full right now. Join the waitlist instead.',
 }
 
+// ?invite=<code> fills in the invite code, so a shared link is all an invitee needs.
 usersRouter.get('/createUser', async (request, response) => {
+  const invite = typeof request.query.invite === 'string' ? request.query.invite.trim() : ''
   represent(
     request,
     response,
-    { viewer: getViewer(request), signup: await getSignupState() },
+    { viewer: getViewer(request), signup: await getSignupState(), inviteCode: invite || null },
     { html: renderCreateUserPage, markdown: createUserMarkdown },
   )
 })
@@ -134,6 +160,7 @@ usersRouter.post('/createUser', async (request, response) => {
     renderCreateUserPage({
       viewer: getViewer(request),
       signup: await getSignupState(),
+      inviteCode: submittedInviteCode(request.body) || null,
       username: submittedUsername(request.body),
       validationError,
     })
@@ -143,10 +170,15 @@ usersRouter.post('/createUser', async (request, response) => {
   }
 
   // Hashed before claiming a slot, so the slot's row lock is held as briefly as possible.
-  const { username, password } = result.data
-  const user = await addUser(username, await hash(password))
+  const { username, password, inviteCode } = result.data
+  const user = await addUser(username, await hash(password), inviteCode)
   if (user === 'taken') {
     const errors = [{ field: 'username', message: 'Username is already taken' }]
+    await sendFormErrors(request, response, errors, rerender)
+    return
+  }
+  if (user === 'invalid-code') {
+    const errors = [{ field: 'inviteCode', message: invalidInviteCode }]
     await sendFormErrors(request, response, errors, rerender)
     return
   }

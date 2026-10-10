@@ -21,17 +21,17 @@ carry `Vary: Accept`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path              | Auth  | JSON                                                               | Errors                  |
-| ----------------- | ----- | ------------------------------------------------------------------ | ----------------------- |
-| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, next }` | 400 bad cursor          |
-| `/everyone`       | —     | the same, always the everyone feed                                 | 400 bad cursor          |
-| `/:username/`     | —     | `{ viewer, profile, follows, blurts: Blurt[], next }`              | 400, 404 no such user   |
-| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                | 400, 404 no such blurt  |
-| `/:username/edit` | owner | `{ viewer, profile }`                                              | 401, 403 not owner, 404 |
-| `/login`          | —     | `{ viewer }`                                                       |                         |
-| `/createUser`     | —     | `{ viewer, signup }`                                               |                         |
-| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                     |                         |
-| `/settings`       | yes   | `{ viewer, activeSessions }`                                       | 401                     |
+| Path              | Auth  | JSON                                                                 | Errors                  |
+| ----------------- | ----- | -------------------------------------------------------------------- | ----------------------- |
+| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, next }`   | 400 bad cursor          |
+| `/everyone`       | —     | the same, always the everyone feed                                   | 400 bad cursor          |
+| `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }` | 400, 404 no such user   |
+| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                  | 400, 404 no such blurt  |
+| `/:username/edit` | owner | `{ viewer, profile }`                                                | 401, 403 not owner, 404 |
+| `/login`          | —     | `{ viewer }`                                                         |                         |
+| `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                     |                         |
+| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                       |                         |
+| `/settings`       | yes   | `{ viewer, activeSessions }`                                         | 401                     |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -54,10 +54,15 @@ carry `Vary: Accept`.
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,
   linkedin, bio }`. Empty fields are `''`.
+- `invitedBy` is the username of whoever invited the profile's owner, or `null`.
+  `inviteCodes` is only there for the owner (`null` for anyone else): their codes as
+  `{ code, usedBy, usedAt, expiresAt, createdAt }`, unused first. `usedBy` is the
+  invitee's username, `expiresAt` `null` for codes that never expire.
 - `signup` is `'open'`, `'invite'` or `'waitlist'` (see Sign-up limits below).
   `/waitlist?username=<name>` looks that name up: `username` echoes it (or `null`), and
   `entry` is `{ username, status: 'waiting' | 'joined', createdAt }` or `null`. `waiting`
-  is how many entries are still waiting.
+  is how many entries are still waiting. `/createUser?invite=<code>` fills in the form's
+  invite code (`inviteCode`, or `null`), so a shared link is all an invitee needs.
 - `activeSessions` is how many browsers and devices the viewer is logged in on.
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
 
@@ -67,17 +72,17 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path                     | Auth  | Body                               | Form success                | JSON success                                   |
-| ------------------------ | ----- | ---------------------------------- | --------------------------- | ---------------------------------------------- |
-| `/createUser`            | —     | `username`, `password`             | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
-| `/waitlist`              | —     | `username`                         | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
-| `/login`                 | —     | `username`, `password`             | 303 → `/`                   | 200 `{ id, username }`                         |
-| `/:username/edit`        | owner | profile fields (missing → cleared) | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`            | yes   | `text`, optional `parentId`        | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
-| `/api/follow`            | yes   | `username`                         | 303 → profile               | 200 their `follows`                            |
-| `/api/unfollow`          | yes   | `username`                         | 303 → profile               | 200 their `follows`                            |
-| `/api/logout`            | —     | —                                  | 303 → `/`                   | 204                                            |
-| `/api/logout-everywhere` | yes   | —                                  | 303 → `/login`              | 204                                            |
+| Path                     | Auth  | Body                                 | Form success                | JSON success                                   |
+| ------------------------ | ----- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
+| `/createUser`            | —     | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/waitlist`              | —     | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
+| `/login`                 | —     | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
+| `/:username/edit`        | owner | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
+| `/api/blurts`            | yes   | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/follow`            | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/unfollow`          | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/logout`            | —     | —                                    | 303 → `/`                   | 204                                            |
+| `/api/logout-everywhere` | yes   | —                                    | 303 → `/login`              | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
@@ -92,13 +97,35 @@ sign-up page (`signup` in its data) is in one of three states:
 | State      | When                            | `/createUser` shows                 | `POST /createUser` |
 | ---------- | ------------------------------- | ----------------------------------- | ------------------ |
 | `open`     | count below `soft_limit`        | the sign-up form                    | creates the user   |
-| `invite`   | `soft_limit` up to `hard_limit` | "invite-only", no form (codes: 011) | 403                |
+| `invite`   | `soft_limit` up to `hard_limit` | "invite-only", the form with a code | needs a valid code |
 | `waitlist` | count at `hard_limit`           | "full", and the waitlist form       | 403                |
 
 Sign-up claims a slot with one `UPDATE ... WHERE current_count < limit RETURNING` in the
 same transaction as creating the user, so concurrent sign-ups never pass the limit. A
 taken username rolls the transaction back, releasing the slot. The 403 carries
 `{ errors: [{ message }] }` for JSON, or the page in its current state for forms.
+
+## Invite codes
+
+Every new user gets 3 invite codes, listed under "Your invite codes" on their own
+profile, each with a `/createUser?invite=<code>` link to share. A code is single-use and
+lets one person sign up while sign-up is invite-only. It doesn't get past the hard limit
+(403, the waitlist). Open sign-up takes a code too, optionally, so "Invited by" still
+shows on the invitee's profile.
+
+Codes are 12 characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no look-alikes), about
+59 random bits. Case, spaces and dashes in what people type are ignored. Sign-up redeems
+the code with `UPDATE invite_codes ... WHERE code = $1 AND used_at IS NULL` in the same
+transaction that claims the slot and creates the user, so two sign-ups with one code at
+the same moment can't both get it. A code that doesn't exist, is used or has expired is
+a 400 on `inviteCode`, and rolls back the slot and the username.
+
+User codes never expire. Admins mint codes in bulk, for launches and press, owned by an
+existing account (they show on its profile), optionally expiring:
+
+```bash
+node db/mint-invites.ts <username> <count> [days until they expire]
+```
 
 `POST /waitlist` only works in the `waitlist` state (403 otherwise). It takes a username
 and nothing else, so no personal data is stored and nobody is contacted: people check

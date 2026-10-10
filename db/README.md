@@ -4,6 +4,7 @@
 db/
   setup-wsl.sh     installs and configures PostgreSQL + pgvector in WSL (safe to re-run)
   migrate.ts       applies every migration that has not run yet
+  mint-invites.ts  mints invite codes in bulk (see docs/routes.md, Invite codes)
   migrations/      plain .sql files, applied in filename (timestamp) order
 ```
 
@@ -90,6 +91,7 @@ migrations run as the normal app user.
 | `sessions`       | one row per login: refresh token generation, last use, revoked    |
 | `signup_counter` | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
 | `waitlist`       | usernames that asked to be let in while sign-up was full          |
+| `invite_codes`   | single-use sign-up codes: owner `user_id`, `used_by_user_id`      |
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
 `sessions` is `UNLOGGED`: a crash empties it, which only logs everyone out. The server
@@ -104,6 +106,10 @@ UPDATE signup_counter SET soft_limit = 2000, hard_limit = 20000;
 `current_count` counts sign-ups, not current users: it never goes down.
 `waitlist` stores only a username and a status (`waiting`, or `joined` once it signs
 up), no email. See docs/routes.md, Sign-up limits.
+
+An invite code counts as used once `used_at` is set, not by `used_by_user_id`, which
+would go `NULL` if the invitee's account were deleted: the code must not work again.
+The migration gave every existing user 3 codes, as new users get at sign-up.
 
 A reply is a blurt with a `parent_id`. The main feed lists only top-level blurts.
 

@@ -12,7 +12,9 @@ import {
 import {
   follow,
   getFollowStats,
+  getInvitedBy,
   getUserProfileByUsername,
+  listInviteCodes,
   listBlurtsByUserId,
   parseCursor,
   unfollow,
@@ -78,14 +80,17 @@ profilesRouter.get('/:username/', async (request, response) => {
   }
 
   const viewer = getViewer(request)
-  const [follows, { items: blurts, next }] = await Promise.all([
+  const isOwner = viewer?.id === profile.userId
+  const [invitedBy, inviteCodes, follows, { items: blurts, next }] = await Promise.all([
+    getInvitedBy(profile.userId),
+    isOwner ? listInviteCodes(profile.userId) : null, // codes are only for their owner
     getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
   ])
   represent(
     request,
     response,
-    { viewer, profile, follows, blurts, next },
+    { viewer, profile, invitedBy, inviteCodes, follows, blurts, next },
     { html: renderProfilePage, markdown: profilePageMarkdown },
   )
 })

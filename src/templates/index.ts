@@ -6,6 +6,7 @@ import type {
   Blurt,
   FeedItem,
   FollowStats,
+  InviteCode,
   SignupState,
   UserProfile,
   WaitlistEntry,
@@ -50,9 +51,13 @@ export type BlurtPageData = {
   related: Blurt[]
 }
 
+// `invitedBy` is the username of whoever invited them (null if nobody did).
+// `inviteCodes` are the profile's own codes, only for its owner (null for anyone else).
 export type ProfilePageData = {
   viewer: Viewer
   profile: UserProfile
+  invitedBy: string | null
+  inviteCodes: InviteCode[] | null
   follows: FollowStats
   blurts: Blurt[]
   next: string | null
@@ -64,7 +69,8 @@ export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
 export type FormPageData = { viewer: Viewer }
 
 // `signup` says whether the sign-up form is open, needs an invite code, or is full.
-export type SignupPageData = { viewer: Viewer; signup: SignupState }
+// `inviteCode` fills in the form's invite code (from ?invite= or the submitted form).
+export type SignupPageData = { viewer: Viewer; signup: SignupState; inviteCode: string | null }
 
 // `waiting`: how many are on the waitlist. `username` is the one looked up with
 // ?username=, and `entry` its waitlist entry (null if it has none).
@@ -119,20 +125,27 @@ function ValidationError({ message }: { message?: string }) {
   return message ? html`<p class="validation-error" role="alert">${message}</p>` : null
 }
 
-// The sign-up page in each state. Invite-only shows no form until invite codes exist.
-function CreateUserPage({ signup, username, validationError }: CreateUserProps) {
+// The sign-up page in each state. Open sign-up takes an invite code too, optionally, so
+// "invited by" still shows on the profile.
+function CreateUserPage({ signup, inviteCode, username, validationError }: CreateUserProps) {
+  const form = html`<${CreateUserForm}
+    username=${username}
+    inviteCode=${inviteCode ?? ''}
+    inviteRequired=${signup === 'invite'}
+    validationError=${validationError}
+  />`
   if (signup === 'open') {
-    return html`<${CreateUserForm} username=${username} validationError=${validationError} />`
+    return form
   }
   if (signup === 'invite') {
     return html`
       <section class="signup-closed" aria-label="Invite only">
-        <${ValidationError} message=${validationError} />
         <h2>Invite only</h2>
         <p>
           blurt.trade is invite-only right now. You need an invite code from someone who's already
           here to sign up.
         </p>
+        ${form}
         <p>Already have a profile? <a href="/login">Log in</a>.</p>
       </section>
     `
@@ -199,13 +212,29 @@ function WaitlistPage({
   `
 }
 
-function CreateUserForm({ username = '', validationError }: FormProps) {
+function CreateUserForm({
+  username = '',
+  inviteCode = '',
+  inviteRequired = false,
+  validationError,
+}: FormProps & { inviteCode?: string; inviteRequired?: boolean }) {
   return html`
     <form method="post" action="/createUser">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
       <label>Username <input name="username" maxlength="40" required value=${username} /></label>
       <label
         >Password <input name="password" type="password" minlength="8" maxlength="200" required
+      /></label>
+      <label
+        >Invite code${inviteRequired ? '' : ' (optional)'}
+        <input
+          name="inviteCode"
+          maxlength="40"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          required=${inviteRequired}
+          value=${inviteCode}
       /></label>
       <button type="submit">Create user</button>
     </form>
@@ -565,7 +594,49 @@ function FollowForm({ username, following }: { username: string; following: bool
   `
 }
 
-function ProfilePage({ viewer, profile, follows, blurts, next }: ProfilePageData) {
+// Unused codes link to sign-up with the code filled in, ready to share.
+function InviteCodes({ codes }: { codes: InviteCode[] }) {
+  const now = new Date()
+  const items = codes.map((invite) => {
+    const status = invite.usedAt
+      ? invite.usedBy
+        ? html`used by <a href="/${invite.usedBy}/">${invite.usedBy}</a>`
+        : 'used'
+      : invite.expiresAt && invite.expiresAt <= now
+        ? 'expired'
+        : html`<a href="/createUser?invite=${invite.code}">sign-up link</a>${
+              invite.expiresAt &&
+              html`, expires
+                <time datetime=${invite.expiresAt.toISOString()}>
+                  ${invite.expiresAt.toISOString().slice(0, 10)}
+                </time>`
+            }`
+    return html`<li><code>${invite.code}</code> · ${status}</li>`
+  })
+  return html`
+    <section aria-label="Your invite codes">
+      <h2>Your invite codes</h2>
+      <p>Each code lets one person sign up, even while blurt.trade is invite-only.</p>
+      ${
+        items.length > 0
+          ? html`<ul class="invite-codes">
+              ${items}
+            </ul>`
+          : html`<p class="empty">You have no invite codes.</p>`
+      }
+    </section>
+  `
+}
+
+function ProfilePage({
+  viewer,
+  profile,
+  invitedBy,
+  inviteCodes,
+  follows,
+  blurts,
+  next,
+}: ProfilePageData) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
 
   return html`
@@ -577,12 +648,14 @@ function ProfilePage({ viewer, profile, follows, blurts, next }: ProfilePageData
       <p class="follow-counts">
         ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
       </p>
+      ${invitedBy && html`<p class="invited-by">Invited by <a href="/${invitedBy}/">${invitedBy}</a></p>`}
       ${
         viewer &&
         viewer.id !== profile.userId &&
         html`<${FollowForm} username=${profile.username} following=${follows.viewerFollows} />`
       }
       <${ProfileData} profile=${profile} canEdit=${viewer?.id === profile.userId} />
+      ${inviteCodes && html`<${InviteCodes} codes=${inviteCodes} />`}
       <section aria-label="${profile.username} blurts">
         <h2>Blurts</h2>
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}

@@ -1,4 +1,4 @@
-import type { Blurt, UserProfile } from '../routes/state.ts'
+import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
 import {
   blurtUrl,
   feedPath,
@@ -135,13 +135,27 @@ const profileFields: [keyof UserProfile, string][] = [
   ['bio', 'Bio'],
 ]
 
+function inviteCodeMarkdown(invite: InviteCode, now: Date): Markdown {
+  const status = invite.usedAt
+    ? invite.usedBy
+      ? md`used by ${link(invite.usedBy, `/${invite.usedBy}/`)}`
+      : 'used'
+    : invite.expiresAt && invite.expiresAt <= now
+      ? 'expired'
+      : md`${link('sign-up link', `/createUser?invite=${invite.code}`)}${invite.expiresAt && md`, expires ${invite.expiresAt}`}`
+  return md`- ${code(invite.code)} · ${status}`
+}
+
 export function profilePageMarkdown({
   viewer,
   profile,
+  invitedBy,
+  inviteCodes,
   follows,
   blurts,
   next,
 }: ProfilePageData): Markdown {
+  const now = new Date()
   const fields = profileFields.map(
     ([key, label]) => md`- ${label}: ${profileValue(String(profile[key]))}`,
   )
@@ -152,6 +166,8 @@ export function profilePageMarkdown({
     ${home}
 
     ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
+
+    ${invitedBy && md`Invited by ${link(invitedBy, `/${invitedBy}/`)}`}
 
     ${
       viewer &&
@@ -164,6 +180,24 @@ export function profilePageMarkdown({
     ${join(fields, '\n')}
 
     ${viewer?.id === profile.userId && link('Edit profile', `/${profile.username}/edit`)}
+
+    ${
+      inviteCodes &&
+      md`
+        ## Your invite codes
+
+        Each code lets one person sign up, even while blurt.trade is invite-only.
+
+        ${
+          inviteCodes.length > 0
+            ? join(
+                inviteCodes.map((invite) => inviteCodeMarkdown(invite, now)),
+                '\n',
+              )
+            : 'You have no invite codes.'
+        }
+      `
+    }
 
     ## Blurts
 
@@ -207,7 +241,8 @@ export function loginMarkdown({ viewer }: FormPageData): Markdown {
 
 const usernameRules = md`${code('username')} (letters, numbers and ${code('_')})`
 
-export function createUserMarkdown({ viewer, signup }: SignupPageData): Markdown {
+export function createUserMarkdown({ viewer, signup, inviteCode }: SignupPageData): Markdown {
+  const invite = md`${code('inviteCode')}${inviteCode && md` (yours: ${code(inviteCode)})`}`
   if (signup === 'invite') {
     return md`
       # Create a profile
@@ -216,6 +251,10 @@ export function createUserMarkdown({ viewer, signup }: SignupPageData): Markdown
 
       blurt.trade is invite-only right now. You need an invite code from someone who's already
       here to sign up.
+
+      Send ${code('POST /createUser')} as a form or as JSON with ${usernameRules}, ${code('password')} (at least 8 characters) and ${invite}.
+
+      ${viewer && md`You are already logged in as ${viewer.username}.`}
     `
   }
   if (signup === 'waitlist') {
@@ -230,7 +269,7 @@ export function createUserMarkdown({ viewer, signup }: SignupPageData): Markdown
   return formMarkdown(
     'Create a profile',
     '/createUser',
-    md`${usernameRules} and ${code('password')} (at least 8 characters)`,
+    md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${invite}`,
     viewer,
   )
 }
