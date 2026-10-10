@@ -53,8 +53,8 @@ carry `Vary: Accept`.
   HTML renders them as plain sections between the blurts, so they work without JS.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
-- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount }`, with
-  `createdAt` as an ISO 8601 string. A `FeedItem` is a top-level blurt plus `replies`, its
+- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar }`, with
+  `createdAt` as an ISO 8601 string and `avatar` the blurter's (see Avatar below). A `FeedItem` is a top-level blurt plus `replies`, its
   latest two replies.
 - Lists come in pages of 100. `next` is an opaque cursor for the page after this one, or
   `null` on the last page: `/?before=<next>` and `/:username/?before=<next>` for older
@@ -65,7 +65,7 @@ carry `Vary: Accept`.
 - `parent` is `null` for a top-level blurt. `related` is empty until the blurt's
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,
-  linkedin, bio }`. Empty fields are `''`.
+  linkedin, bio, avatar }`. Empty fields are `''`.
 - `invitedBy` is the username of whoever invited the profile's owner, or `null`.
   `inviteCodes` is only there for the owner (`null` for anyone else): their codes as
   `{ code, usedBy, usedAt, expiresAt, createdAt }`, unused first. `usedBy` is the
@@ -102,6 +102,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/follow`            | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/unfollow`          | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/location`          | yes   | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
+| `/api/avatar`            | yes   | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/logout`            | —     | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere` | yes   | —                                    | 303 → `/login`              | 204                                            |
 
@@ -135,6 +136,35 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
   with the error.
 - The edit page shows what is stored, as text and as a marker on the map.
 - Radius queries use `ST_DWithin` on the profile points, with a GiST index.
+
+## Avatar
+
+Every profile has a cartoon face instead of a profile picture, in the style of Terrance
+and Phillip: the whole top of the head flaps up and down when it talks. Code in
+`src/avatar.ts` (the data, palettes, validation) and `src/templates/avatar.ts` (the SVG).
+
+- `avatar` is `{ skin, hairType, hairColor, eyeType, eyeColor, pupilColor, toothType,
+  toothColor }`, stored as JSON in `user_profiles.avatar`. Colours are lower-case
+  `#rrggbb` (any colour). `hairType` is `bald`, `tuft`, `flat`, `spiky`, `mohawk` or
+  `afro`; `eyeType` `classic`, `dots`, `round`, `wide`, `sleepy` or `angry`; `toothType`
+  `none`, `two`, `buck`, `gap` or `full`.
+- Sign-up gives every new profile a random avatar, with colours from fixed palettes so it
+  looks normal-ish (`avatarPalettes`). Profiles from before avatars got one in the
+  migration.
+- The edit page has an avatar form: `<input type="color">` for the colours, `<select>` for
+  the types, a live preview, and two submit buttons. "Save avatar" sends every field;
+  "Random" (`name="random"`) makes the server pick a new random avatar and save it, so it
+  works without JS. `POST /api/avatar` takes all eight fields, or `random` (any non-empty
+  value, or JSON `{ "random": true }`). A missing or invalid field is a 400 on that field;
+  forms get the edit page again with the error.
+- Nobody uploads SVG. The server draws it from these fields only, as inline SVG with no
+  scripts, links or external references. Every value is validated on the way in (zod),
+  the database `CHECK`s the same rules, and the template checks them again when drawing
+  (anything unexpected gets a default).
+- Blurts show the blurter's avatar, on the left of odd blurts and the right of even ones
+  (`.blurt:nth-of-type(even)`). It talks (CSS animation, no JS) while the pointer is over
+  the avatar or its blurt, and holds still with `prefers-reduced-motion`. The profile page
+  shows it large.
 
 ## Sign-up limits
 

@@ -3,6 +3,8 @@ import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
+import { avatarLabels, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
+import { AvatarSvg, avatarCss } from './avatar.ts'
 import type {
   Blurt,
   FeedItem,
@@ -146,7 +148,11 @@ type CreateUserProps = SignupPageData & FormProps
 
 type LoginProps = FormProps
 
-type ProfileEditProps = ProfileEditData & { validationError?: string; locationError?: string }
+type ProfileEditProps = ProfileEditData & {
+  validationError?: string
+  locationError?: string
+  avatarError?: string
+}
 
 function Composer({
   text = '',
@@ -380,27 +386,31 @@ function BlurtCard({
         ? plural(hiddenReplies, 'more reply', 'more replies')
         : plural(hiddenReplies, 'reply', 'replies')
 
+  // The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
     <article class="blurt">
-      <div class="blurt-meta">
-        <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
-        <a href=${blurtUrl(blurt)}
-          ><time datetime=${blurt.createdAt.toISOString()}
-            >${blurt.createdAt.toLocaleString()}</time
-          ></a
-        >
+      <${AvatarSvg} avatar=${blurt.avatar} />
+      <div class="blurt-body">
+        <div class="blurt-meta">
+          <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
+          <a href=${blurtUrl(blurt)}
+            ><time datetime=${blurt.createdAt.toISOString()}
+              >${blurt.createdAt.toLocaleString()}</time
+            ></a
+          >
+        </div>
+        <p>${blurt.text}</p>
+        ${
+          replies.length > 0 &&
+          html`<div class="replies">
+            ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} />`)}
+          </div>`
+        }
+        ${
+          showActions &&
+          html`<p class="blurt-actions"><a href=${blurtUrl(blurt)}>${threadLink}</a></p>`
+        }
       </div>
-      <p>${blurt.text}</p>
-      ${
-        replies.length > 0 &&
-        html`<div class="replies">
-          ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} />`)}
-        </div>`
-      }
-      ${
-        showActions &&
-        html`<p class="blurt-actions"><a href=${blurtUrl(blurt)}>${threadLink}</a></p>`
-      }
     </article>
   `
 }
@@ -579,7 +589,77 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
   `
 }
 
-function ProfileEditForm({ profile, location, validationError, locationError }: ProfileEditProps) {
+function TypeSelect<T extends string>({
+  name,
+  label,
+  types,
+  value,
+}: {
+  name: keyof Avatar
+  label: string
+  types: readonly T[]
+  value: T
+}) {
+  return html`<label
+    >${label}
+    <select name=${name}>
+      ${types.map(
+        (type) =>
+          html`<option value=${type} selected=${type === value}>${avatarLabels[type]}</option>`,
+      )}
+    </select>
+  </label>`
+}
+
+function ColorInput({ name, label, value }: { name: keyof Avatar; label: string; value: string }) {
+  return html`<label class="color-field"
+    >${label} <input type="color" name=${name} value=${value} required
+  /></label>`
+}
+
+// One plain form: "Save avatar" sends the choices, "Random" (name="random") makes the
+// server pick a new random avatar instead. Both work without JS.
+function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
+  return html`
+    <section aria-label="Avatar">
+      <h2>Avatar</h2>
+      <${ValidationError} message=${error} />
+      <form method="post" action="/api/avatar" class="avatar-form">
+        <div class="avatar-preview">
+          <${AvatarSvg} avatar=${avatar} label="Your avatar" size="large" />
+          <p class="empty">Hover it to hear it talk.</p>
+        </div>
+        <div class="avatar-fields">
+          <${ColorInput} name="skin" label="Skin colour" value=${avatar.skin} />
+          <${TypeSelect} name="hairType" label="Hair" types=${hairTypes} value=${avatar.hairType} />
+          <${ColorInput} name="hairColor" label="Hair colour" value=${avatar.hairColor} />
+          <${TypeSelect} name="eyeType" label="Eyes" types=${eyeTypes} value=${avatar.eyeType} />
+          <${ColorInput} name="eyeColor" label="Eye colour" value=${avatar.eyeColor} />
+          <${ColorInput} name="pupilColor" label="Pupil colour" value=${avatar.pupilColor} />
+          <${TypeSelect}
+            name="toothType"
+            label="Teeth"
+            types=${toothTypes}
+            value=${avatar.toothType}
+          />
+          <${ColorInput} name="toothColor" label="Tooth colour" value=${avatar.toothColor} />
+        </div>
+        <div class="avatar-buttons">
+          <button type="submit">Save avatar</button>
+          <button type="submit" name="random" value="1" formnovalidate>Random</button>
+        </div>
+      </form>
+    </section>
+  `
+}
+
+function ProfileEditForm({
+  profile,
+  location,
+  validationError,
+  locationError,
+  avatarError,
+}: ProfileEditProps) {
   return html`
     <header>
       <h1>Edit profile: ${profile.username}</h1>
@@ -653,6 +733,7 @@ ${profile.bio}</textarea>
         </label>
         <button type="submit">Save profile</button>
       </form>
+      <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
       <${LocationForms} location=${location} error=${locationError} />
     </main>
   `
@@ -829,9 +910,12 @@ function ProfilePage({
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
 
   return html`
-    <header>
-      <h1>${profile.username}</h1>
-      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
+    <header class="profile-header">
+      <${AvatarSvg} avatar=${profile.avatar} label="${profile.username}'s avatar" size="large" />
+      <div>
+        <h1>${profile.username}</h1>
+        <p class="tagline"><a href="/">Back to blurt.trade</a></p>
+      </div>
     </header>
     <main>
       <p class="follow-counts">
@@ -959,9 +1043,54 @@ function IndexDocument({ children }: { children: unknown }) {
             margin: 0.2rem 0 0;
           }
           .blurt {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
             margin-top: 0.75rem;
           }
-          .blurt-meta {
+          .blurt:nth-of-type(even) {
+            flex-direction: row-reverse;
+          }
+          .blurt-body {
+            flex: 1;
+            min-width: 0;
+          }
+          .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+          }
+          .avatar-form {
+            grid-template-columns: auto 1fr;
+            align-items: start;
+            gap: 1rem;
+          }
+          .avatar-preview p {
+            margin: 0.25rem 0 0;
+            font-size: 0.85rem;
+          }
+          .avatar-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+            gap: 0.75rem;
+          }
+          .avatar-buttons {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 0.75rem;
+          }
+          .color-field input {
+            width: 100%;
+            height: 2.6rem;
+            padding: 0.2rem;
+          }
+          select {
+            font: inherit;
+            padding: 0.6rem;
+            border: 1px solid #aaa095;
+            background: #fffdf8;
+          }
+          ${avatarCss} .blurt-meta {
             display: flex;
             justify-content: space-between;
             gap: 1rem;

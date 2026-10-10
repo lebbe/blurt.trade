@@ -6,6 +6,7 @@ import { migrate } from '../db/migrate.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { sendError } from './negotiate.ts'
+import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
@@ -24,6 +25,7 @@ app.use(authenticate)
 app.use(homeRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
+app.use(avatarRouter)
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.

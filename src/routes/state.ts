@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto'
 import type pg from 'pg'
 import { db, dbRead } from '../db.ts'
 import type { GeoPoint } from '../geo.ts'
+import { randomAvatar, type Avatar } from '../avatar.ts'
 
 export type Blurt = {
   id: number
@@ -10,6 +11,7 @@ export type Blurt = {
   createdAt: Date
   parentId: number | null
   replyCount: number
+  avatar: Avatar // the blurter's
 }
 
 // A top-level blurt on the main feed, with its latest few replies (oldest of those first).
@@ -39,9 +41,10 @@ export type UserProfile = {
   github: string
   linkedin: string
   bio: string
+  avatar: Avatar
 }
 
-export type UserProfileInput = Omit<UserProfile, 'userId' | 'username'>
+export type UserProfileInput = Omit<UserProfile, 'userId' | 'username' | 'avatar'>
 
 const pageSize = 100
 const feedRepliesPerBlurt = 2
@@ -56,7 +59,8 @@ const relatedLimit = 5
 const relatedMaxDistance = 0.75
 
 const blurtColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
-  (SELECT count(*) FROM blurts r WHERE r.parent_id = b.id)::int AS "replyCount"`
+  (SELECT count(*) FROM blurts r WHERE r.parent_id = b.id)::int AS "replyCount",
+  (SELECT a.avatar FROM user_profiles a WHERE a.user_id = b.user_id) AS avatar`
 
 const cursorColumn = `to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
   AS "cursorAt"`
@@ -123,7 +127,7 @@ async function listPage(
 }
 
 const profileColumns = `p.user_id AS "userId", u.username, p.homepage, p.x, p.instagram,
-  p.tiktok, p.youtube, p.github, p.linkedin, p.bio`
+  p.tiktok, p.youtube, p.github, p.linkedin, p.bio, p.avatar`
 
 // Top-level blurts from accounts the user follows. The planner walks each followed user's
 // (user_id, created_at DESC, id DESC) index.
@@ -360,13 +364,13 @@ export async function addUser(
          ON CONFLICT DO NOTHING -- username taken, in any letter case
          RETURNING id, username, password_hash
        ), new_profile AS (
-         INSERT INTO user_profiles (user_id) SELECT id FROM new_user
+         INSERT INTO user_profiles (user_id, avatar) SELECT id, $3::jsonb FROM new_user
        ), joined AS (
          UPDATE waitlist SET status = 'joined'
          WHERE lower(username) = lower($1) AND EXISTS (SELECT 1 FROM new_user)
        )
        SELECT id, username, password_hash AS "passwordHash" FROM new_user`,
-      [username, passwordHash],
+      [username, passwordHash, JSON.stringify(randomAvatar())],
     )
     const user = rows[0]
     if (!user) {
@@ -544,6 +548,16 @@ export async function updateUserProfile(
     throw new Error(`Missing profile for user ${userId}`)
   }
   return rows[0]
+}
+
+// Replaces the user's avatar (already validated: avatarSchema in src/avatar.ts). False if
+// the user has no profile (e.g. a still-valid token after a database reset).
+export async function setAvatar(userId: number, avatar: Avatar): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'UPDATE user_profiles SET avatar = $2::jsonb, updated_at = now() WHERE user_id = $1',
+    [userId, JSON.stringify(avatar)],
+  )
+  return rowCount === 1
 }
 
 export async function countFollowing(userId: number): Promise<number> {

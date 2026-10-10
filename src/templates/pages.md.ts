@@ -1,4 +1,5 @@
 import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
+import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
 import {
   blurtUrl,
   discoveryAfter,
@@ -149,7 +150,7 @@ function profileValue(value: string): Markdown {
   return md`${value === '' ? raw('_Not set_') : isWebUrl(value) ? link(value, value) : value}`
 }
 
-const profileFields: [keyof UserProfile, string][] = [
+const profileFields: [Exclude<keyof UserProfile, 'avatar'>, string][] = [
   ['homepage', 'Homepage'],
   ['x', 'X'],
   ['instagram', 'Instagram'],
@@ -181,9 +182,10 @@ export function profilePageMarkdown({
   next,
 }: ProfilePageData): Markdown {
   const now = new Date()
-  const fields = profileFields.map(
-    ([key, label]) => md`- ${label}: ${profileValue(String(profile[key]))}`,
-  )
+  const fields = [
+    ...profileFields.map(([key, label]) => md`- ${label}: ${profileValue(String(profile[key]))}`),
+    md`- Avatar: ${describeAvatar(profile.avatar)}`,
+  ]
   const action = follows.viewerFollows ? '/api/unfollow' : '/api/follow'
   return md`
     # ${profile.username}
@@ -245,6 +247,15 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
     cleared. Current values:
 
     ${join(fields, '\n')}
+
+    ## Avatar
+
+    Yours: ${describeAvatar(profile.avatar)}.
+
+    Send ${code('POST /api/avatar')} with all of ${join(Object.keys(avatarSchema.shape).map(code), ', ')}
+    to change it, or with ${code('random')} for a random one. Colours are ${code('#rrggbb')}. Hair
+    is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
+    teeth one of ${join(toothTypes.map(code), ', ')}.
 
     ## Location
 
