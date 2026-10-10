@@ -30,6 +30,7 @@ carry `Vary: Accept`.
 | `/:username/edit` | owner | `{ viewer, profile }`                                              | 401, 403 not owner, 404 |
 | `/login`          | —     | `{ viewer }`                                                       |                         |
 | `/createUser`     | —     | `{ viewer }`                                                       |                         |
+| `/settings`       | yes   | `{ viewer, activeSessions }`                                       | 401                     |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -52,6 +53,7 @@ carry `Vary: Accept`.
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,
   linkedin, bio }`. Empty fields are `''`.
+- `activeSessions` is how many browsers and devices the viewer is logged in on.
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
 
 ## Actions (POST)
@@ -60,20 +62,41 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path              | Auth  | Body                                | Form success     | JSON success                                    |
-| ----------------- | ----- | ----------------------------------- | ---------------- | ----------------------------------------------- |
-| `/createUser`     | —     | `username`, `password`              | 303 → `/`        | 201 `{ id, username }`, Location `/:username/`  |
-| `/login`          | —     | `username`, `password`              | 303 → `/`        | 200 `{ id, username }`                          |
-| `/:username/edit` | owner | profile fields (missing → cleared)  | 303 → profile    | 200 the updated `profile`                       |
-| `/api/blurts`     | yes   | `text`, optional `parentId`         | 303 → feed/parent| 201 the new `Blurt`, Location `/:username/:id`  |
-| `/api/follow`     | yes   | `username`                          | 303 → profile    | 200 their `follows`                             |
-| `/api/unfollow`   | yes   | `username`                          | 303 → profile    | 200 their `follows`                             |
-| `/api/logout`     | —     | —                                   | 303 → `/`        | 204                                             |
+| Path                     | Auth  | Body                               | Form success      | JSON success                                   |
+| ------------------------ | ----- | ---------------------------------- | ----------------- | ---------------------------------------------- |
+| `/createUser`            | —     | `username`, `password`             | 303 → `/`         | 201 `{ id, username }`, Location `/:username/` |
+| `/login`                 | —     | `username`, `password`             | 303 → `/`         | 200 `{ id, username }`                         |
+| `/:username/edit`        | owner | profile fields (missing → cleared) | 303 → profile     | 200 the updated `profile`                      |
+| `/api/blurts`            | yes   | `text`, optional `parentId`        | 303 → feed/parent | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/follow`            | yes   | `username`                         | 303 → profile     | 200 their `follows`                            |
+| `/api/unfollow`          | yes   | `username`                         | 303 → profile     | 200 their `follows`                            |
+| `/api/logout`            | —     | —                                  | 303 → `/`         | 204                                            |
+| `/api/logout-everywhere` | yes   | —                                  | 303 → `/login`    | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
-Login and sign-up also set the `access_token` cookie, for JSON callers too.
+Login and sign-up also set the session cookies, for JSON callers too.
+
+## Sessions
+
+Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
+`Secure` in production). The code and the reasoning are in `src/middleware/auth.ts`.
+
+| Cookie          | Lifetime | Checked by                                                    |
+| --------------- | -------- | ------------------------------------------------------------- |
+| `access_token`  | 5 min    | its signature only, no database                               |
+| `refresh_token` | 400 days | one row in `sessions`, then rotated to the next generation    |
+
+- When the access token is missing or expired, any request (page load, form POST,
+  `fetch()`) with a valid refresh token gets a new pair, transparently. Each refresh
+  restarts the 400 days, so a session lasts as long as it's used.
+- A refresh token used again more than 20 seconds after it was rotated means a stolen
+  copy: the session is revoked for everyone holding it. Within those 20 seconds it is a
+  second tab racing the first, and gets a new access token only.
+- Logging out revokes the session. `/api/logout-everywhere` revokes all of the user's
+  sessions. Other devices notice at their next refresh, within 5 minutes.
+- Production refuses to start without a `JWT_SECRET` of at least 32 characters.
 
 ## Errors
 

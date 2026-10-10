@@ -2,6 +2,7 @@ import express from 'express'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
+import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { sendError } from './negotiate.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { embedPendingBlurts } from './embeddings.ts'
@@ -13,6 +14,7 @@ export const app = express()
 app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
 app.use(cookieParser())
+app.use(authenticate)
 app.use(homeRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
@@ -41,6 +43,7 @@ const port = Number(process.env.PORT) || 3000
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await migrate()
+  await deleteDeadSessions()
   void embedPendingBlurts() // catch up on blurts saved without an embedding
   app.listen(port, () => {
     console.log(`blurt.trade listening on http://localhost:${port}`)

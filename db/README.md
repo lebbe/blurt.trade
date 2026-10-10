@@ -86,8 +86,13 @@ migrations run as the normal app user.
 | `users`         | `id`, `username` (unique), `password_hash` (Argon2id)             |
 | `user_profiles` | one row per user: homepage, social handles, bio                   |
 | `blurts`        | `user_id`, `text` (1–280 chars), `parent_id` (reply), `embedding` |
+| `follows`       | `user_id` follows `followed_user_id`                              |
+| `sessions`      | one row per login: refresh token generation, last use, revoked    |
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
+`sessions` is `UNLOGGED`: a crash empties it, which only logs everyone out. The server
+deletes revoked and expired rows at startup.
+
 A reply is a blurt with a `parent_id`. The main feed lists only top-level blurts.
 
 `embedding` is a 384-dimension vector from the all-MiniLM-L6-v2 model, which runs

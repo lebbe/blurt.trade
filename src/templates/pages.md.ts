@@ -11,6 +11,7 @@ import {
   type FormPageData,
   type ProfileEditData,
   type ProfilePageData,
+  type SettingsData,
   type Viewer,
 } from './index.ts'
 import { code, join, link, md, raw, type Markdown } from './markdown.ts'
@@ -22,7 +23,7 @@ const home = link('Back to blurt.trade', '/')
 
 function viewerLine(viewer: Viewer): Markdown {
   return viewer
-    ? md`Logged in as ${link(viewer.username, `/${viewer.username}/`)}.`
+    ? md`Logged in as ${link(viewer.username, `/${viewer.username}/`)} · ${link('Settings', '/settings')}`
     : md`${link('Log in', '/login')} or ${link('create a profile', '/createUser')} to blurt.`
 }
 
@@ -209,4 +210,19 @@ export function createUserMarkdown({ viewer }: FormPageData): Markdown {
     md`${code('username')} (letters, numbers and ${code('_')}) and ${code('password')} (at least 8 characters)`,
     viewer,
   )
+}
+
+export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Markdown {
+  return md`
+    # Settings: ${viewer.username}
+
+    ${home}
+
+    ## Sessions
+
+    You're logged in on ${plural(activeSessions, 'browser or device', 'browsers or devices')}.
+
+    Send ${code('POST /api/logout-everywhere')} to log out everywhere, this client included.
+    Other devices are logged out within 5 minutes.
+  `
 }

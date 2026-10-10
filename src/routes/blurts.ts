@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express'
 import { z } from 'zod'
-import { clearAccessToken, getViewer, requireAuth } from '../middleware/auth.ts'
+import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
 import {
   fieldErrors,
@@ -45,13 +45,12 @@ async function getBlurtPageData(
   blurt: Blurt,
   after: Cursor | null = null,
 ): Promise<BlurtPageData> {
-  const [viewer, parent, { items: replies, next }, related] = await Promise.all([
-    getViewer(request),
+  const [parent, { items: replies, next }, related] = await Promise.all([
     blurt.parentId === null ? null : getBlurt(blurt.parentId).then((parent) => parent ?? null),
     listReplies(blurt.id, after),
     listRelatedBlurts(blurt.id),
   ])
-  return { viewer, blurt, parent, replies, next, related }
+  return { viewer: getViewer(request), blurt, parent, replies, next, related }
 }
 
 blurtsRouter.get('/:username/:id', async (request, response, next) => {
@@ -104,7 +103,7 @@ blurtsRouter.post('/api/blurts', requireAuth, async (request, response) => {
   const blurt = id === undefined ? undefined : await getBlurt(id)
   if (!blurt) {
     // A still-valid token for a user that no longer exists (e.g. after a database reset).
-    clearAccessToken(response)
+    clearSessionCookies(response)
     if (wantsJson(request)) {
       sendError(request, response, 401, 'Authentication required')
     } else {

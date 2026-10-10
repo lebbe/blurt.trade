@@ -2,15 +2,17 @@ import { Router } from 'express'
 import { hash, verify } from '@node-rs/argon2'
 import { z } from 'zod'
 import {
-  clearAccessToken,
-  createAccessToken,
+  countActiveSessions,
+  endAllSessions,
+  endSession,
   getViewer,
-  setAccessToken,
+  requireAuth,
+  startSession,
 } from '../middleware/auth.ts'
 import { fieldErrors, represent, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
 import { addUser, getUserByUsername } from './state.ts'
-import { renderCreateUserPage, renderLoginPage } from '../templates/index.ts'
-import { createUserMarkdown, loginMarkdown } from '../templates/pages.md.ts'
+import { renderCreateUserPage, renderLoginPage, renderSettingsPage } from '../templates/index.ts'
+import { createUserMarkdown, loginMarkdown, settingsMarkdown } from '../templates/pages.md.ts'
 
 export const usersRouter = Router()
 
@@ -25,6 +27,7 @@ export const reservedUsernames = new Set([
   'createuser',
   'everyone',
   'login',
+  'settings',
   // likely future pages
   'about',
   'account',
@@ -46,7 +49,6 @@ export const reservedUsernames = new Set([
   'public',
   'register',
   'search',
-  'settings',
   'signup',
   'static',
   'terms',
@@ -85,7 +87,7 @@ usersRouter.get('/createUser', async (request, response) => {
   represent(
     request,
     response,
-    { viewer: await getViewer(request) },
+    { viewer: getViewer(request) },
     { html: () => renderCreateUserPage(), markdown: createUserMarkdown },
   )
 })
@@ -94,7 +96,7 @@ usersRouter.get('/login', async (request, response) => {
   represent(
     request,
     response,
-    { viewer: await getViewer(request) },
+    { viewer: getViewer(request) },
     { html: () => renderLoginPage(), markdown: loginMarkdown },
   )
 })
@@ -116,7 +118,7 @@ usersRouter.post('/createUser', async (request, response) => {
     return
   }
 
-  setAccessToken(response, await createAccessToken(user))
+  await startSession(request, response, user)
   sendFormSuccess(request, response, {
     redirect: '/',
     data: { id: user.id, username: user.username },
@@ -141,14 +143,30 @@ usersRouter.post('/login', async (request, response) => {
     return
   }
 
-  setAccessToken(response, await createAccessToken(user))
+  await startSession(request, response, user)
   sendFormSuccess(request, response, {
     redirect: '/',
     data: { id: user.id, username: user.username },
   })
 })
 
-usersRouter.post('/api/logout', (request, response) => {
-  clearAccessToken(response)
+usersRouter.post('/api/logout', async (request, response) => {
+  await endSession(request, response)
   sendFormSuccess(request, response, { redirect: '/' })
+})
+
+usersRouter.get('/settings', requireAuth, async (request, response) => {
+  const viewer = response.locals.authenticatedUser
+  represent(
+    request,
+    response,
+    { viewer, activeSessions: await countActiveSessions(viewer.id) },
+    { html: renderSettingsPage, markdown: settingsMarkdown },
+  )
+})
+
+// Logs the user out on every browser and device, this one included.
+usersRouter.post('/api/logout-everywhere', requireAuth, async (request, response) => {
+  await endAllSessions(response.locals.authenticatedUser.id, response)
+  sendFormSuccess(request, response, { redirect: '/login' })
 })

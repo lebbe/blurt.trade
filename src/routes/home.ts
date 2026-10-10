@@ -22,7 +22,7 @@ export async function getFeedData(
   before: Cursor | null = null,
   path: '/' | '/everyone' = '/',
 ): Promise<FeedData> {
-  const viewer = await getViewer(request)
+  const viewer = getViewer(request)
   const followingCount = viewer ? await countFollowing(viewer.id) : 0
   const hasFollowingFeed = followingCount > followingFeedThreshold
   const feed = path === '/' && hasFollowingFeed ? 'following' : 'everyone'

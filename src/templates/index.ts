@@ -56,6 +56,9 @@ export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
 // Login and sign-up have no data of their own.
 export type FormPageData = { viewer: Viewer }
 
+// `activeSessions`: how many browsers and devices the viewer is logged in on.
+export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
+
 type ComposerProps = {
   text?: string
   validationError?: string
@@ -128,8 +131,33 @@ function LoginForm({ username = '', validationError }: LoginProps) {
 function LogoutForm() {
   return html`
     <form method="post" action="/api/logout">
+      <a href="/settings">Settings</a>
       <button type="submit">Log out</button>
     </form>
+  `
+}
+
+function SettingsPage({ viewer, activeSessions }: SettingsData) {
+  return html`
+    <header>
+      <h1>Settings: ${viewer.username}</h1>
+      <p><a href="/">Back to blurt.trade</a></p>
+    </header>
+    <main>
+      <section aria-label="Sessions">
+        <h2>Sessions</h2>
+        <p>
+          You're logged in on ${plural(activeSessions, 'browser or device', 'browsers or devices')}.
+        </p>
+        <p>
+          Lost a phone, or logged in somewhere you shouldn't have? Log out everywhere, this browser
+          included. Other devices are logged out within 5 minutes.
+        </p>
+        <form method="post" action="/api/logout-everywhere">
+          <button type="submit">Log out everywhere</button>
+        </form>
+      </section>
+    </main>
   `
 }
 
@@ -650,6 +678,10 @@ export function renderBlurtPage(data: BlurtPageData, composer?: ComposerProps): 
 
 export function renderProfilePage(data: ProfilePageData): string {
   return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(ProfilePage, data) }))
+}
+
+export function renderSettingsPage(data: SettingsData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(SettingsPage, data) }))
 }
 
 export function renderProfileEditPage(props: ProfileEditProps): string {

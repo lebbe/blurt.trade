@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import { z } from 'zod'
-import { clearAccessToken, getViewer, requireAuth } from '../middleware/auth.ts'
+import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import {
   fieldErrors,
   represent,
@@ -77,7 +77,7 @@ profilesRouter.get('/:username/', async (request, response) => {
     return
   }
 
-  const viewer = await getViewer(request)
+  const viewer = getViewer(request)
   const [follows, { items: blurts, next }] = await Promise.all([
     getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
@@ -163,7 +163,7 @@ function followAction(action: 'follow' | 'unfollow'): RequestHandler {
       return
     } else if (!(await follow(viewer.id, profile.userId))) {
       // A still-valid token for a user that no longer exists (e.g. after a database reset).
-      clearAccessToken(response)
+      clearSessionCookies(response)
       if (wantsJson(request)) {
         sendError(request, response, 401, 'Authentication required')
       } else {
