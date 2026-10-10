@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
+import { readYourWrites } from './middleware/replica.ts'
 import { sendError } from './negotiate.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { embedPendingBlurts } from './embeddings.ts'
@@ -18,6 +19,7 @@ app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
 app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
 app.use(cookieParser())
+app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
 app.use(homeRouter)
 app.use(blurtsRouter)

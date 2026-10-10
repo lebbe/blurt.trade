@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # One-time (and safe to re-run) PostgreSQL + pgvector + PostGIS + PgBouncer setup for local
-# development in WSL Ubuntu.
+# development in WSL Ubuntu, with a streaming read replica of the primary.
 # Run from Windows:  wsl -d Ubuntu -u root -- bash db/setup-wsl.sh
 #
 # Port 5433 is used because a native Windows PostgreSQL may already hold 5432,
 # and WSL forwards localhost ports to Windows. PgBouncer listens on 6433 in front of it.
+# The read replica is a second cluster on 5434 that streams the primary's WAL.
 set -euo pipefail
 
 PORT=5433
+REPLICA_PORT=5434
+REPLICA_CLUSTER=replica
+REPLICATION_SLOT=blurt_replica
 PGBOUNCER_PORT=6433
 # Server connections per database/user pair. Keep the app's pool size (DB_POOL_SIZE in
 # src/db.ts) at or below this.
@@ -55,12 +59,32 @@ for DB in "$DB_NAME" "$TEST_DB_NAME"; do
   sudo -u postgres psql -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -qc "CREATE EXTENSION IF NOT EXISTS postgis"
 done
 
+# Streaming read replica: a second cluster, copied from the primary with pg_basebackup.
+# -R makes it a standby that follows the primary; the replication slot makes the primary
+# keep WAL until the replica has it (so a stopped replica makes WAL pile up on the primary:
+# drop the cluster and the slot if you stop using it, see db/README.md). The postgres OS
+# user connects over the Unix socket (peer auth, pg_hba.conf's "local replication" line).
+# The replica holds every database of the primary, blurt_test included, and is read-only.
+REPLICA_DATA=/var/lib/postgresql/$VERSION/$REPLICA_CLUSTER
+if ! pg_lsclusters --no-header | awk '{print $2}' | grep -qx "$REPLICA_CLUSTER"; then
+  pg_createcluster "$VERSION" "$REPLICA_CLUSTER" -p "$REPLICA_PORT" >/dev/null
+  rm -rf "$REPLICA_DATA"
+  if [ -n "$(psql_admin "SELECT 1 FROM pg_replication_slots WHERE slot_name = '$REPLICATION_SLOT'")" ]; then
+    psql_admin "SELECT pg_drop_replication_slot('$REPLICATION_SLOT')" >/dev/null
+  fi
+  sudo -u postgres pg_basebackup -h /var/run/postgresql -p "$PORT" -D "$REPLICA_DATA"     -R -X stream -C -S "$REPLICATION_SLOT"
+fi
+systemctl enable --now "postgresql@$VERSION-$REPLICA_CLUSTER"
+systemctl restart "postgresql@$VERSION-$REPLICA_CLUSTER"
+
 # PgBouncer in transaction pooling mode: a server connection is lent to a client for one
 # transaction at a time. Migrations bypass it (session advisory lock), see db/README.md.
 cat >/etc/pgbouncer/pgbouncer.ini <<INI
 [databases]
 $DB_NAME = host=127.0.0.1 port=$PORT dbname=$DB_NAME
 $TEST_DB_NAME = host=127.0.0.1 port=$PORT dbname=$TEST_DB_NAME
+${DB_NAME}_read = host=127.0.0.1 port=$REPLICA_PORT dbname=$DB_NAME
+${TEST_DB_NAME}_read = host=127.0.0.1 port=$REPLICA_PORT dbname=$TEST_DB_NAME
 
 [pgbouncer]
 listen_addr = 127.0.0.1
@@ -89,4 +113,5 @@ systemctl restart pgbouncer
 pg_lsclusters
 systemctl is-active pgbouncer
 echo "Ready: postgres://$DB_USER:$DB_PASSWORD@localhost:$PGBOUNCER_PORT/$DB_NAME (through PgBouncer)"
+echo "       postgres://$DB_USER:$DB_PASSWORD@localhost:$PGBOUNCER_PORT/${DB_NAME}_read (read replica, through PgBouncer)"
 echo "       postgres://$DB_USER:$DB_PASSWORD@localhost:$PORT/$DB_NAME (direct, for migrations)"

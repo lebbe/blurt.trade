@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto'
 import type pg from 'pg'
-import { db } from '../db.ts'
+import { db, dbRead } from '../db.ts'
 import type { GeoPoint } from '../geo.ts'
 
 export type Blurt = {
@@ -88,6 +88,7 @@ export function parseCursor(value: unknown): Cursor | null | undefined {
   return { createdAt: match[1], id: Number(match[2]) }
 }
 
+// Lists read from the replica (dbRead) when one is configured: feeds, profiles, replies.
 // Keyset pagination on (created_at, id), never OFFSET, so pages stay fast and don't shift
 // as new blurts arrive. The indexes on (..., created_at DESC, id DESC) serve both orders.
 // Fetches one extra row to know whether there is a next page.
@@ -106,7 +107,7 @@ async function listPage(
     values.push(cursor.createdAt, cursor.id)
     keyset = `AND (b.created_at, b.id) ${comparison} ($${values.length - 1}::timestamptz, $${values.length})`
   }
-  const { rows } = await db().query<Blurt & { cursorAt?: string }>(
+  const { rows } = await dbRead().query<Blurt & { cursorAt?: string }>(
     `SELECT ${blurtColumns}, ${cursorColumn} FROM blurts b JOIN users u ON u.id = b.user_id
      WHERE ${where} ${keyset}
      ORDER BY b.created_at ${direction}, b.id ${direction} LIMIT ${limit}`,
@@ -156,7 +157,7 @@ export async function listFollowedHighlights(userId: number): Promise<FeedItem[]
 
 // Adds each blurt's latest replies, oldest of those first.
 async function withReplies(blurts: Blurt[]): Promise<FeedItem[]> {
-  const { rows: replies } = await db().query<Blurt>(
+  const { rows: replies } = await dbRead().query<Blurt>(
     `SELECT r.* FROM unnest($1::bigint[]) AS p(id) CROSS JOIN LATERAL (
        SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
        WHERE b.parent_id = p.id ORDER BY b.created_at DESC, b.id DESC LIMIT $2
@@ -193,7 +194,7 @@ export function listReplies(parentId: number, after: Cursor | null = null): Prom
 // Closest blurts by meaning, excluding the blurt itself and its direct replies (shown anyway).
 // Empty until the blurt's embedding has been computed.
 export async function listRelatedBlurts(id: number): Promise<Blurt[]> {
-  const { rows } = await db().query<Blurt>(
+  const { rows } = await dbRead().query<Blurt>(
     `WITH target AS (SELECT embedding FROM blurts WHERE id = $1 AND embedding IS NOT NULL)
      SELECT ${blurtColumns} FROM target t CROSS JOIN blurts b JOIN users u ON u.id = b.user_id
      WHERE b.id <> $1 AND b.parent_id IS DISTINCT FROM $1 AND b.embedding IS NOT NULL
@@ -216,7 +217,7 @@ export async function listSimilarToUser(
   excludeIds: number[],
   limit: number,
 ): Promise<Blurt[]> {
-  const { rows } = await db().query<Blurt>(
+  const { rows } = await dbRead().query<Blurt>(
     `WITH taste AS (
        SELECT avg(embedding) AS embedding FROM (
          SELECT embedding FROM blurts WHERE user_id = $1 AND embedding IS NOT NULL
@@ -287,7 +288,7 @@ export async function listNearbyForUser(
   excludeIds: number[],
   limit: number,
 ): Promise<Blurt[]> {
-  const { rows } = await db().query<Blurt>(
+  const { rows } = await dbRead().query<Blurt>(
     `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
      WHERE ${nearbyWhere}
        AND b.user_id NOT IN (SELECT followed_user_id FROM follows WHERE user_id = $1)

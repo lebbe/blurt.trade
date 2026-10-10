@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import pg from 'pg'
 import { defaultDatabaseUrl } from '../db/migrate.ts'
 
@@ -15,6 +16,7 @@ pg.types.setTypeParser(pg.types.builtins.INT8, Number)
 export const poolSize = Number(process.env.DB_POOL_SIZE) || 20
 
 let pool: pg.Pool | undefined
+let readPool: pg.Pool | undefined
 
 // Created on first use so DATABASE_URL can be set before any query runs (e.g. in tests).
 export function db(): pg.Pool {
@@ -25,7 +27,32 @@ export function db(): pg.Pool {
   return pool
 }
 
+// Heavy reads (feeds, related blurts, discovery) go to a streaming read replica, from
+// DATABASE_READ_URL, so they don't compete with writes on the primary. Without it, dbRead()
+// is db(): one database, as in tests. The replica lags the primary by a little (usually well
+// under a second), so only use it for reads that may be slightly stale, and never for a read
+// that decides a write. It has its own pool of the same size: it is another PgBouncer
+// database (blurt_read), with its own server connections.
+export function dbRead(): pg.Pool {
+  if (primaryReads.getStore() || !process.env.DATABASE_READ_URL) {
+    return db()
+  }
+  readPool ??= new pg.Pool({ connectionString: process.env.DATABASE_READ_URL, max: poolSize })
+  return readPool
+}
+
+// Read-your-own-writes: inside readFromPrimary(), dbRead() is db(). The readYourWrites
+// middleware (src/middleware/replica.ts) runs a request in it when the request writes, or
+// when the same browser wrote something a moment ago, so the page it is redirected to
+// already shows the change even if the replica hasn't caught up.
+const primaryReads = new AsyncLocalStorage<boolean>()
+
+export function readFromPrimary<T>(callback: () => T): T {
+  return primaryReads.run(true, callback)
+}
+
 export async function closeDb(): Promise<void> {
-  await pool?.end()
+  await Promise.all([pool?.end(), readPool?.end()])
   pool = undefined
+  readPool = undefined
 }

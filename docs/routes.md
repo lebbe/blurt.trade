@@ -200,6 +200,11 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
   sessions. Other devices notice at their next refresh, within 5 minutes.
 - Production refuses to start without a `JWT_SECRET` of at least 32 characters.
 
+Every POST (any method but `GET`, `HEAD` or `OPTIONS`) also sets `recent_write` (`HttpOnly`,
+`SameSite=Lax`, 10 seconds). It holds no data: while it is there, the browser's pages are
+read from the primary database instead of the read replica, so the page a form redirects
+to always shows the change it just made. See db/README.md, Read replica.
+
 ## Errors
 
 | Case                    | Form / HTML                         | JSON                                |

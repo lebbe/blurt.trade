@@ -2,7 +2,8 @@
 
 ```
 db/
-  setup-wsl.sh     installs and configures PostgreSQL + pgvector + PostGIS + PgBouncer in WSL (safe to re-run)
+  setup-wsl.sh     installs and configures PostgreSQL + pgvector + PostGIS + PgBouncer and a
+                   streaming read replica in WSL (safe to re-run)
   migrate.ts       applies every migration that has not run yet
   mint-invites.ts  mints invite codes in bulk (see docs/routes.md, Invite codes)
   migrations/      plain .sql files, applied in filename (timestamp) order
@@ -26,13 +27,15 @@ wsl -d Ubuntu -u root -- bash db/setup-wsl.sh
 
 That installs PostgreSQL, pgvector, PostGIS and PgBouncer, creates the `blurt` and
 `blurt_test` databases with the `vector` and `postgis` extensions, creates the `blurt`
-role, and puts PgBouncer on **port 6433** in front of both databases. `npm start` and
+role, starts a streaming read replica on **port 5434** (see Read replica below), and puts
+PgBouncer on **port 6433** in front of both. `npm start` and
 `npm run dev` apply pending migrations before listening. `node db/migrate.ts` does it on
 its own. Connection strings (the defaults in `db/migrate.ts`):
 
 ```
-postgres://blurt:blurt@localhost:6433/blurt   the app (DATABASE_URL), through PgBouncer
-postgres://blurt:blurt@localhost:5433/blurt   migrations (MIGRATION_DATABASE_URL), direct
+postgres://blurt:blurt@localhost:6433/blurt        the app (DATABASE_URL), through PgBouncer
+postgres://blurt:blurt@localhost:6433/blurt_read   heavy reads (DATABASE_READ_URL), the replica
+postgres://blurt:blurt@localhost:5433/blurt        migrations (MIGRATION_DATABASE_URL), direct
 ```
 
 PostgreSQL and PgBouncer are enabled in systemd, so they start whenever the WSL distro
@@ -41,6 +44,9 @@ starts. If you get "connection refused", the distro probably isn't running yet:
 ```powershell
 wsl -d Ubuntu -u root -- systemctl start postgresql pgbouncer
 ```
+
+`DATABASE_READ_URL` is not set by default, so `npm run dev` reads everything from the
+primary. Set it to the `blurt_read` URL above to use the replica.
 
 A psql shell: `wsl -d Ubuntu -u postgres -- psql -p 5433 -d blurt`
 
@@ -72,12 +78,59 @@ while it runs, which transaction pooling can't keep. `migrate()` connects to
 `MIGRATION_DATABASE_URL`, else `DATABASE_URL`, else `localhost:5433`. When `DATABASE_URL`
 points at PgBouncer, always set `MIGRATION_DATABASE_URL` to PostgreSQL itself.
 
+## Read replica
+
+One primary takes every write; one streaming replica takes the heavy reads: the feeds
+(everyone, following, profiles, replies, near you), related blurts and the discovery
+sections. That keeps vector and geo searches off the write path. In development the replica
+is a second cluster in the same WSL (`18 replica`, port 5434), made by `pg_basebackup -R`
+from the primary. It follows the primary's WAL over a physical replication slot
+(`blurt_replica`), holds every database (`blurt`, `blurt_test`) and is read-only. PgBouncer
+serves it as `blurt_read` and `blurt_test_read`.
+
+In code, `dbRead()` in `src/db.ts` is a second pool from `DATABASE_READ_URL`; unset, it is
+just `db()`, so one database is enough. Queries in `src/routes/state.ts` that may be a
+moment stale use `dbRead()`. Everything else, and anything that decides a write, stays on
+`db()`: auth and sessions, sign-up limits and invite codes, single blurts by id, profile
+data, follow counts and locations.
+
+**Read your own writes.** Replication is asynchronous, so right after a write the replica
+may not have it yet. Any request that can write (not `GET`, `HEAD` or `OPTIONS`) reads from the primary
+throughout, and sets a `recent_write` cookie (HttpOnly, `SameSite=Lax`) for 10 seconds
+(`READ_YOUR_WRITES_SECONDS`). Requests carrying it read from the primary too
+(`src/middleware/replica.ts`). The redirect after posting a blurt carries it, so the poster
+always sees their blurt straight away; other people see it once the replica catches up,
+normally well under a second later. If the replica ever lags by more than the window, a
+poster may briefly miss their own change after it, so watch the lag:
+
+```sql
+-- on the primary
+SELECT application_name, state, replay_lag FROM pg_stat_replication;
+```
+
+JSON callers get the new blurt in the `201` response. Without a cookie jar, their next
+`GET` may come from the replica and not show it for a moment.
+
+The replication slot makes the primary keep WAL until the replica has replayed it, so a
+replica that is down for long fills the primary's disk. To drop the replica:
+
+```bash
+sudo pg_dropcluster 18 replica --stop
+sudo -u postgres psql -p 5433 -c "SELECT pg_drop_replication_slot('blurt_replica')"
+```
+
+Re-running `db/setup-wsl.sh` creates it again from a fresh copy. Sharding, cascading
+replicas, several writers and caches wait until the primary actually struggles (see
+architecture.md).
+
 ## Tests
 
 `npm test` uses the `blurt_test` database and wipes all tables before each test, so it
 never touches your dev data. Like the app, its queries go through PgBouncer (override
 with `TEST_DATABASE_URL`) and its migrations go straight to PostgreSQL (override with
-`TEST_MIGRATION_DATABASE_URL`). Tests use a fake embedder, so they don't load the model.
+`TEST_MIGRATION_DATABASE_URL`). Reads use the primary too, except in the read replica tests,
+one of which needs the real replica (`blurt_test_read`, override with
+`TEST_DATABASE_READ_URL`). Tests use a fake embedder, so they don't load the model.
 
 ## Schema changes
 
@@ -104,7 +157,9 @@ DATABASE_URL=postgres://blurt:blurt@localhost:5433/blurt node node_modules/node-
 ## Production
 
 Set `DATABASE_URL` (PgBouncer in transaction mode, or PostgreSQL itself) and, when it
-points at PgBouncer, `MIGRATION_DATABASE_URL` (PostgreSQL directly). Size `DB_POOL_SIZE`
+points at PgBouncer, `MIGRATION_DATABASE_URL` (PostgreSQL directly). With a read replica,
+set `DATABASE_READ_URL` to it (through PgBouncer too); the replica gets the same
+`DB_POOL_SIZE` pool. Size `DB_POOL_SIZE`
 to PgBouncer's pool as described above. Then start the server. `src/server.ts` runs `migrate()` before it
 starts listening, so migrations that haven't run yet are applied on every deploy. If
 nothing is pending, it does nothing.
