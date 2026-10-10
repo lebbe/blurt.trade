@@ -160,9 +160,11 @@ Set `DATABASE_URL` (PgBouncer in transaction mode, or PostgreSQL itself) and, wh
 points at PgBouncer, `MIGRATION_DATABASE_URL` (PostgreSQL directly). With a read replica,
 set `DATABASE_READ_URL` to it (through PgBouncer too); the replica gets the same
 `DB_POOL_SIZE` pool. Size `DB_POOL_SIZE`
-to PgBouncer's pool as described above. Then start the server. `src/server.ts` runs `migrate()` before it
-starts listening, so migrations that haven't run yet are applied on every deploy. If
-nothing is pending, it does nothing.
+to PgBouncer's pool as described above. By default `src/server.ts` runs `migrate()` before
+it starts listening; if nothing is pending, it does nothing. In production
+`MIGRATE_ON_START=false`, and `deploy/deploy.sh` runs `node db/migrate.ts` once before
+restarting the app, so several instances never race a migration against old code. The
+whole setup, backups included, is in docs/deploy.md.
 
 The database needs the pgvector and PostGIS extensions. Creating an extension needs a
 superuser, so run `CREATE EXTENSION IF NOT EXISTS vector` and
@@ -184,7 +186,7 @@ migrations run as the normal app user.
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
 `sessions` is `UNLOGGED`: a crash empties it, which only logs everyone out. The server
-deletes revoked and expired rows at startup.
+deletes revoked and expired rows at startup and every hour.
 
 `signup_counter` starts at 1000 (soft) and 10000 (hard). Raise them without a deploy:
 

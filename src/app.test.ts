@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { migrate } from '../db/migrate.ts'
@@ -33,6 +33,7 @@ import {
 import { AvatarSvg } from './templates/avatar.ts'
 import { renderProfilePage } from './templates/index.ts'
 import { bodyLimit } from './limits.ts'
+import { configProblems } from './config.ts'
 import {
   contentSecurityPolicy,
   permissionsPolicy,
@@ -2995,4 +2996,72 @@ test('in production: HSTS, and session cookies are __Host-, Secure, HttpOnly, Sa
     assert.match(cookie, /; SameSite=Lax(;|$)/, name)
     assert.doesNotMatch(cookie, /; Domain=/i, name)
   }
+})
+
+test('development needs no configuration', () => {
+  assert.deepEqual(configProblems({}), { errors: [], warnings: [] })
+})
+
+test('production refuses to start with a missing or malformed configuration', () => {
+  const good = {
+    NODE_ENV: 'production',
+    JWT_SECRET: 'x'.repeat(32),
+    DATABASE_URL: 'postgres://blurt:secret@127.0.0.1:6432/blurt',
+    MIGRATION_DATABASE_URL: 'postgres://blurt:secret@127.0.0.1:5432/blurt',
+    TRUST_PROXY: '1',
+  }
+  assert.deepEqual(configProblems(good), { errors: [], warnings: [] })
+
+  const errorsWith = (changes: Record<string, string | undefined>) =>
+    configProblems({ ...good, ...changes }).errors
+  assert.match(errorsWith({ JWT_SECRET: 'short' }).join(), /JWT_SECRET/)
+  assert.match(errorsWith({ DATABASE_URL: undefined }).join(), /DATABASE_URL/)
+  assert.match(errorsWith({ DATABASE_URL: 'mysql://x' }).join(), /DATABASE_URL/)
+  assert.match(errorsWith({ TRUST_PROXY: undefined }).join(), /TRUST_PROXY/)
+  assert.deepEqual(errorsWith({ TRUST_PROXY: 'false' }), [])
+  assert.match(errorsWith({ PORT: '80a' }).join(), /PORT/)
+  assert.match(errorsWith({ DB_POOL_SIZE: '0' }).join(), /DB_POOL_SIZE/)
+  assert.match(errorsWith({ READ_YOUR_WRITES_SECONDS: '2.5' }).join(), /READ_YOUR_WRITES/)
+  assert.match(errorsWith({ MIGRATE_ON_START: 'no' }).join(), /MIGRATE_ON_START/)
+  // Several problems are reported together.
+  assert.equal(errorsWith({ JWT_SECRET: '', DATABASE_URL: undefined }).length, 2)
+
+  const warningsWith = (changes: Record<string, string | undefined>) =>
+    configProblems({ ...good, ...changes }).warnings
+  assert.match(warningsWith({ MIGRATION_DATABASE_URL: undefined }).join(), /MIGRATION/)
+  assert.deepEqual(
+    warningsWith({ MIGRATION_DATABASE_URL: undefined, MIGRATE_ON_START: 'false' }),
+    [],
+  )
+  assert.match(warningsWith({ RATE_LIMIT_SCALE: '0' }).join(), /RATE_LIMIT_SCALE/)
+})
+
+test('the server shuts down cleanly on SIGTERM', async () => {
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'server.ts')], {
+    env: {
+      ...process.env,
+      PORT: '0',
+      MIGRATION_DATABASE_URL: testMigrationDatabaseUrl,
+      DATABASE_READ_URL: '',
+    },
+  })
+  let output = ''
+  child.stderr.on('data', (chunk) => (output += chunk))
+  const exited = new Promise<number | null>((resolve) => child.on('exit', resolve))
+  const port = await new Promise<number>((resolve, reject) => {
+    child.stdout.on('data', (chunk) => {
+      output += chunk
+      const match = /listening on http:\/\/localhost:(\d+)/.exec(output)
+      if (match) {
+        resolve(Number(match[1]))
+      }
+    })
+    child.on('exit', () => reject(new Error(`Server exited before listening:\n${output}`)))
+  })
+
+  const response = await fetch(`http://localhost:${port}/createUser`)
+  assert.equal(response.status, 200)
+  child.kill('SIGTERM')
+  assert.equal(await exited, 0, output)
+  assert.match(output, /Shut down cleanly/)
 })

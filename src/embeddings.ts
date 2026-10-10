@@ -1,4 +1,5 @@
 import pgvector from 'pgvector'
+import { pathToFileURL } from 'node:url'
 import { db } from './db.ts'
 
 // Blurts are saved first and embedded afterwards, so posting never waits for (or fails
@@ -47,23 +48,45 @@ async function runPending(): Promise<void> {
   }
 }
 
-// all-MiniLM-L6-v2 runs locally (no API key, ~23 MB, downloaded once on first use).
-function localModelEmbedder(): Embedder {
-  type Extractor = (texts: string[], options: object) => Promise<{ tolist(): number[][] }>
-  let model: Promise<Extractor> | undefined
+// all-MiniLM-L6-v2 runs locally (no API key, ~23 MB). It is downloaded from the Hugging Face
+// Hub on first use and cached in MODEL_CACHE_DIR (default: inside node_modules, which
+// `npm ci` wipes). Deploys download it beforehand with `npm run prefetch-model`, so the
+// server never waits for (or depends on) the Hub. Loaded, it takes roughly 100–200 MB of
+// memory in this process.
+type Extractor = (texts: string[], options: object) => Promise<{ tolist(): number[][] }>
 
+let model: Promise<Extractor> | undefined
+
+export function loadModel(): Promise<Extractor> {
+  model ??= import('@huggingface/transformers')
+    .then(({ env, pipeline }) => {
+      if (process.env.MODEL_CACHE_DIR) {
+        env.cacheDir = process.env.MODEL_CACHE_DIR
+      }
+      return pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' })
+    })
+    .then((extractor) => extractor as unknown as Extractor)
+    .catch((error: unknown) => {
+      model = undefined // retry loading on the next run instead of failing forever
+      throw error
+    })
+  return model
+}
+
+// A model that fails to load only fails the embedding run: blurts stay saved without an
+// embedding, and the next run (the next post, or the periodic catch-up in src/server.ts)
+// tries again.
+function localModelEmbedder(): Embedder {
   return async (texts) => {
-    model ??= import('@huggingface/transformers')
-      .then(({ pipeline }) =>
-        pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' }),
-      )
-      .then((extractor) => extractor as unknown as Extractor)
-      .catch((error: unknown) => {
-        model = undefined // retry loading on the next run instead of failing forever
-        throw error
-      })
-    const extractor = await model
+    const extractor = await loadModel()
     const output = await extractor(texts, { pooling: 'mean', normalize: true })
     return output.tolist()
   }
+}
+
+// `npm run prefetch-model`: downloads the model into the cache and checks that it loads.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const extractor = await loadModel()
+  const output = await extractor(['hello'], { pooling: 'mean', normalize: true })
+  console.log(`Embedding model ready (${output.tolist()[0].length} dimensions)`)
 }

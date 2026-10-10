@@ -1,0 +1,11 @@
+# /etc/systemd/system/blurt-backup.timer: nightly, and on the next boot if a run was missed.
+[Unit]
+Description=Nightly blurt.trade database backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

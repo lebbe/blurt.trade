@@ -1,0 +1,14 @@
+# /etc/caddy/Caddyfile. Caddy gets and renews the Let's Encrypt certificate by itself,
+# redirects HTTP to HTTPS, and sets X-Forwarded-For/-Proto/-Host for the app
+# (TRUST_PROXY=1). The app sends HSTS and the other security headers itself.
+blurt.trade {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+	log {
+		output file /var/log/caddy/blurt.log
+	}
+}
+
+www.blurt.trade {
+	redir https://blurt.trade{uri} permanent
+}

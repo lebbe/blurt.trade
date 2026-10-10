@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
+import { checkConfig } from './config.ts'
+import { closeDb } from './db.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
@@ -70,11 +72,71 @@ app.use(
 
 const port = Number(process.env.PORT) || 3000
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await migrate()
+// Housekeeping while the server runs. Both are cheap when there is nothing to do.
+const sessionCleanupMs = 60 * 60 * 1000 // revoked and idle sessions, hourly
+const embeddingCatchUpMs = 5 * 60 * 1000 // blurts left without an embedding, e.g. model failed
+
+// Graceful shutdown: on SIGTERM (systemd stop/restart) or SIGINT, stop accepting
+// connections, let requests in flight finish, close the database pools and exit. If that
+// takes longer than shutdownTimeoutMs, exit anyway.
+const shutdownTimeoutMs = 10_000
+
+async function start(): Promise<void> {
+  checkConfig()
+  // MIGRATE_ON_START=false when migrations run as a separate deploy step (docs/deploy.md).
+  if (process.env.MIGRATE_ON_START !== 'false') {
+    await migrate()
+  }
   await deleteDeadSessions()
   void embedPendingBlurts() // catch up on blurts saved without an embedding
-  app.listen(port, () => {
-    console.log(`blurt.trade listening on http://localhost:${port}`)
+
+  const timers = [
+    setInterval(() => {
+      deleteDeadSessions().catch((error: unknown) => {
+        console.error('Deleting dead sessions failed:', error)
+      })
+    }, sessionCleanupMs),
+    setInterval(() => void embedPendingBlurts(), embeddingCatchUpMs),
+  ]
+
+  const server = app.listen(port, () => {
+    const address = server.address()
+    const actualPort = address && typeof address === 'object' ? address.port : port
+    console.log(`blurt.trade listening on http://localhost:${actualPort}`)
   })
+
+  let stopping = false
+  const shutdown = (signal: string) => {
+    if (stopping) {
+      return
+    }
+    stopping = true
+    console.log(`${signal} received, shutting down`)
+    for (const timer of timers) {
+      clearInterval(timer)
+    }
+    setTimeout(() => {
+      console.error('Shutdown timed out, exiting')
+      process.exit(1)
+    }, shutdownTimeoutMs).unref()
+    server.close(() => {
+      closeDb().then(
+        () => {
+          console.log('Shut down cleanly')
+          process.exit(0)
+        },
+        (error: unknown) => {
+          console.error('Closing the database failed:', error)
+          process.exit(1)
+        },
+      )
+    })
+    server.closeIdleConnections() // keep-alive sockets with no request in flight
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await start()
 }

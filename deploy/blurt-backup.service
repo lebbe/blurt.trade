@@ -1,0 +1,9 @@
+# /etc/systemd/system/blurt-backup.service, started by blurt-backup.timer.
+[Unit]
+Description=blurt.trade database backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/blurt/backup.env
+ExecStart=/bin/bash /srv/blurt/app/deploy/backup.sh

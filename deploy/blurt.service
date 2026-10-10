@@ -1,0 +1,39 @@
+# systemd unit for the app: /etc/systemd/system/blurt.service
+# Starts on boot after PostgreSQL and PgBouncer, restarts on crash. `systemctl stop` and
+# `restart` send SIGTERM, which the server handles by finishing requests in flight and
+# closing its database pools (src/server.ts); after TimeoutStopSec systemd kills it.
+[Unit]
+Description=blurt.trade
+After=network-online.target postgresql.service pgbouncer.service
+Wants=network-online.target postgresql.service pgbouncer.service
+# Keep retrying, e.g. while the database is still coming up after a reboot.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=blurt
+Group=blurt
+WorkingDirectory=/srv/blurt/app
+EnvironmentFile=/etc/blurt/blurt.env
+ExecStart=/usr/bin/node src/server.ts
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+# Node, Argon2 and the embedding model together use a few hundred MB. A runaway process
+# is killed and restarted rather than taking PostgreSQL down with it.
+MemoryMax=1500M
+
+# Hardening: the app only reads its code and writes the model cache.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blurt
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

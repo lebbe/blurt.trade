@@ -340,7 +340,7 @@ export async function countActiveSessions(userId: number): Promise<number> {
   return rows[0].count
 }
 
-// Revoked and idle rows can never be used again. Run at startup.
+// Revoked and idle rows can never be used again. Run at startup and hourly (src/server.ts).
 export async function deleteDeadSessions(): Promise<void> {
   await db().query(
     `DELETE FROM sessions
