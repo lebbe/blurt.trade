@@ -4,8 +4,20 @@
 blurt.trade {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:3000
+	# The access log keeps client addresses truncated (IPv4 to /24, IPv6 to /48), and two
+	# weeks at most. Caddy already leaves Cookie and Authorization values out.
+	# docs/deploy.md, Logs and monitoring.
 	log {
-		output file /var/log/caddy/blurt.log
+		output file /var/log/caddy/blurt.log {
+			roll_size 50MiB
+			roll_keep 10
+			roll_keep_for 336h
+		}
+		format filter {
+			request>remote_ip ip_mask 24 48
+			request>client_ip ip_mask 24 48
+			request>headers>X-Forwarded-For delete
+		}
 	}
 }
 

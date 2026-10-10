@@ -1,6 +1,7 @@
 import pgvector from 'pgvector'
 import { pathToFileURL } from 'node:url'
 import { db } from './db.ts'
+import { errorFields, log } from './logging.ts'
 
 // Blurts are saved first and embedded afterwards, so posting never waits for (or fails
 // because of) the model. Anything left without an embedding — e.g. after a crash — is
@@ -22,7 +23,7 @@ export function setEmbedder(next: Embedder): void {
 // The returned promise settles when that run is done; it never rejects.
 export function embedPendingBlurts(): Promise<void> {
   queue = queue.then(runPending).catch((error: unknown) => {
-    console.error('Embedding blurts failed:', error)
+    log('error', 'embedding blurts failed', { error: errorFields(error) })
   })
   return queue
 }

@@ -437,3 +437,17 @@ built with `md`, `raw`, `link`, `code` or `join` go in as they are. Templates ar
 dedented, `null`/`undefined`/booleans render nothing (a line left empty is dropped),
 arrays become one block per item, and a multi-line value stays inside its blockquote or
 list item. See the comment at the top of the file for details.
+
+## Health check
+
+`GET /healthz` answers `200` with `ok` when the app can run a query on the database (and
+on the read replica, if one is configured), and `503` with `database unavailable` or
+`read replica unavailable` otherwise. Plain text only, `Cache-Control: no-store`, no
+auth, no cookies read. It is for the external uptime check and `deploy/deploy.sh`;
+successful checks are not logged (docs/deploy.md, Logs and monitoring).
+
+## Errors and request ids
+
+Every response carries an `X-Request-Id` header, the id of its line in the log. An
+unexpected error is answered with a `500` that says only that something went wrong and
+names the request id (JSON callers: `{ error, requestId }`); the stack goes to the log.

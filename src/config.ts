@@ -32,6 +32,12 @@ export function configProblems(env: Env = process.env): ConfigProblems {
   integer('PORT', 0, 65535)
   integer('DB_POOL_SIZE', 1, 1000)
   integer('READ_YOUR_WRITES_SECONDS', 1)
+  integer('ALERT_5XX_THRESHOLD', 1)
+
+  // Not echoed: the webhook URL usually holds a token.
+  if (set('ALERT_WEBHOOK_URL') && !/^https?:\/\/\S+$/.test(env.ALERT_WEBHOOK_URL as string)) {
+    errors.push('ALERT_WEBHOOK_URL must be an http(s):// URL')
+  }
 
   for (const name of ['DATABASE_URL', 'MIGRATION_DATABASE_URL', 'DATABASE_READ_URL']) {
     if (set(name) && !/^postgres(ql)?:\/\//.test(env[name] as string)) {
@@ -60,6 +66,12 @@ export function configProblems(env: Env = process.env): ConfigProblems {
       warnings.push(
         'MIGRATION_DATABASE_URL is not set, so migrations use DATABASE_URL. If that is ' +
           'PgBouncer in transaction mode, point MIGRATION_DATABASE_URL at PostgreSQL itself',
+      )
+    }
+    if (!set('ALERT_WEBHOOK_URL')) {
+      warnings.push(
+        'ALERT_WEBHOOK_URL is not set, so crashes and 5xx spikes only show in the log ' +
+          '(docs/deploy.md, Logs and monitoring)',
       )
     }
     if (env.RATE_LIMIT_SCALE !== undefined && Number(env.RATE_LIMIT_SCALE) === 0) {

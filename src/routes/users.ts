@@ -55,6 +55,7 @@ export const reservedUsernames = new Set([
   'createuser',
   'deleted', // /deleted/:id, a deleted blurt's placeholder
   'everyone',
+  'healthz',
   'login',
   'near',
   'settings',

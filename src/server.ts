@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
 import { checkConfig } from './config.ts'
 import { closeDb } from './db.ts'
+import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
@@ -14,6 +15,7 @@ import { sendError } from './negotiate.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
+import { healthRouter } from './routes/health.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
 import { locationRouter } from './routes/location.ts'
@@ -25,8 +27,12 @@ export const app = express()
 // So request.ip is the client's address behind a reverse proxy; rate limits key on it.
 app.set('trust proxy', trustProxySetting())
 app.disable('x-powered-by')
-// First, so every response has them, errors included.
+// First: a request id and one log line per request (src/logging.ts).
+app.use(requestLogger)
+// Next, so every response has them, errors included.
 app.use(securityHeaders)
+// Before cookies and auth: the uptime check needs neither.
+app.use(healthRouter)
 // The stylesheet, generated from src/templates/styles.ts. Pages link it with a hash of its
 // content in the URL, so it can be cached for good.
 app.get('/static/style.css', (_request, response) => {
@@ -69,6 +75,8 @@ app.use(
     sendError(request, response, error.status, message)
   },
 )
+// Everything else: logged with its stack and request id, and a generic 500.
+app.use(serverErrorHandler)
 
 const port = Number(process.env.PORT) || 3000
 
@@ -82,6 +90,7 @@ const embeddingCatchUpMs = 5 * 60 * 1000 // blurts left without an embedding, e.
 const shutdownTimeoutMs = 10_000
 
 async function start(): Promise<void> {
+  handleCrashes()
   checkConfig()
   // MIGRATE_ON_START=false when migrations run as a separate deploy step (docs/deploy.md).
   if (process.env.MIGRATE_ON_START !== 'false') {
@@ -93,7 +102,7 @@ async function start(): Promise<void> {
   const timers = [
     setInterval(() => {
       deleteDeadSessions().catch((error: unknown) => {
-        console.error('Deleting dead sessions failed:', error)
+        log('error', 'deleting dead sessions failed', { error: errorFields(error) })
       })
     }, sessionCleanupMs),
     setInterval(() => void embedPendingBlurts(), embeddingCatchUpMs),
@@ -102,7 +111,7 @@ async function start(): Promise<void> {
   const server = app.listen(port, () => {
     const address = server.address()
     const actualPort = address && typeof address === 'object' ? address.port : port
-    console.log(`blurt.trade listening on http://localhost:${actualPort}`)
+    log('info', 'listening', { port: actualPort })
   })
 
   let stopping = false
@@ -111,22 +120,22 @@ async function start(): Promise<void> {
       return
     }
     stopping = true
-    console.log(`${signal} received, shutting down`)
+    log('info', 'shutting down', { signal })
     for (const timer of timers) {
       clearInterval(timer)
     }
     setTimeout(() => {
-      console.error('Shutdown timed out, exiting')
+      log('error', 'shutdown timed out, exiting')
       process.exit(1)
     }, shutdownTimeoutMs).unref()
     server.close(() => {
       closeDb().then(
         () => {
-          console.log('Shut down cleanly')
+          log('info', 'shut down cleanly')
           process.exit(0)
         },
         (error: unknown) => {
-          console.error('Closing the database failed:', error)
+          log('error', 'closing the database failed', { error: errorFields(error) })
           process.exit(1)
         },
       )

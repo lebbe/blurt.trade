@@ -26,7 +26,7 @@ node --env-file="$ENV_FILE" db/migrate.ts
 
 sudo systemctl restart blurt
 for _ in $(seq 1 30); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/"; then
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/healthz"; then
     echo "Deployed and answering on port $PORT"
     exit 0
   fi

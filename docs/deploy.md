@@ -65,6 +65,8 @@ file without starting anything: `node --env-file=/etc/blurt/blurt.env src/config
 | `MODEL_CACHE_DIR`          | inside `node_modules`         | Where the embedding model is downloaded to. Set it outside `node_modules`, which `npm ci` deletes.                                                              |
 | `RATE_LIMIT_SCALE`         | `1`                           | Multiplies every rate limit's burst; `0` switches them off (warned about in production).                                                                         |
 | `RATE_LIMIT_<NAME>`        | see `src/middleware/rate-limit.ts` | One limit as `burst/period`, e.g. `RATE_LIMIT_LOGIN_IP=10/10m`. Names: `LOGIN_IP`, `LOGIN_USERNAME`, `CREATE_USER_IP`, `WAITLIST_IP`, `BLURT`, `FOLLOW`, `PROFILE_EDIT`, `LOCATION`, `AVATAR`, `REPORT`, `DELETE_BLURT`. See docs/routes.md, Rate limits. |
+| `ALERT_WEBHOOK_URL`        | unset: no alerts from the app | Gets a POST with `{"text": "..."}` when the app crashes or 5xx responses spike (Logs and monitoring). A secret; never logged. Warned about in production if missing. |
+| `ALERT_5XX_THRESHOLD`      | `10`                          | How many 5xx responses within 5 minutes make a spike. One alert per 5 minutes at most.                                                                           |
 
 Only for tests: `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL`,
 `TEST_DATABASE_READ_URL` (db/README.md, Tests).
@@ -152,11 +154,14 @@ As root on a fresh Ubuntu 24.04, with DNS `A`/`AAAA` records for `blurt.trade` a
 
 8. **Backups** (below), then **restore one** (below).
 
-9. **Reboot** and check that everything comes back by itself:
-   `reboot`, then `systemctl is-active postgresql pgbouncer blurt caddy` and
-   `curl -I https://blurt.trade`.
+9. **Logs and monitoring** (below): the journald cap, the uptime check and the alert
+   webhook.
 
-10. **Make yourself admin** (docs/routes.md, Deleting and reporting) after signing up.
+10. **Reboot** and check that everything comes back by itself:
+    `reboot`, then `systemctl is-active postgresql pgbouncer blurt caddy` and
+    `curl https://blurt.trade/healthz`.
+
+11. **Make yourself admin** (docs/routes.md, Deleting and reporting) after signing up.
 
 ## Deploying
 
@@ -168,7 +173,7 @@ sudo -u blurt bash /srv/blurt/app/deploy/deploy.sh <commit>   # or any ref
 
 It checks out the ref, runs `npm ci --omit=dev`, checks the configuration, downloads the
 embedding model if needed, runs pending migrations once, restarts the app and waits for it
-to answer. If any step before the restart fails, the running app is untouched. To roll
+to answer on `/healthz`. If any step before the restart fails, the running app is untouched. To roll
 back, deploy the previous commit; migrations are not rolled back (write them so the
 previous code still works).
 
@@ -176,7 +181,68 @@ A restart drops nothing: systemd sends `SIGTERM`, the server stops accepting con
 finishes requests in flight, closes its database pools and exits (`src/server.ts`, at
 most 10 seconds). Caddy answers 502 for the second or two until the new process listens.
 
-Logs: `journalctl -u blurt -f`. Caddy's access log: `/var/log/caddy/blurt.log`.
+Logs: `journalctl -u blurt -f` (Logs and monitoring, below).
+
+## Logs and monitoring
+
+**What the app logs** (`src/logging.ts`): one JSON object per line, on stdout (`info`)
+or stderr (`warn`, `error`), which systemd passes to journald. Every request gets one
+line when it is answered:
+
+```json
+{"time":"2026-10-10T18:00:00.000Z","level":"info","msg":"request","id":"5f0c…","method":"POST","path":"/login","status":303,"ms":84.2}
+```
+
+- The request id is also sent as the `X-Request-Id` response header, and the 500 page
+  shows it, so a user's report can be matched with the log.
+- The path goes without its query string. Never logged: request bodies (passwords),
+  headers (cookies, tokens), query strings, and IP addresses. A test logs in and checks
+  that neither the password nor the session token reaches the log.
+- **IP addresses:** the app doesn't log them at all; rate limiting keeps them in memory
+  only. Caddy's access log (`/var/log/caddy/blurt.log`) keeps them truncated to /24
+  (IPv4) or /48 (IPv6), enough to spot an abusive network, for two weeks at most.
+- Successful `/healthz` requests aren't logged, so the uptime check doesn't drown the rest.
+- Anything a route throws that isn't a client error is logged as `unhandled error` with
+  its stack and the request id, and the user gets a plain 500 that says nothing about
+  the cause. An uncaught exception or unhandled rejection is logged, alerted (below),
+  and the process exits; systemd restarts it.
+
+Reading them:
+
+```bash
+journalctl -u blurt -f                                  # follow
+journalctl -u blurt -p err --since today                # errors only
+journalctl -u blurt -o cat | grep '"id":"5f0c'          # one request, by id
+journalctl -u blurt -o cat --since -1h | jq -r 'select(.status >= 500) | .path'
+```
+
+**Rotation:** journald rotates by itself. Cap it in `/etc/systemd/journald.conf` and
+`systemctl restart systemd-journald`:
+
+```ini
+[Journal]
+SystemMaxUse=1G
+MaxRetentionSec=30day
+```
+
+Caddy rolls its access log at 50 MB and deletes files older than 14 days (`deploy/Caddyfile`).
+
+**Alerts.** Two independent checks, so either one still works when the other can't:
+
+1. **An uptime check from outside** on `https://blurt.trade/healthz`, every minute,
+   notifying by e-mail or push after two failures. `/healthz` answers `200 ok` when the
+   app runs a query on the database (and on the read replica, if there is one), `503`
+   naming which one failed otherwise, so it catches the server, Caddy, the app and the
+   database being down. Any free uptime service works (e.g. UptimeRobot, Better Stack,
+   or a self-hosted Uptime Kuma on another machine); not on this server, which would go
+   down with it. Check: stop the app (`systemctl stop blurt`), wait for the
+   notification, start it again.
+2. **`ALERT_WEBHOOK_URL`** (optional): the app posts `{"text": "blurt.trade: …"}` to it
+   when it crashes (before exiting) and when it has answered `ALERT_5XX_THRESHOLD` (10)
+   5xx responses within 5 minutes, at most once per 5 minutes. Slack, Mattermost and
+   Google Chat incoming webhooks take that body as is; an ntfy.sh topic URL shows it as
+   the message. A failed alert is logged, never retried. The uptime check also catches
+   a crash loop, since `/healthz` fails while the app keeps restarting.
 
 ## Housekeeping inside the app
 
