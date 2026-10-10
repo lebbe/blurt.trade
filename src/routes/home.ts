@@ -108,7 +108,7 @@ async function getDiscovery(
 async function sendFeed(request: Request, response: Response, path: '/' | '/everyone') {
   const before = parseCursor(request.query.before)
   if (before === undefined) {
-    sendError(request, response, 400, 'Invalid cursor')
+    sendError(request, response, 400, 'Invalid cursor', 'before')
     return
   }
   represent(request, response, await getFeedData(request, before, path), {

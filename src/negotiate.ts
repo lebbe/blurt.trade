@@ -51,10 +51,11 @@ export function sendError(
   response: Response,
   status: number,
   message: string,
+  field?: string, // the query parameter a 400 is about, if any
 ): void {
   response.vary('Accept').status(status)
   if (wantsJson(request)) {
-    response.type('json').send(toJson({ error: message }))
+    response.type('json').send(toJson({ error: message, field }))
   } else {
     response.type('text').send(message)
   }

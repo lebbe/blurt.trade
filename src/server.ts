@@ -6,6 +6,7 @@ import { migrate } from '../db/migrate.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
+import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
@@ -21,8 +22,8 @@ export const app = express()
 app.set('trust proxy', trustProxySetting())
 // Static files (the world map) from public/, before auth: they're the same for everyone.
 app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
-app.use(express.urlencoded({ extended: false }))
-app.use(express.json())
+app.use(express.urlencoded({ extended: false, limit: bodyLimit }))
+app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())
 app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
@@ -37,10 +38,10 @@ app.use(profilesRouter)
 app.use((request: express.Request, response: express.Response) => {
   sendError(request, response, 404, 'Not found')
 })
-// Client errors from middleware, e.g. a malformed JSON body.
+// Client errors from middleware, e.g. a malformed JSON body or one over bodyLimit (413).
 app.use(
   (
-    error: { status?: unknown; message?: unknown },
+    error: { status?: unknown; message?: unknown; type?: unknown },
     request: express.Request,
     response: express.Response,
     next: express.NextFunction,
@@ -49,7 +50,11 @@ app.use(
       next(error)
       return
     }
-    sendError(request, response, error.status, String(error.message))
+    const message =
+      error.type === 'entity.too.large'
+        ? `Request body is too large (at most ${bodyLimit})`
+        : String(error.message)
+    sendError(request, response, error.status, message)
   },
 )
 

@@ -100,22 +100,22 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path                         | Auth           | Body                                 | Form success                | JSON success                                   |
-| ---------------------------- | -------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
-| `/createUser`                | —              | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
-| `/waitlist`                  | —              | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
-| `/login`                     | —              | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
-| `/:username/edit`            | owner          | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`                | yes            | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
-| `/api/blurts/:id/delete`     | author, admin  | —                                    | 303 → back (see Deleting)   | 204                                            |
-| `/api/report`                | yes            | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
-| `/api/admin/reports/dismiss` | admin          | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
-| `/api/follow`                | yes            | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/unfollow`              | yes            | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/location`              | yes            | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
-| `/api/avatar`                | yes            | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
-| `/api/logout`                | —              | —                                    | 303 → `/`                   | 204                                            |
-| `/api/logout-everywhere`     | yes            | —                                    | 303 → `/login`              | 204                                            |
+| Path                         | Auth          | Body                                 | Form success                | JSON success                                   |
+| ---------------------------- | ------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
+| `/createUser`                | —             | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
+| `/login`                     | —             | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
+| `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
+| `/api/blurts`                | yes           | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
+| `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
+| `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
+| `/api/follow`                | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
+| `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
+| `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
+| `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
@@ -292,19 +292,19 @@ POSTs that cost CPU or can be spammed are limited by token buckets in
 empty one answers `429` with `Retry-After` (seconds until the next token), as in the
 error table below.
 
-| Limit (env var suffix) | Routes                         | Per                    | Default |
-| ---------------------- | ------------------------------ | ---------------------- | ------- |
-| `LOGIN_IP`             | `/login`, every attempt        | IP                     | 10/10m  |
-| `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)    | 5/5m    |
-| `CREATE_USER_IP`       | `/createUser` (and invites)    | IP                     | 5/1h    |
-| `WAITLIST_IP`          | `/waitlist`                    | IP                     | 10/1h   |
-| `BLURT`                | `/api/blurts` (and replies)    | account                | 20/10m  |
-| `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget)   | 60/10m  |
-| `PROFILE_EDIT`         | `/:username/edit`              | account                | 30/10m  |
-| `LOCATION`             | `/api/location`                | account                | 30/10m  |
-| `AVATAR`               | `/api/avatar`                  | account                | 60/10m  |
-| `REPORT`               | `/api/report`                  | account                | 20/1h   |
-| `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account                | 60/10m  |
+| Limit (env var suffix) | Routes                         | Per                  | Default |
+| ---------------------- | ------------------------------ | -------------------- | ------- |
+| `LOGIN_IP`             | `/login`, every attempt        | IP                   | 10/10m  |
+| `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)  | 5/5m    |
+| `CREATE_USER_IP`       | `/createUser` (and invites)    | IP                   | 5/1h    |
+| `WAITLIST_IP`          | `/waitlist`                    | IP                   | 10/1h   |
+| `BLURT`                | `/api/blurts` (and replies)    | account              | 20/10m  |
+| `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget) | 60/10m  |
+| `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |
+| `LOCATION`             | `/api/location`                | account              | 30/10m  |
+| `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |
+| `REPORT`               | `/api/report`                  | account              | 20/1h   |
+| `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
 
 - `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
   them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).
@@ -331,11 +331,43 @@ error table below.
 | Case                    | Form / HTML                         | JSON                                |
 | ----------------------- | ----------------------------------- | ----------------------------------- |
 | Validation (400)        | The form page again, with the error | `{ errors: [{ field?, message }] }` |
+| Bad query parameter     | Plain-text message (400)            | `{ error: message, field }`         |
 | 401, 403, 404, bad JSON | Plain-text message                  | `{ error: message }`                |
+| 413 (body too large)    | Plain-text message                  | `{ error: message }`                |
 | 429 (rate limit)        | Plain-text message, `Retry-After`   | `{ error: message }`, `Retry-After` |
 
 `field` names the input the error is about (`username`, `text`, `homepage`, ...). It is
-left out when the error is about the whole form, e.g. a wrong username or password.
+left out when the error is about the whole form, e.g. a wrong username or password. For a
+GET it is the query parameter (`before`, `after`, `radius`, `username`, `invite`).
+
+## Input limits
+
+Everything a client sends is bounded, in `src/limits.ts`. Input over a limit is rejected
+with a 400 naming the field (see Errors), never silently truncated. Text is trimmed
+first, then counted in characters (code points, like Postgres' `char_length()`: an emoji
+is one), not bytes. The forms carry the same limits as `maxlength`.
+
+| Input                                      | Limit                                           |
+| ------------------------------------------ | ----------------------------------------------- |
+| Blurt `text`                               | 1–280 characters                                |
+| `bio`                                      | 4000 characters                                 |
+| `homepage`                                 | 200 characters, `http(s)://` only               |
+| `x`, `instagram`, `tiktok`, `youtube`, ... | 200 characters, a handle or an `http(s)://` URL |
+| Report `reason`                            | 500 characters                                  |
+| `username`                                 | 1–40 letters, digits and `_`                    |
+| `password`                                 | 8–200 characters (bounds Argon2's work)         |
+| `?before=` / `?after=` cursors             | 100 characters, and must decode                 |
+| `?radius=` on `/near`                      | one of the listed radii                         |
+| `?invite=` on `/createUser`                | 40 characters                                   |
+| `?username=` on `/waitlist`                | 40 characters                                   |
+| Request body (form or JSON)                | 64 KB, else 413                                 |
+
+- The body limit fits the largest real body, a full bio of 4-byte characters
+  percent-encoded (about 48 KB), with room to spare.
+- The database repeats the text limits, and the `http(s)` rule for profile links, as
+  CHECK constraints. Templates still only link `http(s)://` URLs (`isWebUrl`).
+- Browsers count `maxlength` in UTF-16 units, so a textarea stops at 140 emoji while the
+  server would take 280. The server is the limit that counts.
 
 ## Rules for new routes
 

@@ -1,0 +1,47 @@
+import { z } from 'zod'
+
+// Upper bounds on everything a client sends. Validation rejects anything over a limit
+// with a 400 naming the field; nothing is silently truncated. The database repeats the
+// text limits as CHECK constraints. See "Input limits" in docs/routes.md.
+
+export const blurtMaxLength = 280
+export const bioMaxLength = 4000
+export const reportReasonMaxLength = 500
+// Homepage and social fields.
+export const linkMaxLength = 200
+export const usernameMaxLength = 40
+export const passwordMinLength = 8
+// Keeps Argon2 from hashing huge inputs: at most 800 bytes in UTF-8.
+export const passwordMaxLength = 200
+// An invite code is 12 characters; this leaves room for the spaces and dashes people type.
+export const inviteCodeMaxLength = 40
+// A cursor is about 40 characters; anything much longer isn't one.
+export const cursorMaxLength = 100
+
+// Request bodies, form-encoded or JSON. The biggest real one is the profile form, a full
+// bio of 4-byte characters percent-encoded: about 48 KB. Bigger bodies get a 413.
+export const bodyLimit = '64kb'
+
+// Characters as people count them, and as Postgres' char_length() does: code points, not
+// UTF-16 units (an emoji is one, not two) or bytes.
+export function charLength(text: string): number {
+  return [...text].length
+}
+
+// A trimmed string of at most `max` characters (see charLength).
+export function text(max: number, message: string) {
+  return z
+    .string()
+    .trim()
+    .refine((value) => charLength(value) <= max, message)
+}
+
+// http(s) only, so a link on a profile can never be javascript: or data:. The scheme and
+// // must come first: URL.parse() would also take ' http:x', fixing it up silently.
+export function isWebUrl(value: string): boolean {
+  if (!/^https?:\/\//i.test(value)) {
+    return false
+  }
+  const url = URL.parse(value)
+  return url?.protocol === 'http:' || url?.protocol === 'https:'
+}

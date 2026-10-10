@@ -5,6 +5,16 @@ import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint }
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import { avatarLabels, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
 import { AvatarSvg, avatarCss } from './avatar.ts'
+import {
+  bioMaxLength,
+  blurtMaxLength,
+  isWebUrl,
+  linkMaxLength,
+  passwordMaxLength,
+  passwordMinLength,
+  reportReasonMaxLength,
+  usernameMaxLength,
+} from '../limits.ts'
 import type {
   Blurt,
   FeedItem,
@@ -17,12 +27,6 @@ import type {
 } from '../routes/state.ts'
 
 const html = htm.bind(h)
-
-// Only http(s) links are ever rendered as hrefs; anything else (e.g. javascript:) is plain text.
-export function isWebUrl(value: string): boolean {
-  const url = URL.parse(value)
-  return url?.protocol === 'http:' || url?.protocol === 'https:'
-}
 
 // The data each page is rendered from. A route fetches it once; it goes out as JSON as is,
 // and as HTML or Markdown through the templates (see src/negotiate.ts).
@@ -171,7 +175,9 @@ function Composer({
     <form method="post" action="/api/blurts">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
       ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
-      <label>${label} <textarea name="text" maxlength="280" required>${text}</textarea></label>
+      <label
+        >${label} <textarea name="text" maxlength=${blurtMaxLength} required>${text}</textarea>
+      </label>
       <button type="submit">${button}</button>
     </form>
   `
@@ -224,7 +230,9 @@ function WaitlistForm({ username = '', validationError }: FormProps) {
   return html`
     <form method="post" action="/waitlist">
       <${ValidationError} message=${validationError} />
-      <label>Username <input name="username" maxlength="40" required value=${username} /></label>
+      <label
+        >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
+      /></label>
       <button type="submit">Join the waitlist</button>
     </form>
   `
@@ -277,15 +285,23 @@ function CreateUserForm({
   return html`
     <form method="post" action="/createUser">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-      <label>Username <input name="username" maxlength="40" required value=${username} /></label>
       <label
-        >Password <input name="password" type="password" minlength="8" maxlength="200" required
+        >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
+      /></label>
+      <label
+        >Password
+        <input
+          name="password"
+          type="password"
+          minlength=${passwordMinLength}
+          maxlength=${passwordMaxLength}
+          required
       /></label>
       <label
         >Invite code${inviteRequired ? '' : ' (optional)'}
         <input
           name="inviteCode"
-          maxlength="40"
+          maxlength=${usernameMaxLength}
           autocomplete="off"
           autocapitalize="characters"
           spellcheck="false"
@@ -312,8 +328,12 @@ function LoginForm({ username = '', validationError }: LoginProps) {
   return html`
     <form method="post" action="/login">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-      <label>Username <input name="username" maxlength="40" required value=${username} /></label>
-      <label>Password <input name="password" type="password" maxlength="200" required /></label>
+      <label
+        >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
+      /></label>
+      <label
+        >Password <input name="password" type="password" maxlength=${passwordMaxLength} required
+      /></label>
       <button type="submit">Log in</button>
     </form>
   `
@@ -409,7 +429,7 @@ function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
       <form method="post" action="/api/report" class="inline-form">
         <${ValidationError} message=${error} />
         <input type="hidden" name="blurtId" value=${blurt.id} />
-        <label>Reason (optional) <input name="reason" maxlength="500" /></label>
+        <label>Reason (optional) <input name="reason" maxlength=${reportReasonMaxLength} /></label>
         <button type="submit">Report</button>
       </form>
     </details>
@@ -819,20 +839,25 @@ function ProfileEditForm({
           >Homepage
           <input
             name="homepage"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.homepage}
             placeholder="https://example.com"
           />
         </label>
         <label
           >X
-          <input name="x" maxlength="200" value=${profile.x} placeholder="@handle or full URL" />
+          <input
+            name="x"
+            maxlength=${linkMaxLength}
+            value=${profile.x}
+            placeholder="@handle or full URL"
+          />
         </label>
         <label
           >Instagram
           <input
             name="instagram"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.instagram}
             placeholder="@handle or full URL"
           />
@@ -841,7 +866,7 @@ function ProfileEditForm({
           >TikTok
           <input
             name="tiktok"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.tiktok}
             placeholder="@handle or full URL"
           />
@@ -850,7 +875,7 @@ function ProfileEditForm({
           >YouTube
           <input
             name="youtube"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.youtube}
             placeholder="@handle or full URL"
           />
@@ -859,7 +884,7 @@ function ProfileEditForm({
           >GitHub
           <input
             name="github"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.github}
             placeholder="@handle or full URL"
           />
@@ -868,14 +893,14 @@ function ProfileEditForm({
           >LinkedIn
           <input
             name="linkedin"
-            maxlength="200"
+            maxlength=${linkMaxLength}
             value=${profile.linkedin}
             placeholder="@handle or full URL"
           />
         </label>
         <label
           >Bio
-          <textarea name="bio" maxlength="4000" placeholder="Say the thing.">
+          <textarea name="bio" maxlength=${bioMaxLength} placeholder="Say the thing.">
 ${profile.bio}</textarea>
         </label>
         <button type="submit">Save profile</button>

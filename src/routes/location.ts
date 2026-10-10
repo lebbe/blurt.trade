@@ -138,12 +138,12 @@ locationRouter.get('/near', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
   const radius = parseRadius(request)
   if (radius === undefined) {
-    sendError(request, response, 400, `Radius must be one of ${nearRadii.join(', ')} km`)
+    sendError(request, response, 400, `Radius must be one of ${nearRadii.join(', ')} km`, 'radius')
     return
   }
   const before = parseCursor(request.query.before)
   if (before === undefined) {
-    sendError(request, response, 400, 'Invalid cursor')
+    sendError(request, response, 400, 'Invalid cursor', 'before')
     return
   }
 

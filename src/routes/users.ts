@@ -10,7 +10,13 @@ import {
   startSession,
 } from '../middleware/auth.ts'
 import { rateLimit, sendTooManyRequests, take } from '../middleware/rate-limit.ts'
-import { fieldErrors, represent, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
+import {
+  inviteCodeMaxLength,
+  passwordMaxLength,
+  passwordMinLength,
+  usernameMaxLength,
+} from '../limits.ts'
+import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
 import {
   addUser,
   countWaiting,
@@ -81,14 +87,14 @@ export const reservedUsernames = new Set([
 
 const password = z
   .string()
-  .min(8, 'Password must be at least 8 characters')
-  .max(200, 'Password is too long')
+  .min(passwordMinLength, `Password must be at least ${passwordMinLength} characters`)
+  .max(passwordMaxLength, 'Password is too long')
 
 const newUsername = z
   .string()
   .trim()
   .min(1, 'Username is required')
-  .max(40, 'Username is too long')
+  .max(usernameMaxLength, 'Username is too long')
   .regex(/^[A-Za-z0-9_]+$/, 'Username can only contain letters, numbers and underscores')
   .refine((name) => !reservedUsernames.has(name.toLowerCase()), 'That username is reserved')
 
@@ -116,7 +122,11 @@ const waitlistSchema = z.object({ username: newUsername })
 
 // Login only checks the shape; the database decides whether the user exists.
 const loginSchema = z.object({
-  username: z.string().trim().min(1, 'Username is required').max(40, 'Username is too long'),
+  username: z
+    .string()
+    .trim()
+    .min(1, 'Username is required')
+    .max(usernameMaxLength, 'Username is too long'),
   password,
 })
 
@@ -140,6 +150,10 @@ const signupClosedMessages: Record<SignupState, string> = {
 // ?invite=<code> fills in the invite code, so a shared link is all an invitee needs.
 usersRouter.get('/createUser', async (request, response) => {
   const invite = typeof request.query.invite === 'string' ? request.query.invite.trim() : ''
+  if (invite.length > inviteCodeMaxLength) {
+    sendError(request, response, 400, 'Invite code is too long', 'invite')
+    return
+  }
   represent(
     request,
     response,
@@ -267,8 +281,12 @@ async function getWaitlistData(request: Request, username: string | null): Promi
 }
 
 usersRouter.get('/waitlist', async (request, response) => {
-  const username = typeof request.query.username === 'string' ? request.query.username : ''
-  represent(request, response, await getWaitlistData(request, username.trim() || null), {
+  const username = typeof request.query.username === 'string' ? request.query.username.trim() : ''
+  if (username.length > usernameMaxLength) {
+    sendError(request, response, 400, 'Username is too long', 'username')
+    return
+  }
+  represent(request, response, await getWaitlistData(request, username || null), {
     html: (data) => renderWaitlistPage(data),
     markdown: waitlistMarkdown,
   })

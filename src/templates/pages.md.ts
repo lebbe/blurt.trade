@@ -1,5 +1,6 @@
 import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
 import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
+import { isWebUrl } from '../limits.ts'
 import {
   blurtActions,
   blurtUrl,
@@ -9,7 +10,6 @@ import {
   feedPath,
   formatLocation,
   gridDescription,
-  isWebUrl,
   moreRepliesUrl,
   nearPageUrl,
   olderBlurtsUrl,

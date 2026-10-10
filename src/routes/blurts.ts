@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
+import { blurtMaxLength, reportReasonMaxLength, text } from '../limits.ts'
 import {
   fieldErrors,
   represent,
@@ -36,7 +37,10 @@ import { blurtPageMarkdown } from '../templates/pages.md.ts'
 export const blurtsRouter = Router()
 
 const blurtSchema = z.object({
-  text: z.string().trim().min(1, 'Blurt is required').max(280, 'Blurt is too long'),
+  text: text(blurtMaxLength, `Blurt must be at most ${blurtMaxLength} characters`).min(
+    1,
+    'Blurt is required',
+  ),
 })
 
 // From a URL segment, a form field (string) or a JSON body (number).
@@ -72,7 +76,7 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
   }
   const after = parseCursor(request.query.after)
   if (after === undefined) {
-    sendError(request, response, 400, 'Invalid cursor')
+    sendError(request, response, 400, 'Invalid cursor', 'after')
     return
   }
   represent(request, response, await getBlurtPageData(request, blurt, after), {
@@ -177,7 +181,7 @@ blurtsRouter.post(
 )
 
 const reportSchema = z.object({
-  reason: z.string().trim().max(500, 'Reason is too long').default(''),
+  reason: text(reportReasonMaxLength, 'Reason is too long').default(''),
 })
 
 // One report per user and blurt; reporting again does nothing. Forms go to the blurt's

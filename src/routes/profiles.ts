@@ -22,15 +22,13 @@ import {
   unfollow,
   updateUserProfile,
 } from './state.ts'
-import { isWebUrl, renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
+import { bioMaxLength, isWebUrl, linkMaxLength, text } from '../limits.ts'
+import { renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
 import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
 
 export const profilesRouter = Router()
 
-const socialValue = z
-  .string()
-  .trim()
-  .max(200, 'Social fields must be at most 200 characters')
+const socialValue = text(linkMaxLength, `Social fields must be at most ${linkMaxLength} characters`)
   .refine(
     (value) => value === '' || isWebUrl(value) || /^@?[A-Za-z0-9._-]{1,100}$/.test(value),
     'Social fields must be a username/handle or a full http(s) URL',
@@ -39,10 +37,7 @@ const socialValue = z
 
 // Missing fields count as empty, so a partial POST gets a readable error, not a type error.
 export const profileSchema = z.object({
-  homepage: z
-    .string()
-    .trim()
-    .max(200, 'Homepage must be at most 200 characters')
+  homepage: text(linkMaxLength, `Homepage must be at most ${linkMaxLength} characters`)
     .refine(
       (value) => value === '' || isWebUrl(value),
       'Homepage must be a full URL starting with https:// or http://',
@@ -54,7 +49,7 @@ export const profileSchema = z.object({
   youtube: socialValue,
   github: socialValue,
   linkedin: socialValue,
-  bio: z.string().trim().max(4000, 'Bio must be at most 4000 characters').default(''),
+  bio: text(bioMaxLength, `Bio must be at most ${bioMaxLength} characters`).default(''),
 })
 
 // Echo back only the form's own fields when re-rendering after a validation error.
@@ -77,7 +72,7 @@ profilesRouter.get('/:username/', async (request, response) => {
 
   const before = parseCursor(request.query.before)
   if (before === undefined) {
-    sendError(request, response, 400, 'Invalid cursor')
+    sendError(request, response, 400, 'Invalid cursor', 'before')
     return
   }
 

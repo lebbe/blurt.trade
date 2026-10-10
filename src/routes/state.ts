@@ -3,6 +3,7 @@ import type pg from 'pg'
 import { db, dbRead } from '../db.ts'
 import type { GeoPoint } from '../geo.ts'
 import { randomAvatar, type Avatar } from '../avatar.ts'
+import { cursorMaxLength } from '../limits.ts'
 
 // A deleted blurt that had replies stays in its thread as a placeholder: `deleted` is true
 // and `username`, `text` and `avatar` are null (see deleteBlurts).
@@ -86,7 +87,7 @@ export function parseCursor(value: unknown): Cursor | null | undefined {
     return null
   }
   const match =
-    typeof value === 'string'
+    typeof value === 'string' && value.length <= cursorMaxLength
       ? cursorPattern.exec(Buffer.from(value, 'base64url').toString())
       : null
   if (!match) {
