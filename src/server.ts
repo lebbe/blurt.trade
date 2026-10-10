@@ -24,7 +24,8 @@ import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
 import { usersRouter } from './routes/users.ts'
 import { crawlRouter } from './routes/crawl.ts'
-import { stylesheet } from './templates/styles.ts'
+
+const publicDir = join(import.meta.dirname, '..', 'public')
 
 export const app = express()
 // So request.ip is the client's address behind a reverse proxy; rate limits key on it.
@@ -36,14 +37,10 @@ app.use(requestLogger)
 app.use(securityHeaders)
 // Before cookies and auth: the uptime check needs neither.
 app.use(healthRouter)
-// The stylesheet, generated from src/templates/styles.ts. Pages link it with a hash of its
-// content in the URL, so it can be cached for good.
-app.get('/static/style.css', (_request, response) => {
-  response.type('css').set('Cache-Control', 'public, max-age=31536000, immutable').send(stylesheet)
-})
 app.use(crawlRouter)
-// Static files (the world map) from public/, before auth: they're the same for everyone.
-app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
+// Public files from public/ (css, images, map), before auth: they are the same for everyone.
+// ETag handles revalidation; keep max-age at 0 so clients check before reuse.
+app.use('/static', express.static(publicDir, { etag: true, immutable: false, maxAge: 0 }))
 app.use(express.urlencoded({ extended: false, limit: bodyLimit }))
 app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())

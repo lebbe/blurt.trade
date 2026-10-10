@@ -495,10 +495,12 @@ responses.
   CSP first: serve the files from `/static` and add `script-src 'self'`, never
   `'unsafe-inline'`. The same goes for fonts, `fetch()` (`connect-src`), web app
   manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
-- **No inline CSS.** All styles are in one stylesheet, `src/templates/styles.ts`, served
-  at `/static/style.css?v=<hash of its content>` (cached for a year, immutable). Pages
-  link it and never use `<style>` or `style="..."`: a per-element value goes in an SVG
+- **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
+  at `/static/style.css`. It is cached with ETag/conditional requests (`If-None-Match` /
+  `304 Not Modified`) via the static file handler in `src/server.ts`. Pages link it and never use `<style>` or `style="..."`: a per-element value goes in an SVG
   attribute (the map marker is a `<circle cx cy>`) or a class. A test checks every page.
+- Public files under `/static` are served by one `express.static` handler in
+  `src/server.ts`, with ETag and conditional GET support.
 - Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
   is in the stylesheet. The world map is an image from `/static`, so `img-src 'self'`.
 - User text is escaped by the templates (Preact for HTML, `md` for Markdown); a test

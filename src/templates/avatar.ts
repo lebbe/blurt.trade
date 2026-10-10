@@ -9,7 +9,7 @@ const html = htm.bind(h)
 // checked again here (a colour that isn't #rrggbb, or an unknown type, gets a default),
 // so nothing from the database can add elements, scripts or links.
 //
-// Talking is CSS only (avatarCss, in the site stylesheet): on hover over the avatar or
+// Talking is CSS only (in public/style.css): on hover over the avatar or
 // its blurt, the two `avatar-top` groups (the upper teeth and the top of the head) flap up
 // and down around a hinge at the back of the head, showing the dark mouth behind them.
 // Drawing order makes that work without clip paths:
@@ -202,43 +202,3 @@ export function AvatarSvg({
     </g>
   </svg>`
 }
-
-// Goes in the site stylesheet once (styles.ts). The hinge (transform-origin) is in the
-// SVG's own units: the back of the head, on the mouth line. A reply's blurt is inside its parent's,
-// so :has() keeps hovering a reply from making the parent talk too.
-export const avatarCss = `
-  .avatar {
-    flex: none;
-    width: 3rem;
-    height: 3rem;
-  }
-  .replies .avatar {
-    width: 2.25rem;
-    height: 2.25rem;
-  }
-  .avatar-large {
-    width: 8rem;
-    height: 8rem;
-  }
-  .avatar-top {
-    transform-origin: 86px ${cut}px;
-  }
-  @keyframes avatar-talk {
-    from {
-      transform: none;
-    }
-    to {
-      transform: translateY(-4px) rotate(-12deg);
-    }
-  }
-  .avatar:hover .avatar-top,
-  .blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-top {
-    animation: avatar-talk 0.16s ease-in-out infinite alternate;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .avatar:hover .avatar-top,
-    .blurt:hover .avatar .avatar-top {
-      animation: none;
-    }
-  }
-`

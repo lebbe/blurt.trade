@@ -3,7 +3,6 @@ import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import { publicUrl } from '../config.ts'
 import { searchQueryMaxLength } from '../limits.ts'
-import { stylesheetUrl } from './styles.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
 // preview tags and canonical link, then the site search, the page and the footer.
@@ -19,6 +18,7 @@ export const siteDescription = 'Say the thing. Regret it later.'
 export const previewImagePath = '/static/og-image.png'
 export const previewImageSize = { width: 1200, height: 630 }
 export const faviconPath = '/static/favicon.svg'
+export const stylesheetUrl = '/static/style.css'
 
 // What a page tells search engines and link previews. Everything is optional: a page
 // without a title is just "blurt.trade". Text from users goes in as is; Preact escapes

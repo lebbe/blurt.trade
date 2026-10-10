@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { spawn, spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { migrate } from '../db/migrate.ts'
@@ -52,7 +53,9 @@ import {
   permissionsPolicy,
   strictTransportSecurity,
 } from './middleware/security-headers.ts'
-import { stylesheet, stylesheetUrl } from './templates/styles.ts'
+import { stylesheetUrl } from './templates/layout.ts'
+
+const stylesheet = readFileSync(join(import.meta.dirname, '..', 'public', 'style.css'), 'utf8')
 
 // Never the dev database: every test wipes all tables. Like the app, queries go through
 // PgBouncer (6433) and migrations straight to PostgreSQL (5433).
@@ -3216,7 +3219,13 @@ test('pages use no inline styles or scripts, so the CSP needs no unsafe-inline',
   assert.match(css.contentType ?? '', /^text\/css/)
   assert.equal(css.body, stylesheet)
   assert.match(css.body, /@keyframes avatar-talk/)
-  assert.match(css.headers['cache-control'] ?? '', /immutable/)
+  assert.match(css.headers['cache-control'] ?? '', /max-age=0/)
+  assert.equal(typeof css.headers.etag, 'string')
+  const notModified = await request('GET', stylesheetUrl, '', {
+    'if-none-match': String(css.headers.etag),
+  })
+  assert.equal(notModified.statusCode, 304)
+  assert.equal(notModified.body, '')
 })
 
 test('user text cannot break out of the HTML or the Markdown', async () => {

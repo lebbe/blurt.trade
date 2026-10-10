@@ -1,12 +1,4 @@
-import { createHash } from 'node:crypto'
-import { mapHeight, mapWidth } from '../geo.ts'
-import { avatarCss } from './avatar.ts'
 
-// The one stylesheet every HTML page links to. It is a served file, not an inline
-// <style>, so the Content-Security-Policy can be style-src 'self' with no 'unsafe-inline'
-// (see src/middleware/security-headers.ts). For the same reason the templates never use
-// style="..." attributes: anything per-element goes in SVG attributes or a class here.
-export const stylesheet = `
 :root {
   color-scheme: light;
   font-family: Georgia, serif;
@@ -145,7 +137,42 @@ select {
   border: 1px solid #aaa095;
   background: #fffdf8;
 }
-${avatarCss}
+
+  .avatar {
+    flex: none;
+    width: 3rem;
+    height: 3rem;
+  }
+  .replies .avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+  .avatar-large {
+    width: 8rem;
+    height: 8rem;
+  }
+  .avatar-top {
+    transform-origin: 86px 58px;
+  }
+  @keyframes avatar-talk {
+    from {
+      transform: none;
+    }
+    to {
+      transform: translateY(-4px) rotate(-12deg);
+    }
+  }
+  .avatar:hover .avatar-top,
+  .blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-top {
+    animation: avatar-talk 0.16s ease-in-out infinite alternate;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .avatar:hover .avatar-top,
+    .blurt:hover .avatar .avatar-top {
+      animation: none;
+    }
+  }
+
 .blurt-meta {
   display: flex;
   justify-content: space-between;
@@ -286,8 +313,8 @@ section h2 {
 }
 .map-inner {
   position: relative;
-  width: ${mapWidth}px;
-  height: ${mapHeight}px;
+  width: 720px;
+  height: 360px;
 }
 .map-inner input {
   display: block;
@@ -322,9 +349,3 @@ body > footer {
 body > footer a {
   color: inherit;
 }
-`
-
-// The URL carries a hash of the content, so the file can be cached for good and a
-// deploy that changes the CSS is picked up at once.
-const stylesheetHash = createHash('sha256').update(stylesheet).digest('hex').slice(0, 12)
-export const stylesheetUrl = `/static/style.css?v=${stylesheetHash}`
