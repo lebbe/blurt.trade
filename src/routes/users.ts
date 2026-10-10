@@ -50,6 +50,7 @@ export const usersRouter = Router()
 // Compared in lower case: Express routes ignore case.
 export const reservedUsernames = new Set([
   // current routes
+  'about',
   'admin',
   'api',
   'createuser',
@@ -58,10 +59,11 @@ export const reservedUsernames = new Set([
   'healthz',
   'login',
   'near',
+  'privacy',
   'settings',
   'static',
+  'terms',
   // likely future pages
-  'about',
   'account',
   'assets',
   'discover',
@@ -76,12 +78,10 @@ export const reservedUsernames = new Set([
   'logout',
   'messages',
   'notifications',
-  'privacy',
   'public',
   'register',
   'search',
   'signup',
-  'terms',
   'vendor',
   'waitlist',
 ])

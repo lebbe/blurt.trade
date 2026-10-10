@@ -67,6 +67,8 @@ file without starting anything: `node --env-file=/etc/blurt/blurt.env src/config
 | `RATE_LIMIT_<NAME>`        | see `src/middleware/rate-limit.ts` | One limit as `burst/period`, e.g. `RATE_LIMIT_LOGIN_IP=10/10m`. Names: `LOGIN_IP`, `LOGIN_USERNAME`, `CREATE_USER_IP`, `WAITLIST_IP`, `BLURT`, `FOLLOW`, `PROFILE_EDIT`, `LOCATION`, `AVATAR`, `REPORT`, `DELETE_BLURT`. See docs/routes.md, Rate limits. |
 | `ALERT_WEBHOOK_URL`        | unset: no alerts from the app | Gets a POST with `{"text": "..."}` when the app crashes or 5xx responses spike (Logs and monitoring). A secret; never logged. Warned about in production if missing. |
 | `ALERT_5XX_THRESHOLD`      | `10`                          | How many 5xx responses within 5 minutes make a spike. One alert per 5 minutes at most.                                                                           |
+| `CONTACT_EMAIL`            | unset                         | A public address for things that shouldn't go in a public issue (security, illegal content, data requests), shown on `/about`, `/terms` and `/privacy`. A placeholder until the owner picks one; use a role address, not a personal one. |
+| `CONTACT_REPO_URL`         | unset                         | The public GitHub repository, `https://github.com/<owner>/<repo>`: `/about` links its issues and its private "Report a vulnerability" form. Warned about in production when neither this nor `CONTACT_EMAIL` is set. |
 
 Only for tests: `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL`,
 `TEST_DATABASE_READ_URL` (db/README.md, Tests).
@@ -201,6 +203,7 @@ line when it is answered:
 - **IP addresses:** the app doesn't log them at all; rate limiting keeps them in memory
   only. Caddy's access log (`/var/log/caddy/blurt.log`) keeps them truncated to /24
   (IPv4) or /48 (IPv6), enough to spot an abusive network, for two weeks at most.
+  `/privacy` promises this, and 30 days of backups: change the page with the retention.
 - Successful `/healthz` requests aren't logged, so the uptime check doesn't drown the rest.
 - Anything a route throws that isn't a client error is logged as `unhandled error` with
   its stack and the request id, and the user gets a plain 500 that says nothing about

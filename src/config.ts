@@ -45,6 +45,15 @@ export function configProblems(env: Env = process.env): ConfigProblems {
     }
   }
 
+  if (set('CONTACT_EMAIL') && !emailPattern.test(env.CONTACT_EMAIL as string)) {
+    errors.push(`CONTACT_EMAIL must be an email address, not "${env.CONTACT_EMAIL}"`)
+  }
+  if (set('CONTACT_REPO_URL') && !repoUrlPattern.test(env.CONTACT_REPO_URL as string)) {
+    errors.push(
+      `CONTACT_REPO_URL must be a GitHub repository, https://github.com/<owner>/<repo>, not "${env.CONTACT_REPO_URL}"`,
+    )
+  }
+
   if (set('MIGRATE_ON_START') && !['true', 'false'].includes(env.MIGRATE_ON_START as string)) {
     errors.push('MIGRATE_ON_START must be true or false')
   }
@@ -74,12 +83,41 @@ export function configProblems(env: Env = process.env): ConfigProblems {
           '(docs/deploy.md, Logs and monitoring)',
       )
     }
+    if (!set('CONTACT_EMAIL') && !set('CONTACT_REPO_URL')) {
+      warnings.push(
+        'Neither CONTACT_EMAIL nor CONTACT_REPO_URL is set, so /about gives no way to reach you',
+      )
+    }
     if (env.RATE_LIMIT_SCALE !== undefined && Number(env.RATE_LIMIT_SCALE) === 0) {
       warnings.push('RATE_LIMIT_SCALE=0 switches rate limiting off')
     }
   }
 
   return { errors, warnings }
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const repoUrlPattern = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/
+
+// How to reach whoever runs the site, shown on /about, /terms and /privacy. Both parts are
+// optional and public. CONTACT_REPO_URL gives the public issue tracker and GitHub's
+// private vulnerability reports; CONTACT_EMAIL is for anything that shouldn't be public.
+// Read per request, so it follows the environment (and tests can set it).
+export type Contact = {
+  email: string | null
+  issuesUrl: string | null
+  securityUrl: string | null
+}
+
+export function contact(env: Env = process.env): Contact {
+  const email = env.CONTACT_EMAIL && emailPattern.test(env.CONTACT_EMAIL) ? env.CONTACT_EMAIL : null
+  const repo =
+    env.CONTACT_REPO_URL && repoUrlPattern.test(env.CONTACT_REPO_URL) ? env.CONTACT_REPO_URL : null
+  return {
+    email,
+    issuesUrl: repo && `${repo}/issues`,
+    securityUrl: repo && `${repo}/security/advisories/new`,
+  }
 }
 
 // Logs warnings, and throws with every error at once.

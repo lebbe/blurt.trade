@@ -34,6 +34,9 @@ carry `Vary: Accept`.
 | `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
 | `/settings`       | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
 | `/admin/reports`  | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
+| `/about`          | —     | `{ viewer, contact }`                                                         |                         |
+| `/terms`          | —     | `{ viewer, contact }`                                                         |                         |
+| `/privacy`        | —     | `{ viewer, contact }`                                                         |                         |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -93,6 +96,19 @@ carry `Vary: Accept`.
   HTML picks it with a `<select>` in a GET form. Without a location, `blurts` is empty
   and the page links to the edit page.
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
+- `/about`, `/terms` and `/privacy` are fixed text, linked from the footer of every HTML
+  page. `/about` is the contact page: GitHub issues for anything public, and where not
+  to post sensitive things (security holes, illegal content, personal data).
+  `contact` is `{ email, issuesUrl, securityUrl }`, each `null` when not configured:
+  `CONTACT_EMAIL`, and `CONTACT_REPO_URL` for the issues and private vulnerability
+  report links (docs/deploy.md, Environment).
+- `/privacy` lists what the database stores. A test compares every table and column
+  with a fixed list, so a migration that changes them fails until the page (and the
+  list) is updated.
+- Data minimisation is a standing rule: no email addresses, no analytics, no
+  third-party scripts, fonts or embeds, no cookies beyond the session and `recent_write`
+  cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
+  lost password can't be recovered, and sign-up says so.
 
 ## Actions (POST)
 

@@ -271,6 +271,22 @@ section h2 {
   margin: 1.5rem 0 0;
   text-align: center;
 }
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6d6258;
+}
+body > footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid #cfc5b8;
+  font-size: 0.85rem;
+  color: #6d6258;
+  text-align: center;
+}
+body > footer a {
+  color: inherit;
+}
 `
 
 // The URL carries a hash of the content, so the file can be cached for good and a

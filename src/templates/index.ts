@@ -3,6 +3,7 @@ import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
+import type { Contact } from '../config.ts'
 import { avatarLabels, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
 import { AvatarSvg } from './avatar.ts'
 import { stylesheetUrl } from './styles.ts'
@@ -121,6 +122,9 @@ export function nearPageUrl(radius: number, next?: string): string {
 
 // Login has no data of its own.
 export type FormPageData = { viewer: Viewer }
+
+// /about, /terms and /privacy: fixed text, plus how to reach whoever runs the site.
+export type InfoPageData = { viewer: Viewer; contact: Contact }
 
 // `signup` says whether the sign-up form is open, needs an invite code, or is full.
 // `inviteCode` fills in the form's invite code (from ?invite= or the submitted form).
@@ -277,6 +281,12 @@ function WaitlistPage({
   `
 }
 
+// Said at sign-up, in the terms and on the privacy page: no email means no reset.
+export const noPasswordReset =
+  "Keep your password safe, e.g. in a password manager. We don't take an email address, " +
+  "so there's no password reset: a lost password can't be recovered, and neither can the " +
+  'account.'
+
 function CreateUserForm({
   username = '',
   inviteCode = '',
@@ -298,6 +308,7 @@ function CreateUserForm({
           maxlength=${passwordMaxLength}
           required
       /></label>
+      <p class="hint">${noPasswordReset}</p>
       <label
         >Invite code${inviteRequired ? '' : ' (optional)'}
         <input
@@ -1138,6 +1149,218 @@ function ProfilePage({
   `
 }
 
+// How to reach the owner privately, or a note that no address is set up.
+function PrivateContact({ contact }: { contact: Contact }) {
+  return contact.email
+    ? html`email <a href=${`mailto:${contact.email}`}>${contact.email}</a>`
+    : html`the contact on the <a href="/about">About page</a>`
+}
+
+function InfoHeader({ title }: { title: string }) {
+  return html`
+    <header>
+      <h1>${title}</h1>
+      <p><a href="/">Back to blurt.trade</a></p>
+    </header>
+  `
+}
+
+function AboutPage({ contact }: InfoPageData) {
+  const { email, issuesUrl, securityUrl } = contact
+  return html`
+    <${InfoHeader} title="About blurt.trade" />
+    <main>
+      <p>
+        blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength}
+        characters. It works without JavaScript, has no ads and no tracking, and collects as little
+        about you as it can: see <a href="/privacy">Privacy</a> and <a href="/terms">Terms</a>.
+      </p>
+      <section aria-label="Contact">
+        <h2>Contact</h2>
+        ${
+          issuesUrl &&
+          html`<p>Questions, bugs and ideas: open an issue on <a href=${issuesUrl}>GitHub</a>.</p>`
+        }
+        ${email && html`<p>Anything that shouldn't be public: <a href=${`mailto:${email}`}>${email}</a>.</p>`}
+        ${!issuesUrl && !email && html`<p>No contact address has been set up yet.</p>`}
+        ${
+          issuesUrl &&
+          html`<p>
+              <strong>GitHub issues are public</strong>: anyone can read them. Never put these in
+              one:
+            </p>
+            <ul>
+              <li>
+                A security hole:
+                ${
+                  securityUrl
+                    ? html`report it privately with GitHub's
+                        <a href=${securityUrl}>Report a vulnerability</a
+                        >${email ? ', or by email' : ''}.`
+                    : 'email it.'
+                }
+              </li>
+              <li>
+                Illegal content, or someone's private information posted here: use the Report button
+                on the blurt (when you're logged in)${email ? ', or email' : ''}. Don't repeat the
+                content or the information anywhere public.
+              </li>
+              <li>
+                Anything about your own account or data:
+                ${email ? html`<a href=${`mailto:${email}`}>email</a>` : 'ask without details'}.
+              </li>
+            </ul>`
+        }
+      </section>
+    </main>
+  `
+}
+
+function TermsPage({ contact }: InfoPageData) {
+  return html`
+    <${InfoHeader} title="Terms" />
+    <main>
+      <p>By using blurt.trade you agree to these terms. They're short on purpose.</p>
+      <h2>Your posts</h2>
+      <p>
+        You're responsible for what you post. Everything you post is public: blurts, replies and
+        your profile. You keep the rights to it, and let blurt.trade show it, which is the point.
+      </p>
+      <h2>What's not allowed</h2>
+      <p>
+        Nothing illegal. No harassment, no threats, no spam, and no one else's private information.
+        Don't try to break the site or get around its limits.
+      </p>
+      <h2>Removal</h2>
+      <p>
+        The owner can remove any blurt or profile, and close any account, at any time and without
+        notice, for example when it breaks these terms.
+      </p>
+      <h2>Your password</h2>
+      <p>${noPasswordReset}</p>
+      <h2>No warranty</h2>
+      <p>
+        blurt.trade is a hobby project, provided as it is, with no warranty of any kind. It may be
+        down, lose data, change or shut down. As far as the law allows, the owner isn't liable for
+        any loss from using it.
+      </p>
+      <h2>Changes</h2>
+      <p>
+        These terms may change; this page always has the current version. Questions:
+        <${PrivateContact} contact=${contact} />.
+      </p>
+    </main>
+  `
+}
+
+function PrivacyPage({ contact }: InfoPageData) {
+  return html`
+    <${InfoHeader} title="Privacy" />
+    <main>
+      <p>
+        blurt.trade collects as little as it can. No email address, no real name, no phone number.
+        No analytics, no ads, no tracking, and nothing loaded from other sites.
+      </p>
+      <h2>What is stored</h2>
+      <p>For each account:</p>
+      <ul>
+        <li>
+          Your username, a hash of your password (Argon2id: the password itself is never stored),
+          and when you signed up.
+        </li>
+        <li>
+          The profile fields you fill in: bio, homepage and social links, and your avatar's
+          settings.
+        </li>
+        <li>
+          Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts
+          your blurts in "Near you" for people nearby.
+        </li>
+        <li>
+          Your blurts and replies, with when you posted them, and for each one an embedding: numbers
+          describing what it's about, for related blurts and "You might like". It's computed on our
+          own server; your text isn't sent anywhere.
+        </li>
+        <li>Who you follow.</li>
+        <li>
+          Your invite codes, and who signed up with them. Who invited you shows on your profile.
+        </li>
+        <li>Blurts you report, with your reason and when.</li>
+        <li>
+          Your sessions: one record per login, with when it started and was last used. No IP address
+          and no browser details.
+        </li>
+      </ul>
+      <p>
+        The waitlist stores only the username you'd like, whether you've signed up since, and when
+        you joined it.
+      </p>
+      <p>
+        Public: your username, profile, avatar, blurts, follower counts and who invited you.
+        Everything else is private, though admins see who reported what.
+      </p>
+      <h2>What is not stored</h2>
+      <ul>
+        <li>
+          No email address. So we can't contact you, and there's <strong>no password reset</strong>:
+          a lost password can't be recovered, and neither can the account.
+        </li>
+        <li>
+          No IP addresses in the database or in the app's logs. Rate limiting counts requests per IP
+          address in memory only, until the limit has refilled (an hour at most), and never writes
+          them down. The web server's access log keeps addresses shortened (the last part dropped)
+          for at most 14 days, to spot abuse.
+        </li>
+        <li>
+          The app's logs hold what was asked for and how it went (method, path, status, time), never
+          what you posted, your password or your cookies.
+        </li>
+      </ul>
+      <h2>Cookies</h2>
+      <p>
+        Three, all needed for the site to work, none for tracking, so there's no cookie banner. All
+        are HttpOnly and only sent to blurt.trade.
+      </p>
+      <ul>
+        <li><code>access_token</code>: shows you're logged in. Lasts 5 minutes.</li>
+        <li>
+          <code>refresh_token</code>: keeps you logged in. Renewed as you use the site; expires
+          after 400 days without a visit, or when you log out.
+        </li>
+        <li>
+          <code>recent_write</code>: set for a few seconds after you post or change something, so
+          you see your own change straight away.
+        </li>
+      </ul>
+      <h2>Backups</h2>
+      <p>
+        The database is backed up every night, encrypted, to a storage provider. Backups are kept
+        for 30 days, so anything deleted is gone from them within 30 days.
+      </p>
+      <h2>Deleting your account</h2>
+      <p>
+        Deleting your account deletes everything above that belongs to it. A blurt someone replied
+        to stays as an empty placeholder, with no text and no author, so the thread still reads.
+      </p>
+      <h2>Your rights</h2>
+      <p>
+        You can ask what is stored about you, and have it corrected or deleted:
+        <${PrivateContact} contact=${contact} />.
+      </p>
+    </main>
+  `
+}
+
+function Footer() {
+  return html`
+    <footer>
+      <nav aria-label="About this site">
+        <a href="/about">About</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+      </nav>
+    </footer>
+  `
+}
+
 function IndexDocument({ children }: { children: unknown }) {
   return html`<!doctype html>
     <html lang="en">
@@ -1149,8 +1372,21 @@ function IndexDocument({ children }: { children: unknown }) {
       </head>
       <body>
         ${children}
+        <${Footer} />
       </body>
     </html>`
+}
+
+export function renderAboutPage(data: InfoPageData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(AboutPage, data) }))
+}
+
+export function renderTermsPage(data: InfoPageData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(TermsPage, data) }))
+}
+
+export function renderPrivacyPage(data: InfoPageData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(PrivacyPage, data) }))
 }
 
 export function renderFeedPage(data: FeedData, composer?: ComposerProps): string {

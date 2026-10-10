@@ -18,6 +18,7 @@ import { blurtsRouter } from './routes/blurts.ts'
 import { healthRouter } from './routes/health.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
+import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
@@ -46,6 +47,7 @@ app.use(cookieParser())
 app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
 app.use(homeRouter)
+app.use(infoRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(avatarRouter)
