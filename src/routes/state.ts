@@ -50,7 +50,8 @@ export const followingFeedThreshold = 10
 const followedHighlightsLimit = 5
 const relatedLimit = 5
 // Cosine distance (0 = same meaning, 1 = unrelated). With all-MiniLM-L6-v2, short blurts on
-// the same topic land around 0.6-0.7 and unrelated ones above 0.8.
+// the same topic land around 0.6-0.7 and unrelated ones above 0.8. The same holds against
+// the average of someone's blurts (discovery): 0.5-0.7 on their topics, 0.83+ off them.
 const relatedMaxDistance = 0.75
 
 const blurtColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
@@ -198,6 +199,37 @@ export async function listRelatedBlurts(id: number): Promise<Blurt[]> {
        AND b.embedding <=> t.embedding < $3
      ORDER BY b.embedding <=> t.embedding LIMIT $2`,
     [id, relatedLimit, relatedMaxDistance],
+  )
+  return rows
+}
+
+// How many of the user's latest blurts (posts and replies alike) make up their taste.
+const tasteBlurts = 20
+
+// Top-level blurts close in meaning to what the user has blurted lately: the average of
+// their latest embeddings. Leaves out their own blurts, blurts from accounts they follow
+// (those are in the feed anyway) and `excludeIds` (already on the page). Empty for users
+// with no embedded blurts yet.
+export async function listSimilarToUser(
+  userId: number,
+  excludeIds: number[],
+  limit: number,
+): Promise<Blurt[]> {
+  const { rows } = await db().query<Blurt>(
+    `WITH taste AS (
+       SELECT avg(embedding) AS embedding FROM (
+         SELECT embedding FROM blurts WHERE user_id = $1 AND embedding IS NOT NULL
+         ORDER BY created_at DESC, id DESC LIMIT $2
+       ) recent
+     )
+     SELECT ${blurtColumns} FROM taste t CROSS JOIN blurts b JOIN users u ON u.id = b.user_id
+     WHERE t.embedding IS NOT NULL AND b.parent_id IS NULL AND b.embedding IS NOT NULL
+       AND b.user_id <> $1
+       AND b.user_id NOT IN (SELECT followed_user_id FROM follows WHERE user_id = $1)
+       AND b.id <> ALL ($3::bigint[])
+       AND b.embedding <=> t.embedding < $5
+     ORDER BY b.embedding <=> t.embedding LIMIT $4`,
+    [userId, tasteBlurts, excludeIds, limit, relatedMaxDistance],
   )
   return rows
 }

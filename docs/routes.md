@@ -21,17 +21,17 @@ carry `Vary: Accept`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path              | Auth  | JSON                                                                 | Errors                  |
-| ----------------- | ----- | -------------------------------------------------------------------- | ----------------------- |
-| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, next }`   | 400 bad cursor          |
-| `/everyone`       | —     | the same, always the everyone feed                                   | 400 bad cursor          |
-| `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }` | 400, 404 no such user   |
-| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                  | 400, 404 no such blurt  |
-| `/:username/edit` | owner | `{ viewer, profile }`                                                | 401, 403 not owner, 404 |
-| `/login`          | —     | `{ viewer }`                                                         |                         |
-| `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                     |                         |
-| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                       |                         |
-| `/settings`       | yes   | `{ viewer, activeSessions }`                                         | 401                     |
+| Path              | Auth  | JSON                                                                          | Errors                  |
+| ----------------- | ----- | ----------------------------------------------------------------------------- | ----------------------- |
+| `/`               | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }` | 400 bad cursor          |
+| `/everyone`       | —     | the same, always the everyone feed                                            | 400 bad cursor          |
+| `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
+| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                           | 400, 404 no such blurt  |
+| `/:username/edit` | owner | `{ viewer, profile }`                                                         | 401, 403 not owner, 404 |
+| `/login`          | —     | `{ viewer }`                                                                  |                         |
+| `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                              |                         |
+| `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
+| `/settings`       | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
@@ -39,6 +39,15 @@ carry `Vary: Accept`.
   the latest 5 top-level blurts from them, shown on top of the first page (empty
   otherwise). `hasFollowingFeed` says whether you get the following feed, and with it
   Following / Everyone tabs. `/everyone` is the everyone feed for everybody.
+- `discovery` holds "discovery" sections mixed into the first page of either feed for
+  logged-in viewers (empty otherwise, and on later pages): `{ kind, after, blurts }`,
+  shown after the first `after` of `blurts`. One section after every 20 blurts (one at
+  the end of a shorter page), up to 3 blurts each. `kind: 'similar'` ("You might like")
+  is top-level blurts close in meaning to the average embedding of the viewer's latest
+  20 blurts and replies. Discovery never shows the viewer's own blurts, blurts from
+  accounts they follow, or blurts already on the page. New users, with nothing embedded
+  yet, get no section. The HTML renders them as plain sections between the blurts, so
+  they work without JS. A geographic kind comes with ticket 013a.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
 - `Blurt` is `{ id, username, text, createdAt, parentId, replyCount }`, with

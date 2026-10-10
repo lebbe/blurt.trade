@@ -24,16 +24,34 @@ export function isWebUrl(value: string): boolean {
 // and as HTML or Markdown through the templates (see src/negotiate.ts).
 export type Viewer = AuthenticatedUser | null
 
+// Where a discovery section's blurts come from: 'similar' are close in meaning to what the
+// viewer has blurted lately. Ticket 013a adds a geographic kind ('nearby').
+export type DiscoveryKind = 'similar'
+
+export const discoveryTitles: Record<DiscoveryKind, { title: string; description: string }> = {
+  similar: { title: 'You might like', description: "Close to what you've blurted lately." },
+}
+
+// Blurts from outside the feed, shown after the first `after` of its `blurts`.
+export type DiscoverySection = { kind: DiscoveryKind; after: number; blurts: Blurt[] }
+
+// The discovery sections that go after the feed's first `count` blurts.
+export function discoveryAfter(discovery: DiscoverySection[], count: number): DiscoverySection[] {
+  return discovery.filter((section) => section.after === count)
+}
+
 // `feed` says which feed `blurts` is. `hasFollowingFeed` is whether the viewer follows
 // enough accounts to get the following feed at `/` (and tabs between the two).
 // `followedBlurts` are the latest from followed accounts, shown on top of the everyone
-// feed until then. `next` is the cursor for the page after this one, or null on the last.
+// feed until then. `discovery` is mixed in between `blurts`, on the first page only.
+// `next` is the cursor for the page after this one, or null on the last.
 export type FeedData = {
   viewer: Viewer
   feed: 'following' | 'everyone'
   hasFollowingFeed: boolean
   followedBlurts: FeedItem[]
   blurts: FeedItem[]
+  discovery: DiscoverySection[]
   next: string | null
 }
 
@@ -541,10 +559,23 @@ function FeedTabs({ feed }: { feed: FeedData['feed'] }) {
   `
 }
 
+function Discovery({ section }: { section: DiscoverySection }) {
+  const { title, description } = discoveryTitles[section.kind]
+  return html`
+    <section aria-label=${title} class="discovery">
+      <h2>${title}</h2>
+      <p class="discovery-description">${description}</p>
+      ${section.blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)}
+    </section>
+  `
+}
+
 function FeedPage(data: FeedData & { composer?: ComposerProps }) {
-  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, next, composer } = data
+  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next, composer } = data
   const cards = (items: FeedItem[]) =>
     items.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
+  const discoverySections = (count: number) =>
+    discoveryAfter(discovery, count).map((section) => html`<${Discovery} section=${section} />`)
 
   return html`
     <header>
@@ -564,7 +595,7 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
       <section aria-label="Blurts">
         ${
           blurts.length > 0
-            ? cards(blurts)
+            ? blurts.map((blurt, index) => [cards([blurt]), discoverySections(index + 1)])
             : html`<p class="empty">
                 ${
                   feed === 'following'
@@ -573,6 +604,7 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
                 }
               </p>`
         }
+        ${blurts.length === 0 && discoverySections(0)}
         ${
           next &&
           html`<${NextPageLink}
@@ -818,6 +850,20 @@ function IndexDocument({ children }: { children: unknown }) {
             border: 0;
             background: none;
             padding: 0;
+          }
+          .discovery {
+            margin: 1.5rem 0;
+            padding: 0 1rem 1rem;
+            border: 1px dashed #aaa095;
+          }
+          .discovery h2 {
+            margin: 1rem 0 0.25rem;
+            font-size: 1.1rem;
+          }
+          .discovery-description {
+            margin: 0;
+            color: #6d6258;
+            font-size: 0.9rem;
           }
           .next-page {
             margin: 1.5rem 0 0;

@@ -1,12 +1,15 @@
 import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
 import {
   blurtUrl,
+  discoveryAfter,
+  discoveryTitles,
   feedPath,
   isWebUrl,
   moreRepliesUrl,
   olderBlurtsUrl,
   plural,
   type BlurtPageData,
+  type DiscoverySection,
   type FeedData,
   type FormPageData,
   type ProfileEditData,
@@ -46,8 +49,21 @@ function blurtList(blurts: Blurt[]): Markdown {
   return md`${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt)) : 'Nothing here yet.'}`
 }
 
+function discoveryMarkdown(section: DiscoverySection): Markdown {
+  const { title, description } = discoveryTitles[section.kind]
+  return md`
+    ## ${title}
+
+    ${description}
+
+    ${section.blurts.map((blurt) => blurtMarkdown(blurt))}
+  `
+}
+
 export function feedMarkdown(data: FeedData): Markdown {
-  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, next } = data
+  const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next } = data
+  const discoverySections = (count: number) =>
+    discoveryAfter(discovery, count).map(discoveryMarkdown)
   return md`
     # blurt.trade
 
@@ -75,11 +91,16 @@ export function feedMarkdown(data: FeedData): Markdown {
 
     ${
       blurts.length > 0
-        ? blurts.map((blurt) => blurtMarkdown(blurt, blurt.replies))
+        ? blurts.map((blurt, index) => [
+            blurtMarkdown(blurt, blurt.replies),
+            discoverySections(index + 1),
+          ])
         : feed === 'following'
           ? 'Nobody you follow has blurted yet.'
           : 'Nothing has been blurted yet.'
     }
+
+    ${blurts.length === 0 && discoverySections(0)}
 
     ${next && link('Older blurts', olderBlurtsUrl(feedPath(data), next))}
   `
