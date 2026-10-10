@@ -8,6 +8,7 @@
     "lint": "oxlint src",
     "format": "oxfmt src",
     "qa": "npm run lint && oxfmt --check src && npm test",
+    "dev": "node --watch src/server.ts",
     "start": "node src/server.ts"
   },
   "keywords": [],
@@ -15,6 +16,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "@node-rs/argon2": "^2.2.2",
     "@preact/signals": "^2.11.3",
     "cookie-parser": "^1.4.7",

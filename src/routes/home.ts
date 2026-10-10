@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getAuthenticatedUser, readAccessToken } from '../middleware/auth.ts'
-import { blurts } from './state.ts'
+import { listFeed, type FeedItem } from './state.ts'
 import { renderFeedPage } from '../templates/index.ts'
 
 export const homeRouter = Router()
@@ -9,18 +9,18 @@ function escapeMarkdown(value: string): string {
   return value.replaceAll('\\', '\\\\').replace(/[\\`*_[\]{}()#+\-.!>]/g, '\\$&')
 }
 
-function renderFeedMarkdown(): string {
-  const feed = blurts
-    .slice()
-    .reverse()
-    .map((blurt) => {
-      return [
-        `### ${escapeMarkdown(blurt.username)}`,
-        `_${blurt.createdAt.toISOString()}_`,
-        '',
-        escapeMarkdown(blurt.text),
-      ].join('\n')
-    })
+function renderFeedMarkdown(blurts: FeedItem[]): string {
+  const feed = blurts.map((blurt) => {
+    return [
+      `### ${escapeMarkdown(blurt.username)}`,
+      `_${blurt.createdAt.toISOString()}_`,
+      '',
+      escapeMarkdown(blurt.text),
+      ...blurt.replies.map(
+        (reply) => `\n> **${escapeMarkdown(reply.username)}**: ${escapeMarkdown(reply.text)}`,
+      ),
+    ].join('\n')
+  })
 
   return [
     '# blurt.trade',
@@ -36,6 +36,7 @@ function renderFeedMarkdown(): string {
 
 homeRouter.get('/', async (request, response) => {
   const representation = request.accepts(['html', 'json', 'text/plain'])
+  const blurts = await listFeed()
 
   if (representation === 'json') {
     response.json(blurts)
@@ -49,7 +50,7 @@ homeRouter.get('/', async (request, response) => {
   }
 
   if (representation === 'text/plain') {
-    response.type('text/plain').send(renderFeedMarkdown())
+    response.type('text/plain').send(renderFeedMarkdown(blurts))
     return
   }
 
