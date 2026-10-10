@@ -9,7 +9,7 @@ const html = htm.bind(h)
 // checked again here (a colour that isn't #rrggbb, or an unknown type, gets a default),
 // so nothing from the database can add elements, scripts or links.
 //
-// Talking is CSS only (avatarCss, in the page's stylesheet): on hover over the avatar or
+// Talking is CSS only (avatarCss, in the site stylesheet): on hover over the avatar or
 // its blurt, the two `avatar-top` groups (the upper teeth and the top of the head) flap up
 // and down around a hinge at the back of the head, showing the dark mouth behind them.
 // Drawing order makes that work without clip paths:
@@ -203,8 +203,8 @@ export function AvatarSvg({
   </svg>`
 }
 
-// Goes in the page's <style> once. The hinge (transform-origin) is in the SVG's own
-// units: the back of the head, on the mouth line. A reply's blurt is inside its parent's,
+// Goes in the site stylesheet once (styles.ts). The hinge (transform-origin) is in the
+// SVG's own units: the back of the head, on the mouth line. A reply's blurt is inside its parent's,
 // so :has() keeps hovering a reply from making the parent talk too.
 export const avatarCss = `
   .avatar {

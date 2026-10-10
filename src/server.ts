@@ -6,6 +6,7 @@ import { migrate } from '../db/migrate.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
+import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { adminRouter } from './routes/admin.ts'
@@ -16,10 +17,19 @@ import { homeRouter } from './routes/home.ts'
 import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
+import { stylesheet } from './templates/styles.ts'
 
 export const app = express()
 // So request.ip is the client's address behind a reverse proxy; rate limits key on it.
 app.set('trust proxy', trustProxySetting())
+app.disable('x-powered-by')
+// First, so every response has them, errors included.
+app.use(securityHeaders)
+// The stylesheet, generated from src/templates/styles.ts. Pages link it with a hash of its
+// content in the URL, so it can be cached for good.
+app.get('/static/style.css', (_request, response) => {
+  response.type('css').set('Cache-Control', 'public, max-age=31536000, immutable').send(stylesheet)
+})
 // Static files (the world map) from public/, before auth: they're the same for everyone.
 app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
 app.use(express.urlencoded({ extended: false, limit: bodyLimit }))

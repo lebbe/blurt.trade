@@ -369,6 +369,41 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 - Browsers count `maxlength` in UTF-16 units, so a textarea stops at 140 emoji while the
   server would take 280. The server is the limit that counts.
 
+## Security headers
+
+`src/middleware/security-headers.ts` runs first, so every response carries these:
+pages, errors, JSON, Markdown and static files. A test checks a page and the error
+responses.
+
+| Header                                  | Value                                                    |
+| --------------------------------------- | -------------------------------------------------------- |
+| `Content-Security-Policy`               | `default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
+| `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
+| `X-Content-Type-Options`                | `nosniff`                                                |
+| `Referrer-Policy`                       | `same-origin`                                            |
+| `Permissions-Policy`                    | camera, microphone, geolocation, payment, ... all `()`   |
+| `X-Frame-Options`                       | `DENY` (for browsers without `frame-ancestors`)          |
+| `Cross-Origin-Opener-Policy` / `-Resource-Policy` | `same-origin`                                  |
+
+`X-Powered-By` is off.
+
+- **There is no `script-src`, so no JavaScript runs at all.** Adding any script (the
+  planned Preact client, an inline `<script>`, an `on...=` attribute) means changing the
+  CSP first: serve the files from `/static` and add `script-src 'self'`, never
+  `'unsafe-inline'`. The same goes for fonts, `fetch()` (`connect-src`), web app
+  manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
+- **No inline CSS.** All styles are in one stylesheet, `src/templates/styles.ts`, served
+  at `/static/style.css?v=<hash of its content>` (cached for a year, immutable). Pages
+  link it and never use `<style>` or `style="..."`: a per-element value goes in an SVG
+  attribute (the map marker is a `<circle cx cy>`) or a class. A test checks every page.
+- Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
+  is in the stylesheet. The world map is an image from `/static`, so `img-src 'self'`.
+- User text is escaped by the templates (Preact for HTML, `md` for Markdown); a test
+  posts markup and a `javascript:` link and checks both views.
+- Session cookies are `HttpOnly`, `SameSite=Lax`, `Path=/`, and in production `Secure`
+  with the `__Host-` prefix (no `Domain`). A test starts the app in production mode to
+  check them and HSTS.
+
 ## Rules for new routes
 
 - Every top-level path segment is a reserved username (`reservedUsernames` in
@@ -381,6 +416,8 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
   out, and `toJson()` drops those keys anyway.
 - Usernames are letters, digits and `_` only, and case-insensitive.
 - A POST that costs CPU or can be spammed gets a `rateLimit()` (see Rate limits).
+- No inline `<style>`, `style="..."` or scripts: the CSP blocks them (see Security
+  headers).
 
 ## Markdown templates
 

@@ -33,6 +33,12 @@ import {
 import { AvatarSvg } from './templates/avatar.ts'
 import { renderProfilePage } from './templates/index.ts'
 import { bodyLimit } from './limits.ts'
+import {
+  contentSecurityPolicy,
+  permissionsPolicy,
+  strictTransportSecurity,
+} from './middleware/security-headers.ts'
+import { stylesheet, stylesheetUrl } from './templates/styles.ts'
 
 // Never the dev database: every test wipes all tables. Like the app, queries go through
 // PgBouncer (6433) and migrations straight to PostgreSQL (5433).
@@ -52,6 +58,7 @@ function request(
   location?: string
   setCookie?: string[]
   retryAfter?: string
+  headers: http.IncomingHttpHeaders
   body: string
 }> {
   return new Promise((resolve, reject) => {
@@ -77,19 +84,10 @@ function request(
             ...headers,
           },
         },
-        (response: {
-          statusCode?: number
-          headers: {
-            'content-type'?: string
-            location?: string
-            'set-cookie'?: string[]
-            'retry-after'?: string
-          }
-          on: (event: string, callback: (chunk?: Buffer) => void) => void
-        }) => {
+        (response: http.IncomingMessage) => {
           let responseBody = ''
-          response.on('data', (chunk) => {
-            responseBody += chunk?.toString() ?? ''
+          response.on('data', (chunk: Buffer) => {
+            responseBody += chunk.toString()
           })
           response.on('end', () => {
             server.close()
@@ -99,6 +97,7 @@ function request(
               location: response.headers.location,
               setCookie: response.headers['set-cookie'],
               retryAfter: response.headers['retry-after'],
+              headers: response.headers,
               body: responseBody,
             })
           })
@@ -1284,7 +1283,7 @@ test('sets, moves and removes a coarse location by clicking the map without JS',
 
   const after = await request('GET', '/Lars/edit', '', { cookie })
   assert.match(after.body, /Your location: <strong>59\.5° N, 10\.5° E<\/strong>/)
-  assert.match(after.body, /class="map-marker"[^>]*style="left:381px;top:61px;?"/)
+  assert.match(after.body, /class="map-marker"[^]*?<circle cx="381" cy="61"/)
 
   const moved = await request('POST', '/api/location', 'location.x=100&location.y=300', {
     cookie,
@@ -2132,10 +2131,10 @@ test("blurts show the blurter's avatar, on alternating sides, talking on hover",
   assert.equal(cards.length, 2)
   assert.match(feed.body, /<svg [^>]*aria-hidden="true"[^>]*>/)
   assert.match(feed.body, /fill="#123abc"/)
-  // Sides and the talking are pure CSS: no JS needed.
-  assert.match(feed.body, /\.blurt:nth-of-type\(even\) \{\s*flex-direction: row-reverse;/)
-  assert.match(feed.body, /\.avatar:hover \.avatar-top,/)
-  assert.match(feed.body, /@keyframes avatar-talk/)
+  // Sides and the talking are pure CSS, in the linked stylesheet: no JS needed.
+  assert.match(stylesheet, /\.blurt:nth-of-type\(even\) \{\s*flex-direction: row-reverse;/)
+  assert.match(stylesheet, /\.avatar:hover \.avatar-top,/)
+  assert.match(stylesheet, /@keyframes avatar-talk/)
   assert.equal((feed.body.match(/class="avatar-top"/g) ?? []).length, 4) // 2 per avatar
   assertSafeSvgs(feed.body)
 
@@ -2876,4 +2875,124 @@ test('answers an oversized body with a 413 in the usual error format', async () 
   const bio = encodeURIComponent('😀'.repeat(4000))
   const fullBio = await request('POST', '/Lars/edit', `bio=${bio}`, { cookie })
   assert.equal(fullBio.statusCode, 303)
+})
+
+function assertSecurityHeaders(headers: http.IncomingHttpHeaders, what: string): void {
+  assert.equal(headers['content-security-policy'], contentSecurityPolicy, what)
+  assert.equal(headers['x-content-type-options'], 'nosniff', what)
+  assert.equal(headers['referrer-policy'], 'same-origin', what)
+  assert.equal(headers['permissions-policy'], permissionsPolicy, what)
+  assert.equal(headers['x-frame-options'], 'DENY', what)
+  assert.equal(headers['x-powered-by'], undefined, what)
+  // Production only, and the tests don't run in production.
+  assert.equal(headers['strict-transport-security'], undefined, what)
+}
+
+test('sends the security headers on pages, errors and static files', async () => {
+  assert.match(contentSecurityPolicy, /default-src 'none'/)
+  assert.doesNotMatch(contentSecurityPolicy, /script-src|unsafe-inline|unsafe-eval/)
+
+  const cookie = await createSession('Lars')
+  const responses = {
+    page: await request('GET', '/'),
+    'logged-in page': await request('GET', '/Lars/edit', '', { cookie }),
+    json: await request('GET', '/', '', { accept: 'application/json' }),
+    markdown: await request('GET', '/', '', { accept: 'text/markdown' }),
+    404: await request('GET', '/no/such/page/here'),
+    406: await request('GET', '/', '', { accept: 'application/xml' }),
+    'failed form': await request('POST', '/api/blurts', 'text=', { cookie }),
+    'malformed JSON': await request('POST', '/api/blurts', '{', {
+      'content-type': 'application/json',
+      cookie,
+    }),
+    map: await request('GET', mapUrl),
+    stylesheet: await request('GET', stylesheetUrl),
+  }
+  assert.equal(responses[404].statusCode, 404)
+  assert.equal(responses['malformed JSON'].statusCode, 400)
+  for (const [what, response] of Object.entries(responses)) {
+    assertSecurityHeaders(response.headers, what)
+  }
+})
+
+test('pages use no inline styles or scripts, so the CSP needs no unsafe-inline', async () => {
+  const cookie = await createSession('Lars')
+  await request('POST', '/api/blurts', 'text=hello', { cookie })
+  await request('POST', '/api/location', 'location.x=381&location.y=60', { cookie })
+  const id = (await db().query('SELECT id FROM blurts')).rows[0].id
+
+  for (const path of ['/', '/login', '/createUser', '/Lars/', `/Lars/${id}`, '/Lars/edit']) {
+    const page = await request('GET', path, '', { cookie })
+    assert.equal(page.statusCode, 200, path)
+    assert.doesNotMatch(page.body, /<style|\sstyle=|<script|\son\w+=|javascript:/i, path)
+    assert.ok(page.body.includes(`<link rel="stylesheet" href="${stylesheetUrl}"/>`), path)
+  }
+
+  // The linked stylesheet is ours (style-src 'self') and holds the avatar animation.
+  const css = await request('GET', stylesheetUrl)
+  assert.equal(css.statusCode, 200)
+  assert.match(css.contentType ?? '', /^text\/css/)
+  assert.equal(css.body, stylesheet)
+  assert.match(css.body, /@keyframes avatar-talk/)
+  assert.match(css.headers['cache-control'] ?? '', /immutable/)
+})
+
+test('user text cannot break out of the HTML or the Markdown', async () => {
+  const cookie = await createSession('Lars')
+  const attack =
+    '</p><script>alert(1)</script><img src=x onerror=alert(1)> [x](javascript:alert(1))'
+  await request('POST', '/api/blurts', `text=${encodeURIComponent(attack)}`, { cookie })
+  await request('POST', '/Lars/edit', `bio=${encodeURIComponent(attack)}`, { cookie })
+
+  for (const path of ['/', '/Lars/']) {
+    const page = await request('GET', path, '', { cookie })
+    assert.doesNotMatch(page.body, /<script|<img|href="javascript/i, path)
+    assert.ok(page.body.includes('&lt;/p>&lt;script>alert(1)&lt;/script>'), path)
+
+    const markdown = await request('GET', path, '', { accept: 'text/markdown', cookie })
+    assert.match(markdown.contentType ?? '', /^text\/markdown/)
+    assert.ok(markdown.body.includes(String.raw`\<script\>alert(1)\</script\>`), path)
+    assert.ok(markdown.body.includes(String.raw`\[x\](javascript:alert(1))`), path)
+    // Never sniffed as HTML.
+    assert.equal(markdown.headers['x-content-type-options'], 'nosniff')
+  }
+})
+
+test('in production: HSTS, and session cookies are __Host-, Secure, HttpOnly, SameSite=Lax', () => {
+  const serverModule = pathToFileURL(join(import.meta.dirname, 'server.ts')).href
+  const script = `
+    const { app } = await import('${serverModule}')
+    const server = app.listen(0)
+    await new Promise((resolve) => server.once('listening', resolve))
+    const base = 'http://localhost:' + server.address().port
+    const response = await fetch(base + '/createUser', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'username=Prod&password=correct-horse',
+      redirect: 'manual',
+    })
+    console.log(JSON.stringify({
+      status: response.status,
+      hsts: response.headers.get('strict-transport-security'),
+      cookies: response.headers.getSetCookie(),
+    }))
+    process.exit(0)
+  `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: { ...process.env, NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(32) },
+    encoding: 'utf8',
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const { status, hsts, cookies } = JSON.parse(result.stdout)
+  assert.equal(status, 303)
+  assert.equal(hsts, strictTransportSecurity)
+  for (const name of ['__Host-access_token', '__Host-refresh_token', 'recent_write']) {
+    const cookie = (cookies as string[]).find((value) => value.startsWith(`${name}=`))
+    assert.ok(cookie, name)
+    assert.match(cookie, /; Path=\/(;|$)/, name)
+    assert.match(cookie, /; HttpOnly(;|$)/, name)
+    assert.match(cookie, /; Secure(;|$)/, name)
+    assert.match(cookie, /; SameSite=Lax(;|$)/, name)
+    assert.doesNotMatch(cookie, /; Domain=/i, name)
+  }
 })
