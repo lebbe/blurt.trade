@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express'
 import { mapHeight, mapWidth, pixelToPoint, snapToGrid, type GeoPoint } from '../geo.ts'
 import { clearSessionCookies, requireAuth } from '../middleware/auth.ts'
+import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError, sendFormErrors, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import {
   getLocation,
@@ -82,40 +83,45 @@ export function parseLocationInput(body: unknown): LocationInput {
 
 // Sets, moves or clears the viewer's location. Forms go back to the edit page, which shows
 // what is stored; JSON callers get `{ location }`.
-locationRouter.post('/api/location', requireAuth, async (request, response) => {
-  const viewer = response.locals.authenticatedUser
-  const input = parseLocationInput(request.body)
+locationRouter.post(
+  '/api/location',
+  requireAuth,
+  rateLimit('location', accountKey),
+  async (request, response) => {
+    const viewer = response.locals.authenticatedUser
+    const input = parseLocationInput(request.body)
 
-  if ('error' in input) {
-    const profile = await getUserProfileByUsername(viewer.username)
-    if (!profile) {
-      sendError(request, response, 404, 'User not found')
+    if ('error' in input) {
+      const profile = await getUserProfileByUsername(viewer.username)
+      if (!profile) {
+        sendError(request, response, 404, 'User not found')
+        return
+      }
+      const location = await getLocation(viewer.id)
+      await sendFormErrors(request, response, [input.error], (locationError) =>
+        renderProfileEditPage({ viewer, profile, location, locationError }),
+      )
       return
     }
-    const location = await getLocation(viewer.id)
-    await sendFormErrors(request, response, [input.error], (locationError) =>
-      renderProfileEditPage({ viewer, profile, location, locationError }),
-    )
-    return
-  }
 
-  const location = 'point' in input ? input.point : null
-  if (!(await setLocation(viewer.id, location))) {
-    // A still-valid token for a user that no longer exists (e.g. after a database reset).
-    clearSessionCookies(response)
-    if (wantsJson(request)) {
-      sendError(request, response, 401, 'Authentication required')
-    } else {
-      response.redirect(303, '/')
+    const location = 'point' in input ? input.point : null
+    if (!(await setLocation(viewer.id, location))) {
+      // A still-valid token for a user that no longer exists (e.g. after a database reset).
+      clearSessionCookies(response)
+      if (wantsJson(request)) {
+        sendError(request, response, 401, 'Authentication required')
+      } else {
+        response.redirect(303, '/')
+      }
+      return
     }
-    return
-  }
 
-  sendFormSuccess(request, response, {
-    redirect: `/${viewer.username}/edit`,
-    data: { location },
-  })
-})
+    sendFormSuccess(request, response, {
+      redirect: `/${viewer.username}/edit`,
+      data: { location },
+    })
+  },
+)
 
 function parseRadius(request: Request): number | undefined {
   const value = request.query.radius

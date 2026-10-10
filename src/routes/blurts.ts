@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express'
 import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
+import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
 import {
   fieldErrors,
@@ -73,51 +74,56 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
 })
 
 // A top-level blurt, or a reply when the body has parentId.
-blurtsRouter.post('/api/blurts', requireAuth, async (request, response) => {
-  let parent: Blurt | undefined
-  if (request.body?.parentId !== undefined) {
-    const parentId = parseBlurtId(request.body.parentId)
-    parent = parentId === undefined ? undefined : await getBlurt(parentId)
-    if (!parent) {
-      sendError(request, response, 404, 'Blurt not found')
+blurtsRouter.post(
+  '/api/blurts',
+  requireAuth,
+  rateLimit('blurt', accountKey),
+  async (request, response) => {
+    let parent: Blurt | undefined
+    if (request.body?.parentId !== undefined) {
+      const parentId = parseBlurtId(request.body.parentId)
+      parent = parentId === undefined ? undefined : await getBlurt(parentId)
+      if (!parent) {
+        sendError(request, response, 404, 'Blurt not found')
+        return
+      }
+    }
+
+    const result = blurtSchema.safeParse(request.body ?? {})
+
+    if (!result.success) {
+      await sendFormErrors(request, response, fieldErrors(result.error), async (message) => {
+        const composer = {
+          text: typeof request.body?.text === 'string' ? request.body.text : '',
+          validationError: message,
+        }
+        return parent
+          ? renderBlurtPage(await getBlurtPageData(request, parent), composer)
+          : renderFeedPage(await getFeedData(request), composer)
+      })
       return
     }
-  }
 
-  const result = blurtSchema.safeParse(request.body ?? {})
-
-  if (!result.success) {
-    await sendFormErrors(request, response, fieldErrors(result.error), async (message) => {
-      const composer = {
-        text: typeof request.body?.text === 'string' ? request.body.text : '',
-        validationError: message,
+    const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, parent?.id)
+    const blurt = id === undefined ? undefined : await getBlurt(id)
+    if (!blurt) {
+      // A still-valid token for a user that no longer exists (e.g. after a database reset).
+      clearSessionCookies(response)
+      if (wantsJson(request)) {
+        sendError(request, response, 401, 'Authentication required')
+      } else {
+        response.redirect(303, '/')
       }
-      return parent
-        ? renderBlurtPage(await getBlurtPageData(request, parent), composer)
-        : renderFeedPage(await getFeedData(request), composer)
-    })
-    return
-  }
-
-  const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, parent?.id)
-  const blurt = id === undefined ? undefined : await getBlurt(id)
-  if (!blurt) {
-    // A still-valid token for a user that no longer exists (e.g. after a database reset).
-    clearSessionCookies(response)
-    if (wantsJson(request)) {
-      sendError(request, response, 401, 'Authentication required')
-    } else {
-      response.redirect(303, '/')
+      return
     }
-    return
-  }
 
-  void embedPendingBlurts()
-  // Forms go back to the page they were posted from; JSON callers get the new blurt.
-  sendFormSuccess(request, response, {
-    redirect: parent ? blurtUrl(parent) : '/',
-    data: blurt,
-    status: 201,
-    location: blurtUrl(blurt),
-  })
-})
+    void embedPendingBlurts()
+    // Forms go back to the page they were posted from; JSON callers get the new blurt.
+    sendFormSuccess(request, response, {
+      redirect: parent ? blurtUrl(parent) : '/',
+      data: blurt,
+      status: 201,
+      location: blurtUrl(blurt),
+    })
+  },
+)

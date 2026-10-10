@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
 import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
+import { trustProxySetting } from './middleware/rate-limit.ts'
 import { sendError } from './negotiate.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
@@ -15,6 +16,8 @@ import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
 
 export const app = express()
+// So request.ip is the client's address behind a reverse proxy; rate limits key on it.
+app.set('trust proxy', trustProxySetting())
 // Static files (the world map) from public/, before auth: they're the same for everyone.
 app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
 app.use(express.urlencoded({ extended: false }))

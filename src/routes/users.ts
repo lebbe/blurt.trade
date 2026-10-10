@@ -9,6 +9,7 @@ import {
   requireAuth,
   startSession,
 } from '../middleware/auth.ts'
+import { rateLimit, sendTooManyRequests, take } from '../middleware/rate-limit.ts'
 import { fieldErrors, represent, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
 import {
   addUser,
@@ -155,7 +156,7 @@ usersRouter.get('/login', async (request, response) => {
   )
 })
 
-usersRouter.post('/createUser', async (request, response) => {
+usersRouter.post('/createUser', rateLimit('createUserIp'), async (request, response) => {
   const result = createUserSchema.safeParse(request.body ?? {})
   const rerender = async (validationError: string) =>
     renderCreateUserPage({
@@ -198,7 +199,10 @@ usersRouter.post('/createUser', async (request, response) => {
   })
 })
 
-usersRouter.post('/login', async (request, response) => {
+// Limited per IP for every attempt, and per username for failed ones only, so guessing one
+// account's password from many addresses is slow too, while its owner logging in doesn't
+// count.
+usersRouter.post('/login', rateLimit('loginIp'), async (request, response) => {
   const result = loginSchema.safeParse(request.body ?? {})
   const rerender = (validationError: string) =>
     renderLoginPage({ username: submittedUsername(request.body), validationError })
@@ -208,11 +212,17 @@ usersRouter.post('/login', async (request, response) => {
   }
 
   const { username, password } = result.data
+  const attempt = take('loginUsername', username.toLowerCase())
+  if (!attempt.allowed) {
+    sendTooManyRequests(request, response, attempt.retryAfterSeconds)
+    return
+  }
   const user = await getUserByUsername(username)
   if (!user || !(await verify(user.passwordHash, password))) {
     await sendFormErrors(request, response, [{ message: 'Invalid username or password' }], rerender)
     return
   }
+  attempt.refund()
 
   await startSession(request, response, user)
   sendFormSuccess(request, response, {
@@ -263,7 +273,7 @@ usersRouter.get('/waitlist', async (request, response) => {
   })
 })
 
-usersRouter.post('/waitlist', async (request, response) => {
+usersRouter.post('/waitlist', rateLimit('waitlistIp'), async (request, response) => {
   const result = waitlistSchema.safeParse(request.body ?? {})
   const rerender = async (validationError: string) =>
     renderWaitlistPage(await getWaitlistData(request, null), {

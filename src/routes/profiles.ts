@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from 'express'
 import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
+import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import {
   fieldErrors,
   represent,
@@ -118,37 +119,42 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
   )
 })
 
-profilesRouter.post('/:username/edit', requireAuth, async (request, response) => {
-  const viewer = response.locals.authenticatedUser
-  const profile = await getUserProfileByUsername(request.params.username)
+profilesRouter.post(
+  '/:username/edit',
+  requireAuth,
+  rateLimit('profileEdit', accountKey),
+  async (request, response) => {
+    const viewer = response.locals.authenticatedUser
+    const profile = await getUserProfileByUsername(request.params.username)
 
-  if (!profile) {
-    sendError(request, response, 404, 'User not found')
-    return
-  }
+    if (!profile) {
+      sendError(request, response, 404, 'User not found')
+      return
+    }
 
-  if (viewer.id !== profile.userId) {
-    sendError(request, response, 403, 'Forbidden')
-    return
-  }
+    if (viewer.id !== profile.userId) {
+      sendError(request, response, 403, 'Forbidden')
+      return
+    }
 
-  const result = profileSchema.safeParse(request.body ?? {})
-  if (!result.success) {
-    const location = await getLocation(profile.userId)
-    await sendFormErrors(request, response, fieldErrors(result.error), (validationError) =>
-      renderProfileEditPage({
-        viewer,
-        profile: { ...profile, ...submittedFields(request.body) },
-        location,
-        validationError,
-      }),
-    )
-    return
-  }
+    const result = profileSchema.safeParse(request.body ?? {})
+    if (!result.success) {
+      const location = await getLocation(profile.userId)
+      await sendFormErrors(request, response, fieldErrors(result.error), (validationError) =>
+        renderProfileEditPage({
+          viewer,
+          profile: { ...profile, ...submittedFields(request.body) },
+          location,
+          validationError,
+        }),
+      )
+      return
+    }
 
-  const updated = await updateUserProfile(profile.userId, result.data)
-  sendFormSuccess(request, response, { redirect: `/${profile.username}/`, data: updated })
-})
+    const updated = await updateUserProfile(profile.userId, result.data)
+    sendFormSuccess(request, response, { redirect: `/${profile.username}/`, data: updated })
+  },
+)
 
 // Separate POSTs for follow and unfollow, so a plain form on the profile can send either.
 // Forms go back to the profile; JSON callers get its updated follow stats.
@@ -187,5 +193,15 @@ function followAction(action: 'follow' | 'unfollow'): RequestHandler {
   }
 }
 
-profilesRouter.post('/api/follow', requireAuth, followAction('follow'))
-profilesRouter.post('/api/unfollow', requireAuth, followAction('unfollow'))
+profilesRouter.post(
+  '/api/follow',
+  requireAuth,
+  rateLimit('follow', accountKey),
+  followAction('follow'),
+)
+profilesRouter.post(
+  '/api/unfollow',
+  requireAuth,
+  rateLimit('follow', accountKey),
+  followAction('unfollow'),
+)

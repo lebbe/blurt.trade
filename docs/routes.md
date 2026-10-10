@@ -235,12 +235,52 @@ Every POST (any method but `GET`, `HEAD` or `OPTIONS`) also sets `recent_write` 
 read from the primary database instead of the read replica, so the page a form redirects
 to always shows the change it just made. See db/README.md, Read replica.
 
+## Rate limits
+
+POSTs that cost CPU or can be spammed are limited by token buckets in
+`src/middleware/rate-limit.ts`. A bucket holds a burst and refills at a steady rate; an
+empty one answers `429` with `Retry-After` (seconds until the next token), as in the
+error table below.
+
+| Limit (env var suffix) | Routes                         | Per                    | Default |
+| ---------------------- | ------------------------------ | ---------------------- | ------- |
+| `LOGIN_IP`             | `/login`, every attempt        | IP                     | 10/10m  |
+| `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)    | 5/5m    |
+| `CREATE_USER_IP`       | `/createUser` (and invites)    | IP                     | 5/1h    |
+| `WAITLIST_IP`          | `/waitlist`                    | IP                     | 10/1h   |
+| `BLURT`                | `/api/blurts` (and replies)    | account                | 20/10m  |
+| `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget)   | 60/10m  |
+| `PROFILE_EDIT`         | `/:username/edit`              | account                | 30/10m  |
+| `LOCATION`             | `/api/location`                | account                | 30/10m  |
+| `AVATAR`               | `/api/avatar`                  | account                | 60/10m  |
+
+- `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
+  them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).
+  `RATE_LIMIT_SCALE` multiplies every limit: `100` for a load test (029), `0` turns them
+  all off. The tests run at 1000 and switch to the real limits for the rate-limit tests.
+- The per-username login limit counts failures only, so guessing one account's password
+  from many IPs is slow, while its owner logging in doesn't use it up. Someone hammering
+  it can make the owner wait for the next token: a minute at most.
+- IPv6 clients are limited per /64. The IP is `request.ip`, which depends on
+  `TRUST_PROXY` (Express's `trust proxy`): unset when clients connect directly, `1`
+  behind one reverse proxy, or the proxy's addresses (`loopback`, `10.0.0.0/8`). Trusting
+  more than the real proxies lets clients pick their IP with `X-Forwarded-For`, and so
+  dodge the IP limits.
+- Counters live in the process's memory, not the database: no round trip per request.
+  A restart forgets them, so everyone starts with a full bucket, which is harmless for
+  slowing down guessing and spam. With several app instances each would count on its
+  own; move them to a small `UNLOGGED` table then. Refilled buckets are dropped every
+  minute, so memory follows the number of recently active clients.
+- New routes add a name to `defaults` and use
+  `rateLimit('name', accountKey)` after `requireAuth`, or `rateLimit('name')` per IP.
+
 ## Errors
 
 | Case                    | Form / HTML                         | JSON                                |
 | ----------------------- | ----------------------------------- | ----------------------------------- |
 | Validation (400)        | The form page again, with the error | `{ errors: [{ field?, message }] }` |
 | 401, 403, 404, bad JSON | Plain-text message                  | `{ error: message }`                |
+| 429 (rate limit)        | Plain-text message, `Retry-After`   | `{ error: message }`, `Retry-After` |
 
 `field` names the input the error is about (`username`, `text`, `homepage`, ...). It is
 left out when the error is about the whole form, e.g. a wrong username or password.
@@ -256,6 +296,7 @@ left out when the error is about the whole form, e.g. a wrong username or passwo
 - JSON never contains `passwordHash`, `password` or `embedding`. The types keep them
   out, and `toJson()` drops those keys anyway.
 - Usernames are letters, digits and `_` only, and case-insensitive.
+- A POST that costs CPU or can be spammed gets a `rateLimit()` (see Rate limits).
 
 ## Markdown templates
 
