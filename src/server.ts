@@ -1,4 +1,5 @@
 import express from 'express'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
@@ -7,10 +8,13 @@ import { sendError } from './negotiate.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
+import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { usersRouter } from './routes/users.ts'
 
 export const app = express()
+// Static files (the world map) from public/, before auth: they're the same for everyone.
+app.use('/static', express.static(join(import.meta.dirname, '..', 'public')))
 app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
 app.use(cookieParser())
@@ -18,6 +22,7 @@ app.use(authenticate)
 app.use(homeRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
+app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.
 app.use((request: express.Request, response: express.Response) => {

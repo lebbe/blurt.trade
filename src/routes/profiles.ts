@@ -12,6 +12,7 @@ import {
 import {
   follow,
   getFollowStats,
+  getLocation,
   getInvitedBy,
   getUserProfileByUsername,
   listInviteCodes,
@@ -112,7 +113,7 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
   represent(
     request,
     response,
-    { viewer, profile },
+    { viewer, profile, location: await getLocation(profile.userId) },
     { html: renderProfileEditPage, markdown: profileEditMarkdown },
   )
 })
@@ -133,10 +134,12 @@ profilesRouter.post('/:username/edit', requireAuth, async (request, response) =>
 
   const result = profileSchema.safeParse(request.body ?? {})
   if (!result.success) {
+    const location = await getLocation(profile.userId)
     await sendFormErrors(request, response, fieldErrors(result.error), (validationError) =>
       renderProfileEditPage({
         viewer,
         profile: { ...profile, ...submittedFields(request.body) },
+        location,
         validationError,
       }),
     )

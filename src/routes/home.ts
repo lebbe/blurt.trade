@@ -6,6 +6,7 @@ import {
   followingFeedThreshold,
   listFeed,
   listFollowedHighlights,
+  listNearbyForUser,
   listSimilarToUser,
   parseCursor,
   type Blurt,
@@ -53,12 +54,13 @@ const discoverySectionSize = 3
 
 // Where each kind of discovery section gets its blurts: a query against the same blurts
 // table as the feed, leaving out the viewer's own, followed accounts' and `excludeIds`.
-// A new kind (ticket 013a's geographic one) is one more entry here.
+// 'nearby' finds nothing for viewers without a location. A new kind is one more entry here.
 const discoverySources: Record<
   DiscoveryKind,
   (viewerId: number, excludeIds: number[], limit: number) => Promise<Blurt[]>
 > = {
   similar: listSimilarToUser,
+  nearby: listNearbyForUser,
 }
 
 // Sources take turns filling the slots, so with more than one kind they alternate. A blurt

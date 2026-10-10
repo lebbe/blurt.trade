@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-time (and safe to re-run) PostgreSQL setup for local development in WSL Ubuntu.
+# One-time (and safe to re-run) PostgreSQL + pgvector + PostGIS setup for local development
+# in WSL Ubuntu.
 # Run from Windows:  wsl -d Ubuntu -u root -- bash db/setup-wsl.sh
 #
 # Port 5433 is used because a native Windows PostgreSQL may already hold 5432,
@@ -19,9 +20,11 @@ if ! command -v pg_lsclusters >/dev/null; then
 fi
 
 VERSION=$(pg_lsclusters --no-header | awk 'NR==1 {print $1}')
-if ! dpkg -s "postgresql-$VERSION-pgvector" >/dev/null 2>&1; then
-  apt-get install -y -qq "postgresql-$VERSION-pgvector"
-fi
+for PACKAGE in "postgresql-$VERSION-pgvector" "postgresql-$VERSION-postgis-3"; do
+  if ! dpkg -s "$PACKAGE" >/dev/null 2>&1; then
+    apt-get install -y -qq "$PACKAGE"
+  fi
+done
 CONF=/etc/postgresql/$VERSION/main/postgresql.conf
 if ! grep -q "^port = $PORT" "$CONF"; then
   sed -i "s/^port = [0-9]*/port = $PORT/" "$CONF"
@@ -41,6 +44,7 @@ for DB in "$DB_NAME" "$TEST_DB_NAME"; do
   fi
   # Extensions need a superuser, so they are created here rather than in migrations.
   sudo -u postgres psql -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -qc "CREATE EXTENSION IF NOT EXISTS vector"
+  sudo -u postgres psql -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -qc "CREATE EXTENSION IF NOT EXISTS postgis"
 done
 
 pg_lsclusters

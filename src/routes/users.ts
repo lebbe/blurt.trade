@@ -47,7 +47,9 @@ export const reservedUsernames = new Set([
   'createuser',
   'everyone',
   'login',
+  'near',
   'settings',
+  'static',
   // likely future pages
   'about',
   'account',
@@ -70,7 +72,6 @@ export const reservedUsernames = new Set([
   'register',
   'search',
   'signup',
-  'static',
   'terms',
   'vendor',
   'waitlist',

@@ -2,7 +2,7 @@
 
 ```
 db/
-  setup-wsl.sh     installs and configures PostgreSQL + pgvector in WSL (safe to re-run)
+  setup-wsl.sh     installs and configures PostgreSQL + pgvector + PostGIS in WSL (safe to re-run)
   migrate.ts       applies every migration that has not run yet
   mint-invites.ts  mints invite codes in bulk (see docs/routes.md, Invite codes)
   migrations/      plain .sql files, applied in filename (timestamp) order
@@ -24,8 +24,8 @@ First time, from the repo root:
 wsl -d Ubuntu -u root -- bash db/setup-wsl.sh
 ```
 
-That installs PostgreSQL and pgvector, creates the `blurt` and `blurt_test` databases
-with the `vector` extension, and creates the `blurt` role. `npm start` and `npm run dev`
+That installs PostgreSQL, pgvector and PostGIS, creates the `blurt` and `blurt_test`
+databases with the `vector` and `postgis` extensions, and creates the `blurt` role. `npm start` and `npm run dev`
 apply pending migrations before listening. `node db/migrate.ts` does it on its own.
 Connection string (also the default in `migrate.ts`):
 
@@ -76,8 +76,9 @@ Set `DATABASE_URL` and start the server. `src/server.ts` runs `migrate()` before
 starts listening, so migrations that haven't run yet are applied on every deploy. If
 nothing is pending, it does nothing.
 
-The database needs the pgvector extension. Creating an extension needs a superuser,
-so run `CREATE EXTENSION IF NOT EXISTS vector` as one, once per database. The app's
+The database needs the pgvector and PostGIS extensions. Creating an extension needs a
+superuser, so run `CREATE EXTENSION IF NOT EXISTS vector` and
+`CREATE EXTENSION IF NOT EXISTS postgis` as one, once per database. The app's
 migrations run as the normal app user.
 
 ## Tables
@@ -85,7 +86,7 @@ migrations run as the normal app user.
 | table            | contents                                                          |
 | ---------------- | ----------------------------------------------------------------- |
 | `users`          | `id`, `username` (unique), `password_hash` (Argon2id)             |
-| `user_profiles`  | one row per user: homepage, social handles, bio                   |
+| `user_profiles`  | one row per user: homepage, social handles, bio, `location`       |
 | `blurts`         | `user_id`, `text` (1–280 chars), `parent_id` (reply), `embedding` |
 | `follows`        | `user_id` follows `followed_user_id`                              |
 | `sessions`       | one row per login: refresh token generation, last use, revoked    |
@@ -112,6 +113,10 @@ would go `NULL` if the invitee's account were deleted: the code must not work ag
 The migration gave every existing user 3 codes, as new users get at sign-up.
 
 A reply is a blurt with a `parent_id`. The main feed lists only top-level blurts.
+
+`location` is a PostGIS `geography(Point, 4326)`, `NULL` until the user sets one. It is
+always the centre of a 1° grid cell (a `CHECK` enforces it), never an exact position. A
+GiST index backs the `ST_DWithin` radius queries. See docs/routes.md, Location.
 
 `embedding` is a 384-dimension vector from the all-MiniLM-L6-v2 model, which runs
 locally in Node (`src/embeddings.ts`). The model downloads once, about 23 MB. The

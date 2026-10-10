@@ -4,14 +4,18 @@ import {
   discoveryAfter,
   discoveryTitles,
   feedPath,
+  formatLocation,
+  gridDescription,
   isWebUrl,
   moreRepliesUrl,
+  nearPageUrl,
   olderBlurtsUrl,
   plural,
   type BlurtPageData,
   type DiscoverySection,
   type FeedData,
   type FormPageData,
+  type NearData,
   type ProfileEditData,
   type ProfilePageData,
   type SettingsData,
@@ -28,7 +32,7 @@ const home = link('Back to blurt.trade', '/')
 
 function viewerLine(viewer: Viewer): Markdown {
   return viewer
-    ? md`Logged in as ${link(viewer.username, `/${viewer.username}/`)} · ${link('Settings', '/settings')}`
+    ? md`Logged in as ${link(viewer.username, `/${viewer.username}/`)} · ${link('Near you', '/near')} · ${link('Settings', '/settings')}`
     : md`${link('Log in', '/login')} or ${link('create a profile', '/createUser')} to blurt.`
 }
 
@@ -228,7 +232,7 @@ export function profilePageMarkdown({
   `
 }
 
-export function profileEditMarkdown({ profile }: ProfileEditData): Markdown {
+export function profileEditMarkdown({ profile, location }: ProfileEditData): Markdown {
   const fields = profileFields.map(
     ([key, label]) => md`- ${code(key)} (${label}): ${profileValue(String(profile[key]))}`,
   )
@@ -241,6 +245,37 @@ export function profileEditMarkdown({ profile }: ProfileEditData): Markdown {
     cleared. Current values:
 
     ${join(fields, '\n')}
+
+    ## Location
+
+    ${location ? md`Your location: ${formatLocation(location)} (the middle of ${gridDescription}).` : "You haven't set a location."}
+
+    Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} to set it (only
+    ${gridDescription} is stored), or with ${code('clear')} to remove it. Nobody else can see
+    it. Then see ${link('blurts near you', '/near')}.
+  `
+}
+
+export function nearMarkdown({ location, radius, radii, blurts, next }: NearData): Markdown {
+  return md`
+    # Blurts near you
+
+    ${home}
+
+    ${
+      location
+        ? md`
+            From people within ${radius} km of ${formatLocation(location)}. Other radii: ${join(
+              radii.filter((km) => km !== radius).map((km) => link(`${km} km`, nearPageUrl(km))),
+              ', ',
+            )}.
+
+            ${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt, blurt.replies)) : 'Nobody near you has blurted yet.'}
+
+            ${next && link('Older blurts', nearPageUrl(radius, next))}
+          `
+        : md`You haven't set a location. Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} first.`
+    }
   `
 }
 

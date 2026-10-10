@@ -35,3 +35,14 @@ Accept: application/json
 Content-Type: application/json
 
 { "text": "Hello from JSON" }
+
+### Set your location from fetch() (snapped to a 1° cell)
+POST http://localhost:3000/api/location
+Accept: application/json
+Content-Type: application/json
+
+{ "lat": 59.91, "lon": 10.75 }
+
+### Blurts near you as JSON
+GET http://localhost:3000/near?radius=250
+Accept: application/json

@@ -1,6 +1,7 @@
 import { h } from 'preact'
 import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
+import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import type {
   Blurt,
@@ -25,11 +26,12 @@ export function isWebUrl(value: string): boolean {
 export type Viewer = AuthenticatedUser | null
 
 // Where a discovery section's blurts come from: 'similar' are close in meaning to what the
-// viewer has blurted lately. Ticket 013a adds a geographic kind ('nearby').
-export type DiscoveryKind = 'similar'
+// viewer has blurted lately, 'nearby' from people whose location is near theirs.
+export type DiscoveryKind = 'similar' | 'nearby'
 
 export const discoveryTitles: Record<DiscoveryKind, { title: string; description: string }> = {
   similar: { title: 'You might like', description: "Close to what you've blurted lately." },
+  nearby: { title: 'Near you', description: 'From people near where you are.' },
 }
 
 // Blurts from outside the feed, shown after the first `after` of its `blurts`.
@@ -81,7 +83,31 @@ export type ProfilePageData = {
   next: string | null
 }
 
-export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
+// `location` is the owner's coarse location (null if not set). The edit page is the only
+// profile page that has it.
+export type ProfileEditData = { viewer: Viewer; profile: UserProfile; location: GeoPoint | null }
+
+// "Blurts near you". `location` is the viewer's own (null if not set: then no blurts).
+// `radius` is in km, one of `radii`. `next` is the cursor for older blurts.
+export type NearData = {
+  viewer: AuthenticatedUser
+  location: GeoPoint | null
+  radius: number
+  radii: number[]
+  blurts: FeedItem[]
+  next: string | null
+}
+
+// A stored location as people read it, e.g. "59.5° N, 10.5° E".
+export function formatLocation({ lat, lon }: GeoPoint): string {
+  return `${Math.abs(lat)}° ${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon)}° ${lon < 0 ? 'W' : 'E'}`
+}
+
+export const gridDescription = `a ${gridDegrees}° by ${gridDegrees}° square, about ${Math.round(gridDegrees * 111)} km across`
+
+export function nearPageUrl(radius: number, next?: string): string {
+  return `/near?radius=${radius}${next ? `&before=${next}` : ''}`
+}
 
 // Login has no data of its own.
 export type FormPageData = { viewer: Viewer }
@@ -120,7 +146,7 @@ type CreateUserProps = SignupPageData & FormProps
 
 type LoginProps = FormProps
 
-type ProfileEditProps = ProfileEditData & { validationError?: string }
+type ProfileEditProps = ProfileEditData & { validationError?: string; locationError?: string }
 
 function Composer({
   text = '',
@@ -284,6 +310,7 @@ function LoginForm({ username = '', validationError }: LoginProps) {
 function LogoutForm() {
   return html`
     <form method="post" action="/api/logout">
+      <a href="/near">Near you</a>
       <a href="/settings">Settings</a>
       <button type="submit">Log out</button>
     </form>
@@ -472,7 +499,87 @@ function ProfileData({ profile, canEdit }: { profile: UserProfile; canEdit: bool
   `
 }
 
-function ProfileEditForm({ profile, validationError }: ProfileEditProps) {
+// Opt-in, coarse location. Clicking the map image submits the pixel (location.x,
+// location.y) with no JS; the server snaps it to a grid cell. The number fields are the
+// fallback for keyboards, which can't click a spot. The marker shows exactly what is stored.
+function LocationForms({ location, error }: { location: GeoPoint | null; error?: string }) {
+  const marker = location && pointToPixel(location)
+  return html`
+    <section aria-label="Location">
+      <h2>Location</h2>
+      <p>
+        Optional. Set it to see <a href="/near">blurts near you</a>. Only ${gridDescription} is
+        stored, never the exact spot, and nobody else can see it.
+      </p>
+      <${ValidationError} message=${error} />
+      <p class="location-status">
+        ${
+          location
+            ? html`${'Your location: '}<strong>${formatLocation(location)}</strong>${` (the middle of ${gridDescription}).`}`
+            : "You haven't set a location."
+        }
+      </p>
+      <form method="post" action="/api/location" class="map-form">
+        <div class="map">
+          <div class="map-inner" style=${{ width: `${mapWidth}px`, height: `${mapHeight}px` }}>
+            <input
+              type="image"
+              name="location"
+              src=${mapUrl}
+              width=${mapWidth}
+              height=${mapHeight}
+              alt="World map: click to set your location"
+            />
+            ${
+              marker &&
+              html`<span
+                class="map-marker"
+                aria-hidden="true"
+                style=${{ left: `${marker.x}px`, top: `${marker.y}px` }}
+              ></span>`
+            }
+          </div>
+        </div>
+      </form>
+      <form method="post" action="/api/location">
+        <label
+          >Latitude (-90 to 90, south is negative)
+          <input
+            type="number"
+            name="lat"
+            min="-90"
+            max="90"
+            step="any"
+            required
+            value=${location?.lat ?? ''}
+          />
+        </label>
+        <label
+          >Longitude (-180 to 180, west is negative)
+          <input
+            type="number"
+            name="lon"
+            min="-180"
+            max="180"
+            step="any"
+            required
+            value=${location?.lon ?? ''}
+          />
+        </label>
+        <button type="submit">Set location</button>
+      </form>
+      ${
+        location &&
+        html`<form method="post" action="/api/location">
+          <input type="hidden" name="clear" value="1" />
+          <button type="submit">Remove my location</button>
+        </form>`
+      }
+    </section>
+  `
+}
+
+function ProfileEditForm({ profile, location, validationError, locationError }: ProfileEditProps) {
   return html`
     <header>
       <h1>Edit profile: ${profile.username}</h1>
@@ -546,6 +653,7 @@ ${profile.bio}</textarea>
         </label>
         <button type="submit">Save profile</button>
       </form>
+      <${LocationForms} location=${location} error=${locationError} />
     </main>
   `
 }
@@ -613,6 +721,55 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
           />`
         }
       </section>
+    </main>
+  `
+}
+
+function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
+  return html`
+    <header>
+      <h1>Blurts near you</h1>
+      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
+    </header>
+    <main>
+      ${
+        location
+          ? html`
+              <p>
+                From people within ${radius} km of ${formatLocation(location)}.${' '}
+                <a href="/${viewer.username}/edit">Change your location</a>
+              </p>
+              <form method="get" action="/near" class="radius-form">
+                <label
+                  >Radius
+                  <select name="radius">
+                    ${radii.map(
+                      (km) => html`<option value=${km} selected=${km === radius}>${km} km</option>`,
+                    )}
+                  </select>
+                </label>
+                <button type="submit">Show</button>
+              </form>
+              <section aria-label="Blurts">
+                ${
+                  blurts.length > 0
+                    ? blurts.map(
+                        (blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`,
+                      )
+                    : html`<p class="empty">Nobody near you has blurted yet.</p>`
+                }
+                ${
+                  next &&
+                  html`<${NextPageLink} href=${nearPageUrl(radius, next)} label="Older blurts" />`
+                }
+              </section>
+            `
+          : html`<p>
+              You haven't set a location.${' '}
+              <a href="/${viewer.username}/edit">Click the map on your edit page</a> to see blurts
+              from people near you.
+            </p>`
+      }
     </main>
   `
 }
@@ -865,6 +1022,32 @@ function IndexDocument({ children }: { children: unknown }) {
             color: #6d6258;
             font-size: 0.9rem;
           }
+          .map {
+            overflow-x: auto;
+            margin-bottom: 1rem;
+          }
+          .map-form {
+            padding: 0;
+          }
+          .map-inner {
+            position: relative;
+          }
+          .map-inner input {
+            display: block;
+            padding: 0;
+            border: 0;
+            cursor: crosshair;
+          }
+          .map-marker {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            margin: -7px 0 0 -7px;
+            border: 2px solid #fffdf8;
+            border-radius: 50%;
+            background: #a32020;
+            pointer-events: none;
+          }
           .next-page {
             margin: 1.5rem 0 0;
             text-align: center;
@@ -914,6 +1097,10 @@ export function renderProfilePage(data: ProfilePageData): string {
 
 export function renderSettingsPage(data: SettingsData): string {
   return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(SettingsPage, data) }))
+}
+
+export function renderNearPage(data: NearData): string {
+  return '<!doctype html>' + renderToString(h(IndexDocument, { children: h(NearPage, data) }))
 }
 
 export function renderProfileEditPage(props: ProfileEditProps): string {

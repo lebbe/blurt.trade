@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto'
 import type pg from 'pg'
 import { db } from '../db.ts'
+import type { GeoPoint } from '../geo.ts'
 
 export type Blurt = {
   id: number
@@ -230,6 +231,69 @@ export async function listSimilarToUser(
        AND b.embedding <=> t.embedding < $5
      ORDER BY b.embedding <=> t.embedding LIMIT $4`,
     [userId, tasteBlurts, excludeIds, limit, relatedMaxDistance],
+  )
+  return rows
+}
+
+// The user's coarse location, or null if they haven't set one. Only for its owner.
+export async function getLocation(userId: number): Promise<GeoPoint | null> {
+  const { rows } = await db().query<GeoPoint>(
+    `SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lon
+     FROM user_profiles WHERE user_id = $1 AND location IS NOT NULL`,
+    [userId],
+  )
+  return rows[0] ?? null
+}
+
+// Sets (or with null, clears) the user's location. `point` must already be snapped to a
+// cell centre (snapToGrid in src/geo.ts): the database rejects anything else. False if the user has no profile
+// (e.g. a still-valid token after a database reset).
+export async function setLocation(userId: number, point: GeoPoint | null): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `UPDATE user_profiles SET updated_at = now(), location = CASE WHEN $2::float8 IS NULL THEN NULL
+       ELSE ST_SetSRID(ST_MakePoint($3::float8, $2::float8), 4326)::geography END
+     WHERE user_id = $1`,
+    [userId, point?.lat ?? null, point?.lon ?? null],
+  )
+  return rowCount === 1
+}
+
+// Top-level blurts from other people whose location is within `radiusKm` of the user's.
+// The GiST index on user_profiles.location serves ST_DWithin. Matches nothing when the user
+// has no location (ST_DWithin on NULL is NULL).
+const nearbyWhere = `b.parent_id IS NULL AND b.user_id <> $1 AND b.user_id IN (
+    SELECT p.user_id FROM user_profiles me JOIN user_profiles p
+      ON ST_DWithin(p.location, me.location, $2::float8 * 1000)
+    WHERE me.user_id = $1
+  )`
+
+// "Blurts near you": older than `before`, newest first, each with its latest replies.
+export async function listNearbyBlurts(
+  userId: number,
+  radiusKm: number,
+  before: Cursor | null = null,
+): Promise<Page<FeedItem>> {
+  const page = await listPage(nearbyWhere, [userId, radiusKm], before, 'newest first')
+  return { items: await withReplies(page.items), next: page.next }
+}
+
+// How far away "Near you" discovery in the feed reaches.
+const nearbyDiscoveryKm = 250
+
+// Discovery: the latest top-level blurts from people near the user, leaving out accounts
+// they follow and `excludeIds` (already on the page). Empty without a location.
+export async function listNearbyForUser(
+  userId: number,
+  excludeIds: number[],
+  limit: number,
+): Promise<Blurt[]> {
+  const { rows } = await db().query<Blurt>(
+    `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
+     WHERE ${nearbyWhere}
+       AND b.user_id NOT IN (SELECT followed_user_id FROM follows WHERE user_id = $1)
+       AND b.id <> ALL ($3::bigint[])
+     ORDER BY b.created_at DESC, b.id DESC LIMIT $4`,
+    [userId, nearbyDiscoveryKm, excludeIds, limit],
   )
   return rows
 }

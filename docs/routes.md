@@ -27,7 +27,8 @@ carry `Vary: Accept`.
 | `/everyone`       | —     | the same, always the everyone feed                                            | 400 bad cursor          |
 | `/:username/`     | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
 | `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }`                           | 400, 404 no such blurt  |
-| `/:username/edit` | owner | `{ viewer, profile }`                                                         | 401, 403 not owner, 404 |
+| `/:username/edit` | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
+| `/near`           | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/login`          | —     | `{ viewer }`                                                                  |                         |
 | `/createUser`     | —     | `{ viewer, signup, inviteCode }`                                              |                         |
 | `/waitlist`       | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
@@ -46,8 +47,10 @@ carry `Vary: Accept`.
   is top-level blurts close in meaning to the average embedding of the viewer's latest
   20 blurts and replies. Discovery never shows the viewer's own blurts, blurts from
   accounts they follow, or blurts already on the page. New users, with nothing embedded
-  yet, get no section. The HTML renders them as plain sections between the blurts, so
-  they work without JS. A geographic kind comes with ticket 013a.
+  yet, get no section. `kind: 'nearby'` ("Near you") is the latest top-level blurts from
+  people whose location is within 250 km of the viewer's (none without a location). With
+  both kinds, sections take turns (similar first), and a blurt both find shows once. The
+  HTML renders them as plain sections between the blurts, so they work without JS.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
 - `Blurt` is `{ id, username, text, createdAt, parentId, replyCount }`, with
@@ -73,6 +76,14 @@ carry `Vary: Accept`.
   is how many entries are still waiting. `/createUser?invite=<code>` fills in the form's
   invite code (`inviteCode`, or `null`), so a shared link is all an invitee needs.
 - `activeSessions` is how many browsers and devices the viewer is logged in on.
+- `location` is the viewer's own `{ lat, lon }` or `null` (see Location below). It is
+  only on `/:username/edit` and `/near`, which only the owner sees, never on profiles.
+- `/near?radius=<km>` is "blurts near you": top-level blurts (with their latest two
+  replies) from other people whose location is within `radius` km of yours, newest
+  first, paged like the feed (`/near?radius=<km>&before=<next>`). `radius` is one of
+  `radii` (50, 100, 250, 500, 1000, 2500), 250 when left out, anything else a 400. The
+  HTML picks it with a `<select>` in a GET form. Without a location, `blurts` is empty
+  and the page links to the edit page.
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
 
 ## Actions (POST)
@@ -90,6 +101,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/blurts`            | yes   | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
 | `/api/follow`            | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/unfollow`          | yes   | `username`                           | 303 → profile               | 200 their `follows`                            |
+| `/api/location`          | yes   | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/logout`            | —     | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere` | yes   | —                                    | 303 → `/login`              | 204                                            |
 
@@ -97,6 +109,32 @@ Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the session cookies, for JSON callers too.
+
+## Location
+
+Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
+`src/routes/location.ts` and `src/geo.ts`.
+
+- Only the centre of a 1° by 1° grid cell (about 111 km across) is stored, on the
+  profile (`user_profiles.location`, a PostGIS `geography(Point)`), never on blurts.
+  Everything the server gets is snapped to it first, whatever its precision, and a
+  `CHECK` in the database refuses anything else. The raw click is never stored.
+- Only its owner sees it: in `/:username/edit` and `/near`. Profiles never show it.
+- `POST /api/location` takes one of:
+  - `location.x` and `location.y`: a click on the map on the edit page, an
+    `<input type="image" name="location">` showing `/static/world-map.svg`
+    (equirectangular, 720 × 360 px, 2 px per degree). The browser sends the pixel as a
+    plain form POST, so it works without JS. Pixels outside the map are a 400. `0,0` is
+    what a keyboard sends for an image input, so it counts as no click (a 400 asking for
+    a click or numbers).
+  - `lat` and `lon` (degrees, `-90..90` and `-180..180`): the fallback form with two
+    number fields, or JSON `{ "lat": 59.91, "lon": 10.75 }`.
+  - `clear` (any non-empty value, or JSON `{ "clear": true }`): the "Remove my
+    location" button.
+- Errors are 400 with `field` `location`, `lat` or `lon`. Forms get the edit page again
+  with the error.
+- The edit page shows what is stored, as text and as a marker on the map.
+- Radius queries use `ST_DWithin` on the profile points, with a GiST index.
 
 ## Sign-up limits
 
