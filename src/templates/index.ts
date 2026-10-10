@@ -16,17 +16,24 @@ export function isWebUrl(value: string): boolean {
 // and as HTML or Markdown through the templates (see src/negotiate.ts).
 export type Viewer = AuthenticatedUser | null
 
-export type FeedData = { viewer: Viewer; blurts: FeedItem[] }
+// `next` is the cursor for the page after this one, or null on the last page.
+export type FeedData = { viewer: Viewer; blurts: FeedItem[]; next: string | null }
 
 export type BlurtPageData = {
   viewer: Viewer
   blurt: Blurt
   parent: Blurt | null
   replies: Blurt[]
+  next: string | null // for replies
   related: Blurt[]
 }
 
-export type ProfilePageData = { viewer: Viewer; profile: UserProfile; blurts: Blurt[] }
+export type ProfilePageData = {
+  viewer: Viewer
+  profile: UserProfile
+  blurts: Blurt[]
+  next: string | null
+}
 
 export type ProfileEditData = { viewer: Viewer; profile: UserProfile }
 
@@ -114,6 +121,19 @@ export function blurtUrl(blurt: Blurt): string {
   return `/${blurt.username}/${blurt.id}`
 }
 
+// Where the next page of each list lives. Plain links, so paging works without JS.
+export function olderBlurtsUrl(path: string, next: string): string {
+  return `${path}?before=${next}`
+}
+
+export function moreRepliesUrl(blurt: Blurt, next: string): string {
+  return `${blurtUrl(blurt)}?after=${next}`
+}
+
+function NextPageLink({ href, label }: { href: string; label: string }) {
+  return html`<p class="next-page"><a href=${href} rel="next">${label}</a></p>`
+}
+
 export function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? 'y' : 'ies'}`
 }
@@ -163,7 +183,7 @@ function BlurtCard({
 
 type BlurtPageProps = BlurtPageData & { composer?: ComposerProps }
 
-function BlurtPage({ viewer, blurt, parent, replies, related, composer }: BlurtPageProps) {
+function BlurtPage({ viewer, blurt, parent, replies, next, related, composer }: BlurtPageProps) {
   return html`
     <header>
       <h1>${blurt.username}</h1>
@@ -195,6 +215,7 @@ function BlurtPage({ viewer, blurt, parent, replies, related, composer }: BlurtP
             ? replies.map((reply) => html`<${BlurtCard} blurt=${reply} />`)
             : html`<p class="empty">No replies yet.</p>`
         }
+        ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
       </section>
       <section aria-label="Related blurts">
         <h2>Related blurts</h2>
@@ -332,7 +353,7 @@ ${profile.bio}</textarea>
   `
 }
 
-function FeedPage({ viewer, blurts, composer }: FeedData & { composer?: ComposerProps }) {
+function FeedPage({ viewer, blurts, next, composer }: FeedData & { composer?: ComposerProps }) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} replies=${blurt.replies} />`)
 
   return html`
@@ -345,12 +366,13 @@ function FeedPage({ viewer, blurts, composer }: FeedData & { composer?: Composer
       ${viewer && html`<${LogoutForm} />`}
       <section aria-label="Blurts">
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
+        ${next && html`<${NextPageLink} href=${olderBlurtsUrl('/', next)} label="Older blurts" />`}
       </section>
     </main>
   `
 }
 
-function ProfilePage({ viewer, profile, blurts }: ProfilePageData) {
+function ProfilePage({ viewer, profile, blurts, next }: ProfilePageData) {
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} />`)
 
   return html`
@@ -363,6 +385,13 @@ function ProfilePage({ viewer, profile, blurts }: ProfilePageData) {
       <section aria-label="${profile.username} blurts">
         <h2>Blurts</h2>
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
+        ${
+          next &&
+          html`<${NextPageLink}
+            href=${olderBlurtsUrl(`/${profile.username}/`, next)}
+            label="Older blurts"
+          />`
+        }
       </section>
     </main>
   `
@@ -495,6 +524,10 @@ function IndexDocument({ children }: { children: unknown }) {
           }
           section h2 {
             margin-top: 2rem;
+          }
+          .next-page {
+            margin: 1.5rem 0 0;
+            text-align: center;
           }
         </style>
       </head>

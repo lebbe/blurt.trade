@@ -21,18 +21,24 @@ carry `Vary: Accept`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path                | Auth  | JSON                                          | Errors                    |
-| ------------------- | ----- | --------------------------------------------- | ------------------------- |
-| `/`                 | —     | `{ viewer, blurts: FeedItem[] }`              |                           |
-| `/:username/`       | —     | `{ viewer, profile, blurts: Blurt[] }`        | 404 no such user          |
-| `/:username/:id`    | —     | `{ viewer, blurt, parent, replies, related }` | 404 no such blurt         |
-| `/:username/edit`   | owner | `{ viewer, profile }`                         | 401, 403 not owner, 404   |
-| `/login`            | —     | `{ viewer }`                                  |                           |
-| `/createUser`       | —     | `{ viewer }`                                  |                           |
+| Path              | Auth  | JSON                                                | Errors                  |
+| ----------------- | ----- | --------------------------------------------------- | ----------------------- |
+| `/`               | —     | `{ viewer, blurts: FeedItem[], next }`              | 400 bad cursor          |
+| `/:username/`     | —     | `{ viewer, profile, blurts: Blurt[], next }`        | 400, 404 no such user   |
+| `/:username/:id`  | —     | `{ viewer, blurt, parent, replies, next, related }` | 400, 404 no such blurt  |
+| `/:username/edit` | owner | `{ viewer, profile }`                               | 401, 403 not owner, 404 |
+| `/login`          | —     | `{ viewer }`                                        |                         |
+| `/createUser`     | —     | `{ viewer }`                                        |                         |
 
 - `Blurt` is `{ id, username, text, createdAt, parentId, replyCount }`, with
   `createdAt` as an ISO 8601 string. A `FeedItem` is a top-level blurt plus `replies`, its
   latest two replies.
+- Lists come in pages of 100. `next` is an opaque cursor for the page after this one, or
+  `null` on the last page: `/?before=<next>` and `/:username/?before=<next>` for older
+  blurts (newest first), `/:username/:id?after=<next>` for later replies (oldest first).
+  The HTML has the same as an "Older blurts" / "More replies" link, so it works without
+  JS. Cursors are keyset positions on `(created_at, id)`, so pages don't shift as new
+  blurts arrive. A malformed cursor is a 400.
 - `parent` is `null` for a top-level blurt. `related` is empty until the blurt's
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,

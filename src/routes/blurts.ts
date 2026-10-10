@@ -10,13 +10,15 @@ import {
   sendFormSuccess,
   wantsJson,
 } from '../negotiate.ts'
+import { getFeedData } from './home.ts'
 import {
   addBlurt,
   getBlurt,
-  listFeed,
   listRelatedBlurts,
   listReplies,
+  parseCursor,
   type Blurt,
+  type Cursor,
 } from './state.ts'
 import {
   blurtUrl,
@@ -38,14 +40,18 @@ function parseBlurtId(value: unknown): number | undefined {
   return typeof text === 'string' && /^\d{1,15}$/.test(text) ? Number(text) : undefined
 }
 
-async function getBlurtPageData(request: Request, blurt: Blurt): Promise<BlurtPageData> {
-  const [viewer, parent, replies, related] = await Promise.all([
+async function getBlurtPageData(
+  request: Request,
+  blurt: Blurt,
+  after: Cursor | null = null,
+): Promise<BlurtPageData> {
+  const [viewer, parent, { items: replies, next }, related] = await Promise.all([
     getViewer(request),
     blurt.parentId === null ? null : getBlurt(blurt.parentId).then((parent) => parent ?? null),
-    listReplies(blurt.id),
+    listReplies(blurt.id, after),
     listRelatedBlurts(blurt.id),
   ])
-  return { viewer, blurt, parent, replies, related }
+  return { viewer, blurt, parent, replies, next, related }
 }
 
 blurtsRouter.get('/:username/:id', async (request, response, next) => {
@@ -56,7 +62,12 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
     next() // not a blurt URL (e.g. /:username/edit), or no such blurt
     return
   }
-  represent(request, response, await getBlurtPageData(request, blurt), {
+  const after = parseCursor(request.query.after)
+  if (after === undefined) {
+    sendError(request, response, 400, 'Invalid cursor')
+    return
+  }
+  represent(request, response, await getBlurtPageData(request, blurt, after), {
     html: renderBlurtPage,
     markdown: blurtPageMarkdown,
   })
@@ -84,7 +95,7 @@ blurtsRouter.post('/api/blurts', requireAuth, async (request, response) => {
       }
       return parent
         ? renderBlurtPage(await getBlurtPageData(request, parent), composer)
-        : renderFeedPage({ viewer: await getViewer(request), blurts: await listFeed() }, composer)
+        : renderFeedPage(await getFeedData(request), composer)
     })
     return
   }

@@ -2,6 +2,8 @@ import type { Blurt, UserProfile } from '../routes/state.ts'
 import {
   blurtUrl,
   isWebUrl,
+  moreRepliesUrl,
+  olderBlurtsUrl,
   plural,
   type BlurtPageData,
   type FeedData,
@@ -40,7 +42,7 @@ function blurtList(blurts: Blurt[]): Markdown {
   return md`${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt)) : 'Nothing here yet.'}`
 }
 
-export function feedMarkdown({ viewer, blurts }: FeedData): Markdown {
+export function feedMarkdown({ viewer, blurts, next }: FeedData): Markdown {
   return md`
     # blurt.trade
 
@@ -55,10 +57,18 @@ export function feedMarkdown({ viewer, blurts }: FeedData): Markdown {
         ? blurts.map((blurt) => blurtMarkdown(blurt, blurt.replies))
         : 'Nothing has been blurted yet.'
     }
+
+    ${next && link('Older blurts', olderBlurtsUrl('/', next))}
   `
 }
 
-export function blurtPageMarkdown({ blurt, parent, replies, related }: BlurtPageData): Markdown {
+export function blurtPageMarkdown({
+  blurt,
+  parent,
+  replies,
+  next,
+  related,
+}: BlurtPageData): Markdown {
   return md`
     # ${blurt.username}
 
@@ -78,6 +88,8 @@ export function blurtPageMarkdown({ blurt, parent, replies, related }: BlurtPage
     ## Replies
 
     ${blurtList(replies)}
+
+    ${next && link('More replies', moreRepliesUrl(blurt, next))}
 
     ## Related blurts
 
@@ -100,7 +112,7 @@ const profileFields: [keyof UserProfile, string][] = [
   ['bio', 'Bio'],
 ]
 
-export function profilePageMarkdown({ viewer, profile, blurts }: ProfilePageData): Markdown {
+export function profilePageMarkdown({ viewer, profile, blurts, next }: ProfilePageData): Markdown {
   const fields = profileFields.map(
     ([key, label]) => md`- ${label}: ${profileValue(String(profile[key]))}`,
   )
@@ -118,6 +130,8 @@ export function profilePageMarkdown({ viewer, profile, blurts }: ProfilePageData
     ## Blurts
 
     ${blurtList(blurts)}
+
+    ${next && link('Older blurts', olderBlurtsUrl(`/${profile.username}/`, next))}
   `
 }
 

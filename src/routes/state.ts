@@ -12,6 +12,13 @@ export type Blurt = {
 // A top-level blurt on the main feed, with its latest few replies (oldest of those first).
 export type FeedItem = Blurt & { replies: Blurt[] }
 
+// One page of a list, and the cursor for the page after it (null on the last page).
+export type Page<T> = { items: T[]; next: string | null }
+
+// A position in a list ordered by (created_at, id). createdAt keeps Postgres' microseconds,
+// which a JS Date would round away, so blurts in the same millisecond aren't skipped.
+export type Cursor = { createdAt: string; id: number }
+
 export type User = {
   id: number
   username: string
@@ -33,7 +40,7 @@ export type UserProfile = {
 
 export type UserProfileInput = Omit<UserProfile, 'userId' | 'username'>
 
-const feedLimit = 100
+const pageSize = 100
 const feedRepliesPerBlurt = 2
 const relatedLimit = 5
 // Cosine distance (0 = same meaning, 1 = unrelated). With all-MiniLM-L6-v2, short blurts on
@@ -43,16 +50,74 @@ const relatedMaxDistance = 0.75
 const blurtColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
   (SELECT count(*) FROM blurts r WHERE r.parent_id = b.id)::int AS "replyCount"`
 
+const cursorColumn = `to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  AS "cursorAt"`
+
+const cursorPattern = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z)_(\d{1,15})$/
+
+// Opaque to clients: base64url keeps it a single URL-safe token they shouldn't pick apart.
+function encodeCursor(cursor: Cursor): string {
+  return Buffer.from(`${cursor.createdAt}_${cursor.id}`).toString('base64url')
+}
+
+// From the query string: null when there is no cursor, undefined when it is malformed.
+export function parseCursor(value: unknown): Cursor | null | undefined {
+  if (value === undefined) {
+    return null
+  }
+  const match =
+    typeof value === 'string'
+      ? cursorPattern.exec(Buffer.from(value, 'base64url').toString())
+      : null
+  if (!match) {
+    return undefined
+  }
+  // Rejects well-formed but impossible dates (e.g. month 13) before Postgres sees them.
+  const date = new Date(match[1])
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 19) !== match[1].slice(0, 19)) {
+    return undefined
+  }
+  return { createdAt: match[1], id: Number(match[2]) }
+}
+
+// Keyset pagination on (created_at, id), never OFFSET, so pages stay fast and don't shift
+// as new blurts arrive. The indexes on (..., created_at DESC, id DESC) serve both orders.
+// Fetches one extra row to know whether there is a next page.
+async function listPage(
+  where: string,
+  params: unknown[],
+  cursor: Cursor | null,
+  order: 'newest first' | 'oldest first',
+): Promise<Page<Blurt>> {
+  const [direction, comparison] = order === 'newest first' ? ['DESC', '<'] : ['ASC', '>']
+  const values = [...params, pageSize + 1]
+  const limit = `$${values.length}`
+  let keyset = ''
+  if (cursor) {
+    values.push(cursor.createdAt, cursor.id)
+    keyset = `AND (b.created_at, b.id) ${comparison} ($${values.length - 1}::timestamptz, $${values.length})`
+  }
+  const { rows } = await db().query<Blurt & { cursorAt?: string }>(
+    `SELECT ${blurtColumns}, ${cursorColumn} FROM blurts b JOIN users u ON u.id = b.user_id
+     WHERE ${where} ${keyset}
+     ORDER BY b.created_at ${direction}, b.id ${direction} LIMIT ${limit}`,
+    values,
+  )
+  const items = rows.slice(0, pageSize)
+  const last = rows.length > pageSize ? items.at(-1) : undefined
+  const next = last?.cursorAt ? encodeCursor({ createdAt: last.cursorAt, id: last.id }) : null
+  for (const item of items) {
+    delete item.cursorAt
+  }
+  return { items, next }
+}
+
 const profileColumns = `p.user_id AS "userId", u.username, p.homepage, p.x, p.instagram,
   p.tiktok, p.youtube, p.github, p.linkedin, p.bio`
 
-// Top-level blurts, newest first, each with its latest replies.
-export async function listFeed(): Promise<FeedItem[]> {
-  const { rows: blurts } = await db().query<Blurt>(
-    `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
-     WHERE b.parent_id IS NULL ORDER BY b.created_at DESC, b.id DESC LIMIT $1`,
-    [feedLimit],
-  )
+// Top-level blurts older than `before`, newest first, each with its latest replies.
+export async function listFeed(before: Cursor | null = null): Promise<Page<FeedItem>> {
+  const { items: blurts, next } = await listPage('b.parent_id IS NULL', [], before, 'newest first')
   const { rows: replies } = await db().query<Blurt>(
     `SELECT r.* FROM unnest($1::bigint[]) AS p(id) CROSS JOIN LATERAL (
        SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
@@ -60,20 +125,21 @@ export async function listFeed(): Promise<FeedItem[]> {
      ) r ORDER BY r."createdAt", r.id`,
     [blurts.map((blurt) => blurt.id), feedRepliesPerBlurt],
   )
-  return blurts.map((blurt) => ({
-    ...blurt,
-    replies: replies.filter((reply) => reply.parentId === blurt.id),
-  }))
+  return {
+    items: blurts.map((blurt) => ({
+      ...blurt,
+      replies: replies.filter((reply) => reply.parentId === blurt.id),
+    })),
+    next,
+  }
 }
 
-// Newest first, replies included.
-export async function listBlurtsByUserId(userId: number): Promise<Blurt[]> {
-  const { rows } = await db().query<Blurt>(
-    `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
-     WHERE b.user_id = $1 ORDER BY b.created_at DESC, b.id DESC LIMIT $2`,
-    [userId, feedLimit],
-  )
-  return rows
+// Older than `before`, newest first, replies included.
+export function listBlurtsByUserId(
+  userId: number,
+  before: Cursor | null = null,
+): Promise<Page<Blurt>> {
+  return listPage('b.user_id = $1', [userId], before, 'newest first')
 }
 
 export async function getBlurt(id: number): Promise<Blurt | undefined> {
@@ -84,14 +150,9 @@ export async function getBlurt(id: number): Promise<Blurt | undefined> {
   return rows[0]
 }
 
-// Direct replies, oldest first so the thread reads top to bottom.
-export async function listReplies(parentId: number): Promise<Blurt[]> {
-  const { rows } = await db().query<Blurt>(
-    `SELECT ${blurtColumns} FROM blurts b JOIN users u ON u.id = b.user_id
-     WHERE b.parent_id = $1 ORDER BY b.created_at, b.id LIMIT $2`,
-    [parentId, feedLimit],
-  )
-  return rows
+// Direct replies after `after`, oldest first so the thread reads top to bottom.
+export function listReplies(parentId: number, after: Cursor | null = null): Promise<Page<Blurt>> {
+  return listPage('b.parent_id = $1', [parentId], after, 'oldest first')
 }
 
 // Closest blurts by meaning, excluding the blurt itself and its direct replies (shown anyway).

@@ -2,7 +2,12 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { getViewer, requireAuth } from '../middleware/auth.ts'
 import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
-import { getUserProfileByUsername, listBlurtsByUserId, updateUserProfile } from './state.ts'
+import {
+  getUserProfileByUsername,
+  listBlurtsByUserId,
+  parseCursor,
+  updateUserProfile,
+} from './state.ts'
 import { isWebUrl, renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
 import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
 
@@ -56,14 +61,20 @@ profilesRouter.get('/:username/', async (request, response) => {
     return
   }
 
-  const [viewer, blurts] = await Promise.all([
+  const before = parseCursor(request.query.before)
+  if (before === undefined) {
+    sendError(request, response, 400, 'Invalid cursor')
+    return
+  }
+
+  const [viewer, { items: blurts, next }] = await Promise.all([
     getViewer(request),
-    listBlurtsByUserId(profile.userId),
+    listBlurtsByUserId(profile.userId, before),
   ])
   represent(
     request,
     response,
-    { viewer, profile, blurts },
+    { viewer, profile, blurts, next },
     { html: renderProfilePage, markdown: profilePageMarkdown },
   )
 })

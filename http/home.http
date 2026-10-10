@@ -6,6 +6,10 @@ Accept: text/html
 GET http://localhost:3000/
 Accept: application/json
 
+### Next feed page (paste `next` from the response above)
+GET http://localhost:3000/?before=PASTE_NEXT_HERE
+Accept: application/json
+
 ### Feed as Markdown
 GET http://localhost:3000/
 Accept: text/markdown
