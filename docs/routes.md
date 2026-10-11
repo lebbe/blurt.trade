@@ -35,6 +35,7 @@ carry `Vary: Accept`.
 | `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
 | `/settings`        | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
 | `/settings/delete` | yes   | `{ viewer }`                                                                  | 401                     |
+| `/admin`           | admin | `{ viewer }`                                                                  | 401, 403 not an admin   |
 | `/admin/reports`   | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
 | `/about`           | —     | `{ viewer, contact }`                                                         |                         |
 | `/terms`           | —     | `{ viewer, contact }`                                                         |                         |
@@ -156,6 +157,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
 | `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
+| `/api/admin/blurts/delete`  | admin         | `blurtId`                            | 303 → `/admin`              | 204                                            |
+| `/api/admin/invites`         | admin         | `username`, `count`, optional `days` | 201 `/admin` with the codes | 201 `{ username, codes }`                      |
 | `/api/follow`                | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/like`                  | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |

@@ -110,7 +110,7 @@ type NavItem = { href: string; label: string; icon: IconName; current: boolean }
 // Every destination, on every page, always visible: no menus to open. Logged-in viewers
 // get their profile and settings; everyone else the way in.
 function navItems(): NavItem[] {
-  const { viewer, path } = pageContext()
+  const { viewer, isAdmin, path } = pageContext()
   const item = (href: string, label: string, icon: IconName, current = path === href) => ({
     href,
     label,
@@ -133,6 +133,7 @@ function navItems(): NavItem[] {
     item('/near', 'Near', 'pin'),
     item(profile, 'Profile', 'person', path === profile || path === `/${viewer.username}/edit`),
     item('/settings', 'Settings', 'sliders', path.startsWith('/settings')),
+    ...(isAdmin ? [item('/admin', 'Admin', 'shield', path.startsWith('/admin'))] : []),
   ]
 }
 

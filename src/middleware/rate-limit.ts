@@ -31,6 +31,7 @@ const defaults = {
   theme: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
+  mintInvites: '20/1h',
   // Reblurt and unreblurt share it. Quotes are blurts, under `blurt`.
   reblurt: '60/10m',
   // Like and unlike share it.

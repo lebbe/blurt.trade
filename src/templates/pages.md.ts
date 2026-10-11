@@ -31,6 +31,7 @@ import {
   reblurtAction,
   searchUrl,
   type AdminReportsData,
+  type AdminToolsData,
   type BlurtPageData,
   type DeleteAccountData,
   type DiscoverySection,
@@ -654,6 +655,23 @@ Sign-up is full. When it opens again, this page will say so.
     ${plural(waiting, 'person', 'people')} waiting.
 
     ${signup === 'waitlist' && md`Send ${code('POST /waitlist')} as a form or as JSON with ${usernameRules}. No email: check back at ${code('/waitlist?username=<username>')}.`}
+  `
+}
+
+export function adminToolsMarkdown({ minted }: AdminToolsData): Markdown {
+  return md`
+    # Admin
+
+    ${home}
+
+    ${minted ? md`Minted for ${minted.username}:` : ''}
+
+    ${minted ? join(minted.codes.map((minted) => md`- ${code(minted)}`), '\n') : ''}
+
+    - ${link('Open reports', '/admin/reports')}
+    - Delete a blurt: ${code('POST /api/admin/blurts/delete')} with ${code('blurtId')}
+    - Dismiss reports: ${code('POST /api/admin/reports/dismiss')} with ${code('blurtId')}
+    - Mint invite codes: ${code('POST /api/admin/invites')} with ${code('username')}, ${code('count')} (1–1000) and optionally ${code('days')}
   `
 }
 

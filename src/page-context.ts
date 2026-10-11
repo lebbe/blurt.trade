@@ -8,13 +8,14 @@ import { defaultTheme, type ThemeId } from './themes.ts'
 // handlers can render pages without passing it along.
 export type PageContext = {
   viewer: AuthenticatedUser | null
+  isAdmin: boolean // only looked up for logged-in viewers; shows the Admin link
   path: string
   theme: ThemeId
 }
 
 const storage = new AsyncLocalStorage<PageContext>()
 
-const outside: PageContext = { viewer: null, path: '', theme: defaultTheme }
+const outside: PageContext = { viewer: null, isAdmin: false, path: '', theme: defaultTheme }
 
 export function runWithPageContext<T>(context: PageContext, callback: () => T): T {
   return storage.run(context, callback)

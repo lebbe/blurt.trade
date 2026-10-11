@@ -166,6 +166,12 @@ export type WaitlistData = {
   entry: WaitlistEntry | null
 }
 
+// /admin: forms for the admin APIs. `minted` is set after minting invite codes.
+export type AdminToolsData = {
+  viewer: AuthenticatedUser
+  minted?: { username: string; codes: string[] }
+}
+
 // /admin/reports: blurts with open reports, the one waiting longest first.
 export type AdminReportsData = { viewer: AuthenticatedUser; reports: ReportedBlurt[] }
 
@@ -991,6 +997,71 @@ function BlurtPage({
           }
         </div>
         ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
+      </section>
+    <//>
+  `
+}
+
+// The admin tools: one form per admin API.
+function AdminToolsPage({ minted }: AdminToolsData) {
+  return html`
+    <${Page} title="Admin" tagline="Tools for moderators.">
+      <section class="panel" aria-label="Reports">
+        <h2>Reports</h2>
+        <p>Blurts that people have reported.</p>
+        <div class="actions">
+          <${ButtonLink} href="/admin/reports" icon="flag" label="Open reports" />
+        </div>
+      </section>
+      <section class="panel" aria-label="Delete a blurt">
+        <h2>Delete a blurt</h2>
+        <form method="post" action="/api/admin/blurts/delete">
+          <label
+            >Blurt id
+            <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
+          /></label>
+          <div class="actions">
+            <${SubmitButton} icon="trash" label="Delete blurt" kind="danger" />
+          </div>
+        </form>
+      </section>
+      <section class="panel" aria-label="Dismiss reports">
+        <h2>Dismiss reports</h2>
+        <p class="tiny">Closes every open report on the blurt, which stays up.</p>
+        <form method="post" action="/api/admin/reports/dismiss">
+          <label
+            >Blurt id
+            <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
+          /></label>
+          <div class="actions">
+            <${SubmitButton} icon="shield" label="Dismiss reports" kind="secondary" />
+          </div>
+        </form>
+      </section>
+      <section class="panel" aria-label="Mint invite codes">
+        <h2>Mint invite codes</h2>
+        <p class="tiny">The codes belong to the user and are listed on their profile.</p>
+        ${
+          minted &&
+          html`<div role="status">
+            <p>${plural(minted.codes.length, 'code', 'codes')} for ${minted.username}:</p>
+            <pre>${minted.codes.join('\n')}</pre>
+          </div>`
+        }
+        <form method="post" action="/api/admin/invites">
+          <label>Owner's username <input name="username" required /></label>
+          <label
+            >How many (1–1000)
+            <input name="count" type="number" min="1" max="1000" value="10" required
+          /></label>
+          <label
+            >Days until they expire (empty: never)
+            <input name="days" type="number" min="1" step="1"
+          /></label>
+          <div class="actions">
+            <${SubmitButton} icon="personPlus" label="Mint codes" />
+          </div>
+        </form>
       </section>
     <//>
   `
@@ -2016,6 +2087,10 @@ export function renderBlurtPage(
   reportError?: string,
 ): string {
   return renderDocument(h(BlurtPage, { ...data, composer, reportError }), blurtPageMeta(data))
+}
+
+export function renderAdminToolsPage(data: AdminToolsData): string {
+  return renderDocument(h(AdminToolsPage, data), { title: 'Admin', noindex: true })
 }
 
 export function renderAdminReportsPage(data: AdminReportsData): string {

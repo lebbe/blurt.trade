@@ -13,6 +13,7 @@ import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { runWithPageContext } from './page-context.ts'
+import { isAdmin } from './routes/state.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
@@ -51,10 +52,15 @@ app.use(authenticate)
 // After auth: who is looking, on which page and in which theme (from their access token),
 // for every page's frame.
 app.use((request, _response, next) => {
-  runWithPageContext(
-    { viewer: getViewer(request), path: request.path, theme: getTheme(request) },
-    next,
-  )
+  const viewer = getViewer(request)
+  ;(viewer ? isAdmin(viewer.id) : Promise.resolve(false))
+    .then((admin) => {
+      runWithPageContext(
+        { viewer, isAdmin: admin, path: request.path, theme: getTheme(request) },
+        next,
+      )
+    })
+    .catch(next)
 })
 app.use(homeRouter)
 app.use(infoRouter)

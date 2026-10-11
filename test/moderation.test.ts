@@ -134,3 +134,62 @@ test('reporting is limited per account', async () => {
     assert.deepEqual(statuses, [...Array<number>(20).fill(303), 429])
   })
 })
+
+test('the admin tools page, header link, and its delete and invite forms', async () => {
+  const adaCookie = await createSession('Ada')
+  const ownerCookie = await createSession('Owner')
+  await makeAdmin('Owner')
+  await request('POST', '/api/blurts', 'text=Doomed', { cookie: adaCookie })
+  const id = await blurtIdByText('Doomed')
+
+  // The Admin link is only for admins.
+  const adaHome = await request('GET', '/', '', { cookie: adaCookie })
+  assert.doesNotMatch(adaHome.body, /href="\/admin"/)
+  const ownerHome = await request('GET', '/', '', { cookie: ownerCookie })
+  assert.match(ownerHome.body, /href="\/admin"/)
+  assert.equal((await request('GET', '/admin')).statusCode, 401)
+  assert.equal((await request('GET', '/admin', '', { cookie: adaCookie })).statusCode, 403)
+  const tools = await request('GET', '/admin', '', { cookie: ownerCookie })
+  assert.equal(tools.statusCode, 200)
+  assert.match(tools.body, /action="\/api\/admin\/invites"/)
+
+  const forbidden = await request('POST', '/api/admin/invites', 'username=Ada&count=2', {
+    cookie: adaCookie,
+  })
+  assert.equal(forbidden.statusCode, 403)
+  assert.equal(
+    (await request('POST', '/api/admin/invites', 'username=Ada&count=0', { cookie: ownerCookie }))
+      .statusCode,
+    400,
+  )
+  assert.equal(
+    (await request('POST', '/api/admin/invites', 'username=Nobody&count=1', { cookie: ownerCookie }))
+      .statusCode,
+    404,
+  )
+  const minted = await sendJson(
+    '/api/admin/invites',
+    { username: 'ada', count: 3, days: 7 },
+    { cookie: ownerCookie },
+  )
+  assert.equal(minted.statusCode, 201)
+  assert.equal(JSON.parse(minted.body).codes.length, 3)
+  const { rows } = await db().query('SELECT count(*)::int AS n FROM invite_codes WHERE code = ANY($1)', [JSON.parse(minted.body).codes])
+  assert.equal(rows[0].n, 3)
+
+  assert.equal(
+    (await request('POST', '/api/admin/blurts/delete', `blurtId=${id}`, { cookie: adaCookie }))
+      .statusCode,
+    403,
+  )
+  const deleted = await request('POST', '/api/admin/blurts/delete', `blurtId=${id}`, {
+    cookie: ownerCookie,
+  })
+  assert.equal(deleted.statusCode, 303)
+  assert.equal(deleted.location, '/admin')
+  assert.equal(
+    (await request('POST', '/api/admin/blurts/delete', `blurtId=${id}`, { cookie: ownerCookie }))
+      .statusCode,
+    404,
+  )
+})
