@@ -50,7 +50,7 @@ import {
 export const usersRouter = Router()
 
 // Profiles live at /:username/, so a username must never equal a top-level path.
-// Every top-level route must be listed here (app.test.ts fails otherwise), plus names
+// Every top-level route must be listed here (test/users.test.ts fails otherwise), plus names
 // we're likely to want for future pages. A POST shares its path with its GET page; POSTs
 // without a page live under /api/, so new actions never need a new entry.
 // Compared in lower case: Express routes ignore case.

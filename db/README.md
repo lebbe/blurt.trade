@@ -132,6 +132,11 @@ with `TEST_DATABASE_URL`) and its migrations go straight to PostgreSQL (override
 one of which needs the real replica (`blurt_test_read`, override with
 `TEST_DATABASE_READ_URL`). Tests use a fake embedder, so they don't load the model.
 
+The tests live in `test/`, one file per area, with the shared setup in `test/helpers.ts`.
+`npm test` runs them all in one process (`--test-isolation=none`): they share the one
+database, and starting a process per file costs seconds each on `/mnt/d`. Run one area
+with `node --test test/search.test.ts`, or one test with `--test-name-pattern`.
+
 ## Schema changes
 
 Migrations use [node-pg-migrate](https://github.com/salsita/node-pg-migrate) with

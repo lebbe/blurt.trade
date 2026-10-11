@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { code, escape, join, link, md, raw } from './markdown.ts'
+import { code, escape, join, link, md, raw } from '../src/templates/markdown.ts'
 
 test('escapes interpolated text but not Markdown values', () => {
   const name = '*bold* [x](javascript:alert(1)) <b>'
