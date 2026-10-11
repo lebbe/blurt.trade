@@ -126,7 +126,26 @@ const inviteCode = z
     return code
   })
 
-const createUserSchema = z.object({ username: newUsername, password, inviteCode })
+// The form sends a second password plus a "skip" checkbox; API clients may leave both out.
+// The repeat must match unless it's skipped.
+const createUserSchema = z
+  .object({
+    username: newUsername,
+    password,
+    passwordConfirm: z.string().optional(),
+    skipConfirm: z.unknown().optional(),
+    inviteCode,
+  })
+  .superRefine((data, context) => {
+    const skipped = Boolean(data.skipConfirm) && data.skipConfirm !== 'false'
+    if (data.passwordConfirm !== undefined && !skipped && data.passwordConfirm !== data.password) {
+      context.addIssue({
+        code: 'custom',
+        path: ['passwordConfirm'],
+        message: "The passwords don't match",
+      })
+    }
+  })
 
 const waitlistSchema = z.object({ username: newUsername })
 

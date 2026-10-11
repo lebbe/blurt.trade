@@ -175,6 +175,17 @@ code {
   letter-spacing: 0.04em;
 }
 
+.top-nav form.logout {
+  display: contents;
+}
+
+.top-nav form.logout button {
+  padding: 8px 10px;
+  font-size: 0.92rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .top-nav a[aria-current='page'] {
   background: var(--signal);
   color: #0f1a1a;
@@ -326,6 +337,42 @@ textarea::placeholder {
 textarea {
   min-height: 7rem;
   resize: vertical;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+label.check input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+label.check input[type='checkbox']:checked {
+  /* A filled inner square: pure CSS, since the CSP allows no data: images. */
+  background:
+    linear-gradient(#0f1a1a, #0f1a1a) center / 55% 55% no-repeat,
+    #fff;
+}
+
+.hint.password-hint {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--warn);
+  margin: 0.5em;
 }
 
 input[type='radio'] {

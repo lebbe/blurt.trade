@@ -137,6 +137,7 @@ function navItems(): NavItem[] {
 }
 
 function TopNav() {
+  const { viewer } = pageContext()
   return html`
     <nav class="top-nav" aria-label="Main">
       ${navItems().map(
@@ -145,6 +146,10 @@ function TopNav() {
             ><${Icon} name=${icon} /><span>${label}</span></a
           >`,
       )}
+      ${viewer &&
+      html`<form method="post" action="/api/logout" class="logout">
+        <button type="submit" class="secondary"><${Icon} name="logout" /><span>Log out</span></button>
+      </form>`}
     </nav>
   `
 }

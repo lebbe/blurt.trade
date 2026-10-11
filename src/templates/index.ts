@@ -444,11 +444,23 @@ function CreateUserForm({
         <input
           name="password"
           type="password"
+          autocomplete="new-password"
           minlength=${passwordMinLength}
           maxlength=${passwordMaxLength}
           required
       /></label>
-      <p class="hint">${noPasswordReset}</p>
+      <label
+        >Repeat password
+        <input
+          name="passwordConfirm"
+          type="password"
+          autocomplete="new-password"
+          maxlength=${passwordMaxLength}
+      /></label>
+      <label class="check"
+        ><input type="checkbox" name="skipConfirm" value="1" /> Skip repeating the password</label
+      >
+      <p class="hint password-hint">${noPasswordReset}</p>
       <label
         >Invite code${inviteRequired ? '' : ' (optional)'}
         <input
