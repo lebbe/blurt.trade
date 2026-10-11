@@ -155,9 +155,11 @@ function TopNav() {
   `
 }
 
-// The frame of every page: the header (title, the page's own buttons, search and the
-// navigation), then the page in <main>, with `aside` beside it on wide screens and under
-// it on narrow ones. `lead` goes before the title (a profile's avatar).
+// The frame of every page: the same header everywhere (site name, search and the
+// navigation), then the page's own headline (`lead`, title, tagline and `actions`) at the top
+// of the page, then <main>, with `aside` beside it on wide screens and under it on narrow ones.
+// `lead` goes before the title (a profile's avatar). The home page's title is the site name,
+// so it gets no second headline: the header's name is its <h1>.
 export function Page({
   title,
   tagline,
@@ -175,20 +177,32 @@ export function Page({
   search?: boolean
   children?: ComponentChildren
 }) {
+  const isHome = title === siteName
+  const name = isHome ? html`<h1>${siteName}</h1>` : html`<p class="site-name">${siteName}</p>`
   return html`
     <header class="site-head">
       <div class="brand-row">
         <div class="brand">
-          ${lead}
           <div>
-            <h1>${title}</h1>
-            ${tagline && html`<p class="tagline">${tagline}</p>`}
+            ${isHome ? name : html`<a href="/" class="site-name-link">${name}</a>`}
+            <p class="tagline">${siteDescription}</p>
           </div>
         </div>
-        ${(actions || search) && html`<div class="head-actions">${actions} ${search && html`<${SiteSearch} />`}</div>`}
+        ${search && html`<div class="head-actions"><${SiteSearch} /></div>`}
       </div>
       <${TopNav} />
     </header>
+    ${
+      !isHome &&
+      html`<div class="page-title">
+        ${lead}
+        <div class="page-title-text">
+          <h1>${title}</h1>
+          ${tagline && html`<p class="tagline">${tagline}</p>`}
+        </div>
+        ${actions && html`<div class="head-actions">${actions}</div>`}
+      </div>`
+    }
     <div class=${aside ? 'layout' : 'layout single'}>
       <main>${children}</main>
       ${aside && html`<aside>${aside}</aside>`}

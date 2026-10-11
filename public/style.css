@@ -116,11 +116,54 @@ code {
   min-width: 0;
 }
 
-.brand h1 {
+.page-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.page-title-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-title {
+  margin-top: 26px;
+}
+
+.page-title h1 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.7rem;
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
+}
+
+.site-name-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand h1,
+.site-name {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: var(--pop-strong);
+  text-shadow: 0 0 18px var(--glow-soft);
+  overflow-wrap: anywhere;
+}
+
+.site-head .tagline {
+  margin-top: 4px;
+}
+
+.site-head .brand-row {
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--line-soft);
 }
 
 .tagline {
@@ -162,7 +205,7 @@ code {
   align-items: center;
   gap: 0.4em;
   text-decoration: none;
-  padding: 8px 10px;
+  padding: 2px 8px;
   border: 2px solid var(--line);
   background: var(--panel-alt);
   color: var(--text);
@@ -180,7 +223,7 @@ code {
 }
 
 .top-nav form.logout button {
-  padding: 8px 10px;
+  padding: 2px 8px;
   font-size: 0.92rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -882,7 +925,7 @@ button.danger,
   height: 8rem;
 }
 
-.brand .avatar-large {
+.page-title .avatar-large {
   width: 84px;
   height: 84px;
   padding: 4px;
@@ -1196,9 +1239,12 @@ button.danger,
     padding: 12px;
   }
 
-  .head-actions,
-  .site-search {
+  .head-actions {
     width: 100%;
+  }
+
+  .site-head .head-actions {
+    display: none;
   }
 
   .site-search input {
