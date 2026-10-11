@@ -546,7 +546,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Backups
 
-    The database is backed up every night, encrypted, to a storage provider. Backups are kept for 30 days, so anything deleted is gone from them within 30 days.
+    No backups of the database are currently being made.
 
     ## Deleting your account
 

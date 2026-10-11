@@ -1816,8 +1816,7 @@ function PrivacyPage({ contact }: InfoPageData) {
       </ul>
       <h2>Backups</h2>
       <p>
-        The database is backed up every night, encrypted, to a storage provider. Backups are kept
-        for 30 days, so anything deleted is gone from them within 30 days.
+        No backups of the database are currently being made.
       </p>
       <h2>Deleting your account</h2>
       <p>
