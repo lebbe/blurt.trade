@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Grants or revokes admin rights (users.is_admin, see docs/routes.md, Deleting and reporting).
+#
+#   ./scripts/admin grant <username>    # or: add
+#   ./scripts/admin revoke <username>   # or: remove
+#
+# Uses DATABASE_URL, like the app (PgBouncer on port 6433 by default). The username is
+# matched in lower case, like the app does.
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 grant|add|revoke|remove <username>" >&2
+  exit 1
+}
+
+[ $# -eq 2 ] || usage
+verb=$1
+username=$2
+
+case "$verb" in
+  grant | add) is_admin=true ;;
+  revoke | remove) is_admin=false ;;
+  *) usage ;;
+esac
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+# pg is a CommonJS package, so plain node runs this without the TypeScript loader.
+ADMIN_USERNAME=$username ADMIN_VALUE=$is_admin ROOT=$root \
+  node -e '
+    const { Pool } = require(process.env.ROOT + "/node_modules/pg")
+    const url = process.env.DATABASE_URL ?? "postgres://blurt:blurt@localhost:6433/blurt"
+    const pool = new Pool({ connectionString: url, max: 1 })
+    pool
+      .query(
+        "UPDATE users SET is_admin = $1 WHERE lower(username) = lower($2) RETURNING username",
+        [process.env.ADMIN_VALUE === "true", process.env.ADMIN_USERNAME],
+      )
+      .then(({ rows }) => {
+        if (rows.length === 0) {
+          console.error("No user named " + process.env.ADMIN_USERNAME)
+          process.exitCode = 1
+          return
+        }
+        const state = process.env.ADMIN_VALUE === "true" ? "is now an admin" : "is no longer an admin"
+        console.log(rows[0].username + " " + state)
+      })
+      .catch((error) => {
+        console.error(error.message)
+        process.exitCode = 1
+      })
+      .finally(() => pool.end())
+  '
