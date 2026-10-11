@@ -1,0 +1,40 @@
+# Runs on the server in ~/blurt, next to .env. Copied there by `npm run deploy`.
+# The app listens on 127.0.0.1:3001 only; nginx is the way in from outside.
+services:
+  db:
+    image: ghcr.io/lebbe/blurt.trade-db:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: blurt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: blurt
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U blurt -d blurt']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: ghcr.io/lebbe/blurt.trade:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3001:3000'
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: '1'
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      DATABASE_URL: postgres://blurt:${POSTGRES_PASSWORD}@db:5432/blurt
+      # One app container, so it can run the migrations itself on start.
+      MIGRATE_ON_START: 'true'
+      PUBLIC_URL: https://blurt.trade
+      CONTACT_REPO_URL: https://github.com/lebbe/blurt.trade
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+
+volumes:
+  pgdata:

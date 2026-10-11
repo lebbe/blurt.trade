@@ -12,7 +12,8 @@
     "start": "node src/server.ts",
     "migrate": "node db/migrate.ts",
     "check-config": "node src/config.ts",
-    "prefetch-model": "node src/embeddings.ts"
+    "prefetch-model": "node src/embeddings.ts",
+    "deploy": "bash docker/deploy.sh"
   },
   "keywords": [],
   "author": "",

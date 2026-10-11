@@ -1,4 +1,4 @@
-name: Build and publish image
+name: Build and publish images
 
 on:
   push:
@@ -11,6 +11,16 @@ permissions:
 
 jobs:
   image:
+    strategy:
+      matrix:
+        include:
+          - name: app
+            context: .
+            image: ghcr.io/lebbe/blurt.trade
+          - name: db
+            context: docker/postgres
+            image: ghcr.io/lebbe/blurt.trade-db
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +32,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           push: true
           tags: |
-            ghcr.io/lebbe/blurt.trade:latest
-            ghcr.io/lebbe/blurt.trade:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
