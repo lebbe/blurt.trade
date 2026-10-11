@@ -3,7 +3,7 @@ import { getViewer } from '../middleware/auth.ts'
 import { rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError } from '../negotiate.ts'
 import { charLength, searchQueryMaxLength } from '../limits.ts'
-import { markViewerLikes, parseCursor, searchBlurts, searchUsers } from './state.ts'
+import { markViewerFlags, parseCursor, searchBlurts, searchUsers } from './state.ts'
 import { renderSearchPage, type SearchData } from '../templates/index.ts'
 import { searchMarkdown } from '../templates/pages.md.ts'
 
@@ -46,7 +46,7 @@ searchRouter.get('/search', rateLimit('search'), async (request, response) => {
     username !== '' && before === null ? searchUsers(username) : [],
     query !== '' ? searchBlurts(query, before) : { items: [], next: null },
   ])
-  await markViewerLikes(viewer?.id ?? null, blurts)
+  await markViewerFlags(viewer?.id ?? null, blurts)
   const data: SearchData = { viewer, query, users, blurts, next }
   represent(request, response, data, { html: renderSearchPage, markdown: searchMarkdown })
 })

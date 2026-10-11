@@ -1,4 +1,4 @@
-import type { Blurt, InviteCode, UserProfile } from '../routes/state.ts'
+import type { Blurt, InviteCode, QuotedBlurt, UserProfile } from '../routes/state.ts'
 import type { Contact } from '../config.ts'
 import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
 import { blurtMaxLength, isWebUrl } from '../limits.ts'
@@ -17,7 +17,9 @@ import {
   nearPageUrl,
   noPasswordReset,
   olderBlurtsUrl,
+  parentUrl,
   plural,
+  reblurtAction,
   searchUrl,
   type AdminReportsData,
   type BlurtPageData,
@@ -48,14 +50,31 @@ function viewerLine(viewer: Viewer): Markdown {
     : md`${link('Log in', '/login')} or ${link('create a profile', '/createUser')} to blurt.`
 }
 
-// `replies` are quoted inline (the feed); the thread link covers the rest.
-function blurtMarkdown(blurt: Blurt, replies: Blurt[] = []): Markdown {
+// The blurt a quote quotes, as a blockquote under its text.
+function quotedMarkdown(quoted: QuotedBlurt): Markdown {
+  return quoted.deleted
+    ? md`
+> _Content is deleted._
+      `
+    : md`> **${quoted.username}** (${link(quoted.createdAt, blurtUrl(quoted))}): ${quoted.text}`
+}
+
+// `replies` are quoted inline (the feed); the thread link covers the rest. `inThread`: see
+// BlurtCard.
+function blurtMarkdown(blurt: Blurt, replies: Blurt[] = [], inThread = false): Markdown {
+  const parent = !inThread && parentUrl(blurt)
   return md`
     ### ${blurt.username ?? 'Deleted'}
 
-    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}${!blurt.deleted && ` · ${likesText(blurt)}`}
+    ${blurt.reblurtedBy && md`Reblurted by ${link(blurt.reblurtedBy, `/${blurt.reblurtedBy}/`)}`}
+
+    ${parent && md`Replying to ${link(blurt.parentUsername ?? 'a deleted blurt', parent)}`}
+
+    ${link(blurt.createdAt, blurtUrl(blurt))} · ${plural(blurt.replyCount, 'reply', 'replies')}${!blurt.deleted && ` · ${likesText(blurt)} · ${reblurtsText(blurt)}`}
 
     ${blurt.deleted ? raw('_This blurt was deleted._') : blurt.text}
+
+    ${blurt.quoted && quotedMarkdown(blurt.quoted)}
 
     ${replies.map((reply) =>
       reply.deleted
@@ -71,14 +90,27 @@ function likesText(blurt: Blurt): string {
   return `${plural(blurt.likeCount, 'like')}${blurt.viewerLikes ? ' (you like it)' : ''}`
 }
 
+function reblurtsText(blurt: Blurt): string {
+  return `${plural(blurt.reblurtCount, 'reblurt')}${blurt.viewerReblurted ? ' (you reblurted it)' : ''}`
+}
+
 // What the viewer can do to the blurt, as the requests to send.
 function blurtActionsMarkdown(viewer: Viewer, blurt: Blurt, reported: boolean): Markdown | null {
   const like =
     viewer &&
     !blurt.deleted &&
     md`${blurt.viewerLikes ? 'Unlike' : 'Like'} it with ${code(`POST ${blurt.viewerLikes ? '/api/unlike' : '/api/like'}`)} and ${code(`blurtId=${blurt.id}`)}.`
+  const reblurt = reblurtAction(viewer, blurt)
+  const quote =
+    viewer &&
+    !blurt.deleted &&
+    md`Quote it with ${code('POST /api/blurts')}, ${code('text')} and ${code(`reblurtOfId=${blurt.id}`)}.`
   return md`
     ${like}
+
+    ${reblurt && md`${reblurt === 'unreblurt' ? 'Undo your reblurt' : 'Reblurt it'} with ${code(`POST /api/${reblurt}`)} and ${code(`blurtId=${blurt.id}`)}.`}
+
+    ${quote}
 
     ${actionMarkdown(viewer, blurt, reported)}
   `
@@ -99,8 +131,8 @@ You reported this blurt.
   return null
 }
 
-function blurtList(blurts: Blurt[]): Markdown {
-  return md`${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt)) : 'Nothing here yet.'}`
+function blurtList(blurts: Blurt[], inThread = false): Markdown {
+  return md`${blurts.length > 0 ? blurts.map((blurt) => blurtMarkdown(blurt, [], inThread)) : 'Nothing here yet.'}`
 }
 
 function discoveryMarkdown(section: DiscoverySection): Markdown {
@@ -183,13 +215,13 @@ export function blurtPageMarkdown({
       `
     }
 
-    ${blurtMarkdown(blurt)}
+    ${blurtMarkdown(blurt, [], true)}
 
     ${blurtActionsMarkdown(viewer, blurt, reported)}
 
     ## Replies
 
-    ${blurtList(replies)}
+    ${blurtList(replies, true)}
 
     ${next && link('More replies', moreRepliesUrl(blurt, next))}
 
@@ -468,6 +500,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - Who you follow.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
+    - Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
     - Your invite codes, and who signed up with them. Who invited you shows on your profile.
     - Blurts you report, with your reason and when.
     - Your sessions: one record per login, with when it started and was last used. No IP address and no browser details.
@@ -476,7 +509,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     For deleted accounts, only the username is kept, in lower case and with nothing else, so it can't be taken again.
 
-    Public: your username, profile, avatar, blurts, follower and like counts, and who invited you. Everything else is private, though admins see who reported what.
+    Public: your username, profile, avatar, blurts, reblurts, follower, like and reblurt counts, and who invited you. Everything else is private, though admins see who reported what.
 
     ## What is not stored
 
@@ -498,9 +531,9 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Deleting your account
 
-    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, your blurts and their embeddings, who you follow and who follows you, your likes (and the likes on your blurts), your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
 
-    What stays: a blurt someone replied to stays as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still hold the account until they expire, 30 days at most.
+    What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still hold the account until they expire, 30 days at most.
 
     ## Your rights
 

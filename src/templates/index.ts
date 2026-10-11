@@ -21,6 +21,7 @@ import type {
   FeedItem,
   FollowStats,
   InviteCode,
+  QuotedBlurt,
   ReportedBlurt,
   SignupState,
   UserMatch,
@@ -163,10 +164,12 @@ export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
 // /settings/delete, the account deletion confirmation.
 export type DeleteAccountData = { viewer: AuthenticatedUser }
 
+// `parentId` makes it a reply form, `reblurtOfId` a quote form.
 type ComposerProps = {
   text?: string
   validationError?: string
   parentId?: number
+  reblurtOfId?: number
   label?: string
   button?: string
 }
@@ -190,6 +193,7 @@ function Composer({
   text = '',
   validationError,
   parentId,
+  reblurtOfId,
   label = 'Blurt',
   button = 'Blurt it',
 }: ComposerProps) {
@@ -197,6 +201,10 @@ function Composer({
     <form method="post" action="/api/blurts">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
       ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
+      ${
+        reblurtOfId !== undefined &&
+        html`<input type="hidden" name="reblurtOfId" value=${reblurtOfId} />`
+      }
       <label
         >${label} <textarea name="text" maxlength=${blurtMaxLength} required>${text}</textarea>
       </label>
@@ -413,8 +421,8 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
 
 // What deleting an account does: on the confirmation page, in both views.
 export const accountDeletionEffects = [
-  'Your profile, avatar, location, follows (both ways), likes, sessions, invite codes and reports are deleted.',
-  'Your blurts and replies are deleted. One that someone replied to stays as an empty placeholder, with no text and no author, so their replies still read.',
+  'Your profile, avatar, location, follows (both ways), likes, reblurts, sessions, invite codes and reports are deleted.',
+  'Your blurts, replies and quotes are deleted: their text is removed, and nothing shows they were yours. One that someone replied to stays as an empty placeholder, with no text and no author, so their replies still read.',
   'Your username is retired: nobody can sign up with it again, so nobody can pass for you.',
   "You're logged out everywhere. It can't be undone; nightly backups still hold the account for up to 30 days.",
 ]
@@ -448,8 +456,32 @@ function DeleteAccountPage({ viewer, validationError }: DeleteAccountData & Form
 
 // A deleted placeholder has no author, so it lives at /deleted/:id ('deleted' is a
 // reserved username). Its page also answers under the old author's name.
-export function blurtUrl(blurt: Blurt): string {
+export function blurtUrl(blurt: Pick<Blurt, 'id' | 'username'>): string {
   return `/${blurt.username ?? 'deleted'}/${blurt.id}`
+}
+
+// The blurt a reply replies to. Its author is null when that blurt was deleted.
+export function parentUrl(blurt: Blurt): string | null {
+  return blurt.parentId === null
+    ? null
+    : blurtUrl({ id: blurt.parentId, username: blurt.parentUsername })
+}
+
+// Where the quote form for a blurt is: on its page.
+export function quoteUrl(blurt: Blurt): string {
+  return `${blurtUrl(blurt)}#quote`
+}
+
+// Logged-in viewers can plain-reblurt anyone's blurt but their own (quoting is fine), and
+// undo a reblurt they made. Placeholders take neither.
+export function reblurtAction(viewer: Viewer, blurt: Blurt): 'reblurt' | 'unreblurt' | null {
+  if (!viewer || blurt.deleted) {
+    return null
+  }
+  if (blurt.viewerReblurted) {
+    return 'unreblurt'
+  }
+  return viewer.username === blurt.username ? null : 'reblurt'
 }
 
 export function deleteBlurtPath(blurt: Blurt): string {
@@ -504,6 +536,58 @@ function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
   `
 }
 
+// The count for everyone; a Reblurt / Undo reblurt button where reblurtAction allows one.
+// Quoting is a link to the quote form on the blurt's page.
+function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
+  const count = html`<span class="like-count">${plural(blurt.reblurtCount, 'reblurt')}</span>`
+  const action = reblurtAction(viewer, blurt)
+  const quote = viewer && html`<a href=${quoteUrl(blurt)}>Quote</a>`
+  if (!action) {
+    return html`${count} ${quote}`
+  }
+  return html`
+    <form method="post" action="/api/${action}" class="like-form">
+      <input type="hidden" name="blurtId" value=${blurt.id} />
+      <button type="submit" aria-pressed=${action === 'unreblurt' ? 'true' : 'false'}>
+        ${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
+      </button>
+      ${count}
+    </form>
+    ${quote}
+  `
+}
+
+// The blurt a quote quotes, under its text: one level, so a quote in it shows only its own
+// text. A deleted one says so, and nothing else.
+function QuotedCard({ quoted }: { quoted: QuotedBlurt }) {
+  if (quoted.deleted) {
+    return html`<blockquote class="quoted"><p class="empty">Content is deleted.</p></blockquote>`
+  }
+  return html`
+    <blockquote class="quoted">
+      <div class="blurt-meta">
+        <strong><a href="/${quoted.username}/">${quoted.username}</a></strong>
+        <a href=${blurtUrl(quoted)}
+          ><time datetime=${quoted.createdAt.toISOString()}
+            >${quoted.createdAt.toLocaleString()}</time
+          ></a
+        >
+      </div>
+      <p>${quoted.text}</p>
+    </blockquote>
+  `
+}
+
+function ReplyingTo({ blurt }: { blurt: Blurt }) {
+  const url = parentUrl(blurt)
+  return (
+    url &&
+    html`<p class="replying-to">
+      Replying to <a href=${url}>${blurt.parentUsername ?? 'a deleted blurt'}</a>
+    </p>`
+  )
+}
+
 // Two clicks, no JS: the <details> opens the form, its button deletes for good.
 function DeleteForm({ blurt }: { blurt: Blurt }) {
   return html`
@@ -533,11 +617,15 @@ function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
 
 // `replies` are shown inline (the feed); the link below covers the rest of the thread.
 // `viewer` decides the Delete / Report actions; `reported` says the viewer already did.
+// `inThread`: shown under (or as) the blurt it replies to, so "Replying to" is left out.
+// A plain reblurt in a list is its original with "Reblurted by" on top; every button acts
+// on the original.
 function BlurtCard({
   blurt,
   viewer = null,
   replies = [],
   showActions = true,
+  inThread = false,
   reported = false,
   reportError,
 }: {
@@ -545,6 +633,7 @@ function BlurtCard({
   viewer?: Viewer
   replies?: Blurt[]
   showActions?: boolean
+  inThread?: boolean
   reported?: boolean
   reportError?: string
 }) {
@@ -561,7 +650,7 @@ function BlurtCard({
   const replyCards =
     replies.length > 0 &&
     html`<div class="replies">
-      ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} />`)}
+      ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} inThread />`)}
     </div>`
 
   if (blurt.deleted) {
@@ -592,6 +681,13 @@ function BlurtCard({
     <article class="blurt" id=${blurtAnchor(blurt)}>
       <${AvatarSvg} avatar=${blurt.avatar} />
       <div class="blurt-body">
+        ${
+          blurt.reblurtedBy &&
+          html`<p class="reblurted-by">
+            Reblurted by <a href="/${blurt.reblurtedBy}/">${blurt.reblurtedBy}</a>
+          </p>`
+        }
+        ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
         <div class="blurt-meta">
           <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
           <a href=${blurtUrl(blurt)}
@@ -601,9 +697,10 @@ function BlurtCard({
           >
         </div>
         <p>${blurt.text}</p>
-        ${replyCards}
+        ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`} ${replyCards}
         <div class="blurt-actions">
           <${Likes} blurt=${blurt} viewer=${viewer} />
+          <${Reblurts} blurt=${blurt} viewer=${viewer} />
           ${showActions && html`<a href=${blurtUrl(blurt)}>${threadLink}</a>`}
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
           ${
@@ -648,9 +745,23 @@ function BlurtPage({
         blurt=${blurt}
         viewer=${viewer}
         showActions=${false}
+        inThread
         reported=${reported}
         reportError=${reportError}
       />
+      ${
+        viewer &&
+        !blurt.deleted &&
+        html`<section aria-label="Quote" id="quote">
+          <h2>Quote</h2>
+          <${Composer}
+            ...${composer?.reblurtOfId === undefined ? {} : composer}
+            reblurtOfId=${blurt.id}
+            label="Your take, with this blurt under it"
+            button="Quote it"
+          />
+        </section>`
+      }
       <section aria-label="Replies">
         <h2>Replies</h2>
         ${
@@ -658,7 +769,7 @@ function BlurtPage({
             ? null
             : viewer
               ? html`<${Composer}
-                  ...${composer ?? {}}
+                  ...${composer?.reblurtOfId === undefined ? (composer ?? {}) : {}}
                   parentId=${blurt.id}
                   label="Reply"
                   button="Reply"
@@ -667,7 +778,9 @@ function BlurtPage({
         }
         ${
           replies.length > 0
-            ? replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} />`)
+            ? replies.map(
+                (reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} inThread />`,
+              )
             : html`<p class="empty">No replies yet.</p>`
         }
         ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
@@ -1371,6 +1484,10 @@ function PrivacyPage({ contact }: InfoPageData) {
           who liked it.
         </li>
         <li>
+          Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your
+          followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
+        </li>
+        <li>
           Your invite codes, and who signed up with them. Who invited you shows on your profile.
         </li>
         <li>Blurts you report, with your reason and when.</li>
@@ -1388,8 +1505,8 @@ function PrivacyPage({ contact }: InfoPageData) {
         can't be taken again.
       </p>
       <p>
-        Public: your username, profile, avatar, blurts, follower and like counts, and who invited
-        you. Everything else is private, though admins see who reported what.
+        Public: your username, profile, avatar, blurts, reblurts, follower, like and reblurt counts,
+        and who invited you. Everything else is private, though admins see who reported what.
       </p>
       <h2>What is not stored</h2>
       <ul>
@@ -1433,16 +1550,18 @@ function PrivacyPage({ contact }: InfoPageData) {
       <p>
         <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It
         deletes at once, in one go, everything above that belongs to the account: your profile,
-        avatar and location, your blurts and their embeddings, who you follow and who follows you,
-        your likes (and the likes on your blurts), your invite codes, your reports, your sessions
-        and your waitlist entry. You're logged out everywhere.
+        avatar and location, the text of your blurts and their embeddings, your reblurts, who you
+        follow and who follows you, your likes (and the likes on your blurts), your invite codes,
+        your reports, your sessions and your waitlist entry. You're logged out everywhere.
       </p>
       <p>
-        What stays: a blurt someone replied to stays as an empty placeholder, with no text and no
-        author, so the thread still reads. The invite code you signed up with stays marked as used,
-        with nothing linking it to you. Your username goes on the list of retired names, with
-        nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go
-        down. Backups still hold the account until they expire, 30 days at most.
+        What stays: an empty record of the account, with no username, password or profile, and an
+        empty row for each of your blurts, with no text, which shows nowhere and names nobody. A
+        blurt someone replied to shows as an empty placeholder, with no text and no author, so the
+        thread still reads. The invite code you signed up with stays marked as used, with nothing
+        linking it to you. Your username goes on the list of retired names, with nothing else, so
+        nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still
+        hold the account until they expire, 30 days at most.
       </p>
       <h2>Your rights</h2>
       <p>

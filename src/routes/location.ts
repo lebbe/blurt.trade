@@ -7,7 +7,7 @@ import {
   getLocation,
   getUserProfileByUsername,
   listNearbyBlurts,
-  markViewerLikes,
+  markViewerFlags,
   parseCursor,
   setLocation,
 } from './state.ts'
@@ -152,7 +152,7 @@ locationRouter.get('/near', requireAuth, async (request, response) => {
   const { items: blurts, next } = location
     ? await listNearbyBlurts(viewer.id, radius, before)
     : { items: [], next: null }
-  await markViewerLikes(viewer.id, blurts)
+  await markViewerFlags(viewer.id, blurts)
   represent(
     request,
     response,

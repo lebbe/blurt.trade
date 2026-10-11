@@ -41,11 +41,13 @@ carry `Vary: Accept`.
 | `/privacy`         | —     | `{ viewer, contact }`                                                         |                         |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
-  follow) when you're logged in and follow more than 10 accounts. Otherwise it's the
-  everyone feed (`feed: 'everyone'`), and if you follow anyone, `followedBlurts` holds
-  the latest 5 top-level blurts from them, shown on top of the first page (empty
-  otherwise). `hasFollowingFeed` says whether you get the following feed, and with it
-  Following / Everyone tabs. `/everyone` is the everyone feed for everybody.
+  follow, and what they reblurted) when you're logged in and follow more than 10
+  accounts. Otherwise it's the everyone feed (`feed: 'everyone'`), and if you follow
+  anyone, `followedBlurts` holds the latest 5 from them (reblurts included), shown on
+  top of the first page (empty otherwise). `hasFollowingFeed` says whether you get the
+  following feed, and with it Following / Everyone tabs. `/everyone` is the everyone
+  feed for everybody; it leaves plain reblurts out, since their originals are in it
+  already (see Reblurts).
 - `discovery` holds "discovery" sections mixed into the first page of either feed for
   logged-in viewers (empty otherwise, and on later pages): `{ kind, after, blurts }`,
   shown after the first `after` of `blurts`. One section after every 20 blurts (one at
@@ -59,14 +61,20 @@ carry `Vary: Accept`.
   HTML renders them as plain sections between the blurts, so they work without JS.
 - `follows` is `{ followerCount, followingCount, viewerFollows }`. `viewerFollows` is
   `false` for anonymous visitors and on your own profile.
-- `Blurt` is `{ id, username, text, createdAt, parentId, replyCount, avatar, deleted,
-  likeCount, viewerLikes }`,
+- `Blurt` is `{ id, username, text, createdAt, parentId, parentUsername, replyCount,
+  avatar, deleted, likeCount, viewerLikes, reblurtCount, viewerReblurted, reblurtedBy,
+  quoted }`,
   with `createdAt` as an ISO 8601 string and `avatar` the blurter's (see Avatar below).
   `deleted` is `true` for a deleted blurt's placeholder in a thread, whose `username`,
-  `text` and `avatar` are `null` (see Deleting and reporting). A `FeedItem` is a
-  top-level blurt plus `replies`, its latest two replies. `likeCount` is how many people
-  like it, `viewerLikes` whether you do (`false` for anonymous visitors), on every page
-  that lists blurts (see Likes).
+  `text`, `avatar` and `quoted` are `null` (see Deleting and reporting). A `FeedItem` is
+  a top-level blurt plus `replies`, its latest two replies. `likeCount` is how many
+  people like it, `viewerLikes` whether you do (`false` for anonymous visitors), on every
+  page that lists blurts (see Likes); `reblurtCount` and `viewerReblurted` the same for
+  plain reblurts (see Reblurts). `parentUsername` is the author of the blurt it replies
+  to (`null` for top-level blurts, and when that one was deleted); lists show "Replying
+  to" with it. `reblurtedBy` is set when this item of a list is someone's plain reblurt
+  of it. `quoted` is the blurt a quote-reblurt quotes, `{ id, username, text, createdAt,
+  avatar, deleted }`, or `null`.
 - `reported` on a blurt page says whether the viewer has reported the blurt (`false`
   for anonymous viewers).
 - `reports` on `/admin/reports` is `[{ blurt, reports: [{ reporter, reason, createdAt }] }]`:
@@ -77,7 +85,8 @@ carry `Vary: Accept`.
   blurts (newest first), `/:username/:id?after=<next>` for later replies (oldest first).
   The HTML has the same as an "Older blurts" / "More replies" link, so it works without
   JS. Cursors are keyset positions on `(created_at, id)`, so pages don't shift as new
-  blurts arrive. A malformed cursor is a 400.
+  blurts arrive. A plain reblurt sits in a list at its own row's position (when it was
+  reblurted), not the original's. A malformed cursor is a 400.
 - `parent` is `null` for a top-level blurt. `related` is empty until the blurt's
   embedding has been computed.
 - `profile` is `{ userId, username, homepage, x, instagram, tiktok, youtube, github,
@@ -106,13 +115,13 @@ carry `Vary: Accept`.
   `users` is `[{ username, avatar }]`: usernames containing `q` (a leading `@` is
   dropped), ignoring case, those starting with it first (shortest first, so an exact
   match leads), then the rest, up to 20, on the first page only. `blurts` is blurts and
-  replies whose text matches, newest first, paged like the feed
+  replies (and quotes) whose own text matches, newest first, paged like the feed
   (`/search?q=<words>&before=<next>`). The text search is Postgres full-text search with
   the `simple` configuration (lower case, no stemming, no stop words, so Norwegian and
   English work alike, but `cats` doesn't find `cat`) and `websearch_to_tsquery`: every
   word must match, `"quoted phrases"`, `or` and `-word` work, punctuation alone matches
-  nothing. A GIN index on `to_tsvector('simple', text)` serves it. Deleted blurts never
-  match. A missing, empty or malformed `q` (`?q[]=`, `?q=a&q=b`) is an empty search
+  nothing. A GIN index on `to_tsvector('simple', text)` serves it. Deleted blurts and
+  plain reblurts have no text, so they never match. A missing, empty or malformed `q` (`?q[]=`, `?q=a&q=b`) is an empty search
   (`query: ''`, a friendly page); one over 200 characters is a 400. `query` is echoed
   escaped and is never logged (request lines leave out the query string).
 - The page decides `canEdit` itself: `viewer?.id === profile.userId`.
@@ -143,7 +152,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
 | `/login`                     | —             | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
 | `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`                | yes           | `text`, optional `parentId`          | 303 → feed/parent           | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`  | 303 → feed/parent/quote     | 201 the new `Blurt`, Location `/:username/:id` |
 | `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
 | `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
@@ -151,6 +160,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/like`                  | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
 | `/api/unlike`                | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
+| `/api/reblurt`               | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
+| `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
@@ -166,24 +177,92 @@ Login and sign-up also set the session cookies, for JSON callers too.
 
 Every blurt shows its like count, and to logged-in viewers a Like (or Unlike) button: a
 plain form with `blurtId`, so it works without JS, on the feeds, profiles, `/near` and
-blurt pages. Code: `setLike` and `markViewerLikes` in `src/routes/state.ts`, the routes
+blurt pages. Code: `setLike` and `markViewerFlags` in `src/routes/state.ts`, the routes
 in `src/routes/blurts.ts`.
 
 - `POST /api/like` and `POST /api/unlike`, the same shape as follow and unfollow.
   Liking twice, or unliking a blurt you don't like, does nothing. Your own blurts can be
-  liked. An unknown, deleted or placeholder blurt is a 404. Forms go back to the page
-  they came from (its `Referer`, same host only) at `#blurt-<id>`, the blurt's
-  `<article>`; without one, to the blurt's page. JSON callers get
-  `{ blurtId, likeCount, viewerLikes }`.
-- The count is a column, `blurts.like_count`, so lists never count likes. `setLike`
-  locks the blurt row, inserts or deletes the `likes` row and changes the count by one
-  only if that did something, in one transaction. Concurrent likes of one blurt queue on
-  the lock, so none is lost. `viewerLikes` is one query per page for all the blurts on
-  it (`markViewerLikes`), from the replica like the lists.
-- Who liked what is private: only counts are shown. Deleting a blurt (or turning it into
-  a placeholder) deletes its likes and zeroes its count; deleting an account takes its
-  likes off every count, then deletes them.
+  liked. An unknown, deleted or placeholder blurt is a 404. A plain reblurt's id likes
+  its original. Forms go back to the page they came from (its `Referer`, same host only)
+  at `#blurt-<id>`, the blurt's `<article>`; without one, to the blurt's page. JSON
+  callers get `{ blurtId, likeCount, viewerLikes }`.
+- The count is in `blurt_stats`, a narrow table of counters (`like_count`,
+  `reblurt_count`; no row means zero), so lists never count likes, and a like never
+  rewrites the blurt row (with its 1.5 KB embedding). `setLike` takes key-share locks
+  on the user and the blurt (so it can't race a deletion), inserts or deletes the
+  `likes` row, and changes the count by one only if that did something, in one
+  transaction. Concurrent likes of one blurt queue only briefly on its tiny
+  `blurt_stats` row, and none is lost. `viewerLikes` is one query per page for all the
+  blurts on it (`markViewerFlags`), from the replica like the lists.
+- Who liked what is private: only counts are shown. Deleting a blurt deletes its likes
+  and counters; deleting an account takes its likes off every count, then deletes them.
 - Rate limited per account, one budget for both (`LIKE`).
+
+## Reblurts
+
+A reblurt is a row in `blurts` that points at another blurt (`reblurt_of_id`, plus
+`reblurt_of_user_id`, the original's author, so a sharded lookup of the original goes to
+one shard). So feeds, profiles and their cursors stay single-table queries, and reblurts
+reach followers' feeds with no extra work. Code: `setReblurt`, `addBlurt` and the shown
+blurt query (`shownFrom`) in `src/routes/state.ts`, the routes in `src/routes/blurts.ts`.
+
+| Row           | `reblurt_of_id` | `text` | Shown as                                       |
+| ------------- | --------------- | ------ | ---------------------------------------------- |
+| Blurt / reply | `NULL`          | set    | its own text                                   |
+| Plain reblurt | set             | `NULL` | the original, with "Reblurted by X" above it   |
+| Quote-reblurt | set             | set    | its own text, with the original embedded below |
+
+"Plain reblurt" is `reblurt_of_id IS NOT NULL AND text IS NULL AND deleted_at IS NULL`
+(a deleted quote also has `reblurt_of_id` and no text). The app writes it once, as
+`plainReblurt()`; the partial indexes repeat it.
+
+- **Plain reblurts.** `POST /api/reblurt` and `POST /api/unreblurt` with `blurtId`, the
+  same shape as like and unlike: a Reblurt / Undo reblurt button with the count, on
+  every blurt in feeds, profiles, `/near` and blurt pages, no JS needed. JSON callers get
+  `{ blurtId, reblurtCount, viewerReblurted }`. One plain reblurt per user and original (a
+  unique partial index), so reblurting twice does nothing. Your own blurt is a 400
+  (quote it instead); an unknown or deleted one a 404. Reblurting a plain reblurt stores
+  its original: a plain reblurt always points at content, so reads resolve in one step.
+  Un-reblurting deletes the row, like unliking: a plain reblurt has no content and
+  nothing hangs off it. It is the one kind of `blurts` row that is ever removed.
+- A plain reblurt has no page, text or embedding, isn't searched, and can't be liked,
+  replied to or reported itself: its id in those actions acts on the original, and the
+  buttons on it are the original's.
+- **Quotes.** The quote form is on the blurt's page (`#quote`); every blurt has a Quote
+  link to it. It is the compose form with a hidden `reblurtOfId`: `POST /api/blurts` with
+  `text` and `reblurtOfId` makes a blurt of its own, with the original shown under it
+  (`quoted`). The usual input limits and the `BLURT` rate limit apply. Forms go to the new
+  quote's page. A quote is ordinary content: it is liked, replied to, reported, searched
+  and embedded. You can quote your own blurts, and the same blurt many times. A quote of
+  a quote points at that quote, and only one level is shown. Quoting a plain reblurt
+  quotes its original. `parentId` and `reblurtOfId` together are a 400.
+- Replies can be reblurted and quoted; lists show "Replying to X" on them.
+- `reblurtCount` counts plain reblurts (not quotes), from `blurt_stats.reblurt_count`,
+  kept like the like count. `viewerReblurted` comes from the same per-page query as
+  `viewerLikes`, answered by the unique index.
+- **Feeds.** Plain reblurts by accounts you follow are in the following feed and in
+  `followedBlurts`, shown as the original with `reblurtedBy`. When several people you
+  follow reblurt the same blurt (or reblurt one by someone you follow), it shows once, at
+  its newest row: a row is left out when a newer row of the same blurt is in the feed.
+  That holds across pages too. The reblurter's profile lists their plain reblurts and
+  quotes with their blurts. The everyone feed, `/near` and discovery list only content.
+- Rate limited per account, one budget for both (`REBLURT`).
+
+### The shown blurt query
+
+What a row shows is decided in one place, `shownFrom` / `shownWhere` / `selectShown` in
+`src/routes/state.ts`, and every list, thread, search and single-blurt query uses it. It
+follows a plain reblurt to its original, hides stale references, hides deleted authors,
+and joins the counters. Each query writing its own join is how a `deleted_at IS NULL`
+gets forgotten. `r` is the row in the list (filtered and ordered on), `b` the blurt it
+shows.
+
+- A plain reblurt whose original is deleted, or whose reblurter's account is deleted, is
+  never shown, even before cleanup has removed it.
+- Deleted blurts show as placeholders only in threads and on their own page; every
+  list leaves them out.
+- The author of a deleted blurt, or of anything by a deleted account, is never joined:
+  `username`, `avatar` are `null`. Rows keep `user_id`; the reads never use it then.
 
 ## Deleting and reporting
 
@@ -195,17 +274,28 @@ Plain forms, so all of it works without JS. Code in `src/routes/blurts.ts`,
   403 (unless you're an admin), an unknown or already deleted one a 404. Forms go back
   to the page they came from (its `Referer`, same host only), unless that was the
   deleted blurt's own page: then to the thread it replied to, or `/`.
-- A blurt nobody replied to is deleted for good. One with replies stays in its thread
-  as a placeholder, "This blurt was deleted": its text, embedding and author are
-  removed from the row (`NULL`, enforced by a `CHECK`), so the replies stay readable
-  and nothing refers to the author any more. Placeholders never show in feeds, profiles,
-  discovery or related blurts, can't be replied to, reported or deleted again, and live
-  at `/deleted/:id` (their old `/:username/:id` link still works). When a placeholder's
-  last reply is deleted, the placeholder goes too, up the thread.
+- **A content row (blurt, reply, quote) is never removed.** Deleting sets `deleted_at`
+  and removes its text and embedding (`NULL`, enforced by a `CHECK`). It keeps `user_id`
+  (the future sharding key, which must never change), `parent_id` and `reblurt_of_id`.
+  "A deleted blurt says nothing about who wrote it" is enforced when reading (see The
+  shown blurt query), not in the data. Its page is a placeholder, "This blurt was
+  deleted", at `/deleted/:id` (its old `/:username/:id` link still works), and replies
+  stay readable under it. Placeholders never show in feeds, profiles, discovery or
+  related blurts, and can't be replied to, liked, reblurted, quoted, reported or deleted
+  again. Quotes of a deleted blurt show "Content is deleted" for the embedded part.
 - `deleteBlurts(ids, client?)` does all of it in one transaction, or inside the
-  caller's: account deletion (025) passes all of a user's blurts. Deleting a blurt row
-  that still has replies any other way fails (the `parent_id` foreign key no longer
-  cascades), so other people's replies can't vanish with it.
+  caller's: account deletion (025) passes all of a user's blurts. It deletes the blurts'
+  likes, reports and counters, and the plain reblurts of them (`deleteStaleReblurts`).
+  It is safe to run twice.
+- **Plain reblurts of a deleted blurt** are removed in the same transaction for now, by
+  `deleteStaleReblurts({ of })`. It is written to become a batched background job once
+  the data is sharded: without `of` it sweeps any table-wide, `limit` rows at a time,
+  and is idempotent. Reads hide those reblurts anyway, so a late or crashed cleanup never
+  shows a dead reblurt.
+- **The software handles relations, not the database.** No `ON DELETE CASCADE` from or
+  into `blurts`: the foreign keys (`user_id`, `parent_id`, `reblurt_of_id`,
+  `blurt_stats.blurt_id`) stay as assertions while there is one database, and are
+  dropped the day it is sharded (they can't cross shards).
 - Every blurt by someone else has a "Report" `<details>` with an optional reason (up to
   500 characters) for logged-in viewers. `POST /api/report` with `blurtId` and `reason`:
   one report per user and blurt, so reporting again does nothing (also after a dismissal).
@@ -233,14 +323,18 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
 (`DELETE_ACCOUNT`), since it runs Argon2 like login. Code: `deleteAccount` in
 `src/routes/state.ts`, the route in `src/routes/users.ts`.
 
-- One transaction. The user's blurts go through `deleteBlurts`, so one that others
-  replied to stays as an authorless placeholder and their replies stay. The likes they
-  gave are taken off each blurt's count and deleted. Then the
-  `users` row goes, and with it (`ON DELETE CASCADE`) the profile (avatar, location),
+- One transaction. The user's content goes through `deleteBlurts`: the rows stay,
+  emptied, and nothing shows them as the user's; one that others replied to reads as a
+  placeholder, and their replies stay. The likes they gave and their plain reblurts are
+  taken off each blurt's counts and deleted. Then the profile (avatar, location),
   sessions, follows both ways, the user's own invite codes (so "Invited by" disappears
-  from their invitees' profiles) and the reports they made. The code they signed up with
-  stays used (`used_at`) with `used_by_user_id` set `NULL`. Their waitlist entry is
-  deleted.
+  from their invitees' profiles) and the reports they made are deleted, by the app, not
+  by a cascade. The code they signed up with stays used (`used_at`) with
+  `used_by_user_id` set `NULL`. Their waitlist entry is deleted.
+- **The `users` row stays as a stub**: `deleted_at` set, `username` and `password_hash`
+  removed (`NULL`, enforced by a `CHECK`), `is_admin` off. So `blurts.user_id` stays
+  valid on the account's rows, and nothing cascades from `users`. Logging in, posting,
+  liking, following and reporting all require a live (`deleted_at IS NULL`) user.
 - **The username is retired, not freed**: it goes into `retired_usernames` (lower case,
   nothing else), and sign-up and the waitlist treat it as taken, in any letter case.
   Freeing it would let someone sign up as the old account and pass for it, with
@@ -253,9 +347,10 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
   this app instance until they run out (5 minutes), from an in-memory list of the
   deleted session ids. With several instances, another one could still show the user
   as logged in for up to 5 minutes, but there is nothing left to read or change: every
-  write checks that the user exists.
-- A test checks every table afterwards, by every foreign key to `users` and by the
-  username anywhere in a row, and that the old cookies are rejected.
+  write checks that the user exists and isn't deleted.
+- A test checks every table afterwards, by every foreign key to `users` (live rows
+  only: the stub and the emptied blurts keep the id on purpose) and by the username
+  anywhere in a row, and that the old cookies are rejected.
 - Known edge: a sign-up with the same name committing in the very instant the deletion
   commits could slip past the retired check; deletion is rare and that window tiny.
 
@@ -397,7 +492,8 @@ error table below.
 | `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)  | 5/5m    |
 | `CREATE_USER_IP`       | `/createUser` (and invites)    | IP                   | 5/1h    |
 | `WAITLIST_IP`          | `/waitlist`                    | IP                   | 10/1h   |
-| `BLURT`                | `/api/blurts` (and replies)    | account              | 20/10m  |
+| `BLURT`                | `/api/blurts` (replies, quotes) | account             | 20/10m  |
+| `REBLURT`              | `/api/reblurt`, `/api/unreblurt` | account (one budget) | 60/10m |
 | `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget) | 60/10m  |
 | `LIKE`                 | `/api/like`, `/api/unlike`     | account (one budget) | 120/10m |
 | `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |

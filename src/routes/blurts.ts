@@ -22,9 +22,10 @@ import {
   isAdmin,
   listRelatedBlurts,
   listReplies,
-  markViewerLikes,
+  markViewerFlags,
   parseCursor,
   setLike,
+  setReblurt,
   type Blurt,
   type Cursor,
 } from './state.ts'
@@ -64,7 +65,7 @@ async function getBlurtPageData(
     listReplies(blurt.id, after),
     listRelatedBlurts(blurt.id),
   ])
-  await markViewerLikes(viewer?.id ?? null, [blurt, parent, ...replies, ...related])
+  await markViewerFlags(viewer?.id ?? null, [blurt, parent, ...replies, ...related])
   return { viewer, blurt, parent, reported, replies, next, related }
 }
 
@@ -74,7 +75,12 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
   const { username, id } = request.params
   const blurtId = parseBlurtId(id)
   const blurt = blurtId === undefined ? undefined : await getBlurt(blurtId)
-  if (!blurt || (!blurt.deleted && blurt.username?.toLowerCase() !== username.toLowerCase())) {
+  // A plain reblurt has no page of its own: getBlurt would give its original.
+  const wrongUrl =
+    !blurt ||
+    blurt.id !== blurtId ||
+    (!blurt.deleted && blurt.username?.toLowerCase() !== username.toLowerCase())
+  if (wrongUrl) {
     next() // not a blurt URL (e.g. /:username/edit), or no such blurt
     return
   }
@@ -89,20 +95,34 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
   })
 })
 
-// A top-level blurt, or a reply when the body has parentId.
+// The blurt a field of the body names (parentId, reblurtOfId), as it is shown: a plain
+// reblurt gives its original, so replies and quotes go there. Undefined when the field is
+// missing, null when it names no blurt, or a deleted one.
+async function referencedBlurt(value: unknown): Promise<Blurt | null | undefined> {
+  if (value === undefined) {
+    return undefined
+  }
+  const id = parseBlurtId(value)
+  const blurt = id === undefined ? undefined : await getBlurt(id)
+  return blurt && !blurt.deleted ? blurt : null
+}
+
+// A top-level blurt, a reply when the body has parentId, or a quote-reblurt when it has
+// reblurtOfId: a blurt of its own, with the quoted one shown under it.
 blurtsRouter.post(
   '/api/blurts',
   requireAuth,
   rateLimit('blurt', accountKey),
   async (request, response) => {
-    let parent: Blurt | undefined
-    if (request.body?.parentId !== undefined) {
-      const parentId = parseBlurtId(request.body.parentId)
-      parent = parentId === undefined ? undefined : await getBlurt(parentId)
-      if (!parent || parent.deleted) {
-        sendError(request, response, 404, 'Blurt not found')
-        return
-      }
+    const parent = await referencedBlurt(request.body?.parentId)
+    const quoted = await referencedBlurt(request.body?.reblurtOfId)
+    if (parent === null || quoted === null) {
+      sendError(request, response, 404, 'Blurt not found')
+      return
+    }
+    if (parent && quoted) {
+      sendError(request, response, 400, 'A blurt can reply or quote, not both', 'reblurtOfId')
+      return
     }
 
     const result = blurtSchema.safeParse(request.body ?? {})
@@ -112,15 +132,20 @@ blurtsRouter.post(
         const composer = {
           text: typeof request.body?.text === 'string' ? request.body.text : '',
           validationError: message,
+          reblurtOfId: quoted?.id,
         }
-        return parent
-          ? renderBlurtPage(await getBlurtPageData(request, parent), composer)
+        const thread = parent ?? quoted
+        return thread
+          ? renderBlurtPage(await getBlurtPageData(request, thread), composer)
           : renderFeedPage(await getFeedData(request), composer)
       })
       return
     }
 
-    const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, parent?.id)
+    const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, {
+      parentId: parent?.id,
+      reblurtOfId: quoted?.id,
+    })
     const blurt = id === undefined ? undefined : await getBlurt(id)
     if (!blurt) {
       // A still-valid token for a user that no longer exists (e.g. after a database reset).
@@ -134,9 +159,10 @@ blurtsRouter.post(
     }
 
     void embedPendingBlurts()
-    // Forms go back to the page they were posted from; JSON callers get the new blurt.
+    // Forms go back to the thread replied to, to the new quote's page, or to the feed; JSON
+    // callers get the new blurt.
     sendFormSuccess(request, response, {
-      redirect: parent ? blurtUrl(parent) : '/',
+      redirect: parent ? blurtUrl(parent) : quoted ? blurtUrl(blurt) : '/',
       data: blurt,
       status: 201,
       location: blurtUrl(blurt),
@@ -152,19 +178,27 @@ function localReferer(request: Request): URL | undefined {
   return referer && local ? referer : undefined
 }
 
-// Separate POSTs for like and unlike, so a plain form on any blurt can send either. Forms
-// go back to the page they came from (at the blurt), or the blurt's page without a usable
-// Referer; JSON callers get `{ blurtId, likeCount, viewerLikes }`.
-function likeAction(likes: boolean): RequestHandler {
+// Separate POSTs for like and unlike, reblurt and unreblurt, so a plain form on any blurt
+// can send each. A plain reblurt's id acts on its original. Forms go back to the page they
+// came from (at the blurt), or the blurt's page without a usable Referer; JSON callers get
+// the new state: `{ blurtId, likeCount, viewerLikes }` or
+// `{ blurtId, reblurtCount, viewerReblurted }`.
+function toggleAction<State>(
+  set: (userId: number, blurtId: number) => Promise<State | 'not-found' | 'no-user' | 'own'>,
+): RequestHandler {
   return async (request, response) => {
     const blurtId = parseBlurtId(request.body?.blurtId)
     const blurt = blurtId === undefined ? undefined : await getBlurt(blurtId)
     const state =
       blurt && !blurt.deleted
-        ? await setLike(response.locals.authenticatedUser.id, blurt.id, likes)
+        ? await set(response.locals.authenticatedUser.id, blurt.id)
         : 'not-found'
     if (state === 'not-found' || !blurt) {
       sendError(request, response, 404, 'Blurt not found')
+      return
+    }
+    if (state === 'own') {
+      sendError(request, response, 400, "You can't reblurt your own blurt. Quote it instead.")
       return
     }
     if (state === 'no-user') {
@@ -183,8 +217,30 @@ function likeAction(likes: boolean): RequestHandler {
   }
 }
 
-blurtsRouter.post('/api/like', requireAuth, rateLimit('like', accountKey), likeAction(true))
-blurtsRouter.post('/api/unlike', requireAuth, rateLimit('like', accountKey), likeAction(false))
+blurtsRouter.post(
+  '/api/like',
+  requireAuth,
+  rateLimit('like', accountKey),
+  toggleAction((userId, blurtId) => setLike(userId, blurtId, true)),
+)
+blurtsRouter.post(
+  '/api/unlike',
+  requireAuth,
+  rateLimit('like', accountKey),
+  toggleAction((userId, blurtId) => setLike(userId, blurtId, false)),
+)
+blurtsRouter.post(
+  '/api/reblurt',
+  requireAuth,
+  rateLimit('reblurt', accountKey),
+  toggleAction((userId, blurtId) => setReblurt(userId, blurtId, true)),
+)
+blurtsRouter.post(
+  '/api/unreblurt',
+  requireAuth,
+  rateLimit('reblurt', accountKey),
+  toggleAction((userId, blurtId) => setReblurt(userId, blurtId, false)),
+)
 
 // Where a form goes back to after deleting: the page it was posted from (Referer, same
 // host only), unless that was the deleted blurt's own page. Then the thread it replied
@@ -200,7 +256,8 @@ async function afterDelete(request: Request, blurt: Blurt): Promise<string> {
 }
 
 // The author deletes their own blurt; an admin deletes anyone's (from /admin/reports).
-// Replies by others keep it as a placeholder (see deleteBlurts).
+// It stays as a placeholder (see deleteBlurts). A plain reblurt is undone with
+// /api/unreblurt, not deleted here.
 blurtsRouter.post(
   '/api/blurts/:id/delete',
   requireAuth,
@@ -209,7 +266,7 @@ blurtsRouter.post(
     const viewer = response.locals.authenticatedUser
     const blurtId = parseBlurtId(request.params.id)
     const blurt = blurtId === undefined ? undefined : await getBlurt(blurtId)
-    if (!blurt || blurt.deleted) {
+    if (!blurt || blurt.deleted || blurt.id !== blurtId) {
       sendError(request, response, 404, 'Blurt not found')
       return
     }
@@ -228,7 +285,7 @@ const reportSchema = z.object({
 })
 
 // One report per user and blurt; reporting again does nothing. Forms go to the blurt's
-// page, which says it was reported.
+// page, which says it was reported. A plain reblurt's id reports its original.
 blurtsRouter.post(
   '/api/report',
   requireAuth,

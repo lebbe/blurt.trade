@@ -30,8 +30,10 @@ export function embedPendingBlurts(): Promise<void> {
 
 async function runPending(): Promise<void> {
   for (;;) {
+    // Only rows with text: plain reblurts have none (and no embedding), and neither do
+    // deleted blurts. blurts_missing_embedding_idx has the same condition.
     const { rows } = await db().query<{ id: number; text: string }>(
-      'SELECT id, text FROM blurts WHERE embedding IS NULL AND deleted_at IS NULL ORDER BY id LIMIT $1',
+      'SELECT id, text FROM blurts WHERE embedding IS NULL AND text IS NOT NULL ORDER BY id LIMIT $1',
       [batchSize],
     )
     if (rows.length === 0) {

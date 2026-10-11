@@ -30,6 +30,8 @@ const defaults = {
   avatar: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
+  // Reblurt and unreblurt share it. Quotes are blurts, under `blurt`.
+  reblurt: '60/10m',
   // Like and unlike share it.
   like: '120/10m',
   // Checks the password with Argon2, like login.

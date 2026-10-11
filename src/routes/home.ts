@@ -8,7 +8,7 @@ import {
   listFollowedHighlights,
   listNearbyForUser,
   listSimilarToUser,
-  markViewerLikes,
+  markViewerFlags,
   parseCursor,
   type Blurt,
   type Cursor,
@@ -45,7 +45,7 @@ export async function getFeedData(
   ])
   const discovery =
     viewer && before === null ? await getDiscovery(viewer.id, followedBlurts, blurts) : []
-  await markViewerLikes(viewer?.id ?? null, [
+  await markViewerFlags(viewer?.id ?? null, [
     ...followedBlurts,
     ...blurts,
     ...discovery.flatMap((section) => section.blurts),

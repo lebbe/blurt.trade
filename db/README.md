@@ -175,11 +175,12 @@ migrations run as the normal app user.
 
 | table               | contents                                                          |
 | ------------------- | ----------------------------------------------------------------- |
-| `users`             | `id`, `username` (unique), `password_hash` (Argon2id)             |
+| `users`             | `id`, `username` (unique), `password_hash` (Argon2id), `deleted_at` |
 | `user_profiles`     | one row per user: homepage, social handles, bio, `location`       |
-| `blurts`            | `user_id`, `text`, `parent_id` (reply), `embedding`, `like_count` |
+| `blurts`            | `user_id`, `text`, `parent_id` (reply), `reblurt_of_id`, `embedding` |
+| `blurt_stats`       | counters per blurt: `like_count`, `reblurt_count`                 |
 | `follows`           | `user_id` follows `followed_user_id`                              |
-| `likes`             | `user_id` likes `blurt_id` (`blurts.like_count` is the count)     |
+| `likes`             | `user_id` likes `blurt_id` (`blurt_stats.like_count` is the count) |
 | `sessions`          | one row per login: refresh token generation, last use, revoked    |
 | `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
 | `waitlist`          | usernames that asked to be let in while sign-up was full          |
@@ -200,7 +201,9 @@ UPDATE signup_counter SET soft_limit = 2000, hard_limit = 20000;
 an account is deleted.
 
 Deleting an account (`deleteAccount` in `src/routes/state.ts`, docs/routes.md, Deleting an
-account) removes every row that refers to the user, in one transaction, and puts the
+account) removes every row that refers to the user, in one transaction, except a stub
+`users` row (`deleted_at` set, no username or password hash) and their emptied blurt
+rows, which keep `user_id` as the sharding key. It puts the
 username in `retired_usernames` so it can never be signed up for again.
 `waitlist` stores only a username and a status (`waiting`, or `joined` once it signs
 up), no email. See docs/routes.md, Sign-up limits.
@@ -209,7 +212,12 @@ An invite code counts as used once `used_at` is set, not by `used_by_user_id`, w
 would go `NULL` if the invitee's account were deleted: the code must not work again.
 The migration gave every existing user 3 codes, as new users get at sign-up.
 
-A reply is a blurt with a `parent_id`. The main feed lists only top-level blurts.
+A reply is a blurt with a `parent_id`. The main feed lists only top-level blurts. A
+reblurt is a blurt with a `reblurt_of_id` (and `reblurt_of_user_id`, the original's
+author): without text a plain reblurt, with text a quote. Content rows are never deleted,
+only marked `deleted_at` and emptied; plain reblurts are deleted when undone. Likes and
+reblurts are counted in `blurt_stats`, a narrow table, so a like never rewrites the blurt
+row and its embedding. See docs/routes.md, Reblurts and Deleting and reporting.
 
 `location` is a PostGIS `geography(Point, 4326)`, `NULL` until the user sets one. It is
 always the centre of a 1° grid cell (a `CHECK` enforces it), never an exact position. A
