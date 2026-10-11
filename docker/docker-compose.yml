@@ -33,7 +33,6 @@ services:
       MIGRATE_ON_START: 'true'
       PUBLIC_URL: https://blurt.trade
       CONTACT_REPO_URL: https://github.com/lebbe/blurt.trade
-      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
 
 volumes:
