@@ -1,0 +1,35 @@
+/* Forest Alloy: moss and brass, a softer shadow. Linked after style.css. */
+:root {
+  --bg: #121a17;
+  --bg-wash: #1b2621;
+  --panel: #1c2823;
+  --panel-alt: #24342d;
+  --text: #ebe6dc;
+  --muted: #b7ac99;
+  --line: #b99a63;
+  --line-soft: #55462c;
+  --accent: #8f7745;
+  --accent-strong: #e4c98d;
+  --accent-soft: #342816;
+  --pop: #8faf7b;
+  --pop-strong: #cce3a9;
+  --signal: #9db8a0;
+  --warn: #cf7a6c;
+  --focus: #cce3a9;
+  --glow-soft: rgb(143 175 123 / 38%);
+  --glow-strong: rgb(204 227 169 / 52%);
+  --panel-border: 2px;
+  --panel-shadow: 5px 5px 0 var(--line-soft);
+}
+
+body {
+  font-family: 'IBM Plex Sans', Inter, system-ui, sans-serif;
+}
+
+.blurt {
+  border-left-color: var(--line);
+}
+
+.blurt:nth-of-type(even) {
+  border-right-color: var(--line);
+}

@@ -25,7 +25,12 @@ test('creates a user, logs them in, and redirects to the feed', async () => {
   })
   assert.match(authenticatedFeed.body, /action="\/api\/blurts"/)
   assert.doesNotMatch(authenticatedFeed.body, /name="name"/)
-  assert.match(authenticatedFeed.body, /action="\/api\/logout"/)
+  // Logging out is in settings, which the navigation links to from every page.
+  assert.match(authenticatedFeed.body, /<nav class="top-nav"[^]*href="\/settings"/)
+  const settings = await request('GET', '/settings', '', {
+    cookie: response.setCookie?.[0]?.split(';', 1)[0] ?? '',
+  })
+  assert.match(settings.body, /action="\/api\/logout"/)
 
   const logout = await request('POST', '/api/logout', '', {
     cookie: response.setCookie?.[0]?.split(';', 1)[0] ?? '',

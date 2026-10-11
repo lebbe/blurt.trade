@@ -135,8 +135,8 @@ carry `Vary: Accept`.
   with a fixed list, so a migration that changes them fails until the page (and the
   list) is updated.
 - Data minimisation is a standing rule: no email addresses, no analytics, no
-  third-party scripts, fonts or embeds, no cookies beyond the session and `recent_write`
-  cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
+  third-party scripts, fonts or embeds, no cookies beyond the session, `recent_write` and
+  `theme` cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
   lost password can't be recovered, and sign-up and the login page say so. This was
   decided over email reset and recovery codes (ticket 024): don't add a reset route.
 
@@ -164,6 +164,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
+| `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
 | `/settings/delete`           | yes           | `password`                           | 303 → `/`                   | 204                                            |
@@ -411,6 +412,23 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
   and holds still with `prefers-reduced-motion`. The profile page
   shows it large.
 
+## Themes
+
+Five colour themes, picked on the profile edit page (`#theme`), listed in `src/themes.ts`.
+The default, Midnight Clay, is the variables at the top of `public/style.css`; each other
+theme is a small stylesheet in `public/themes/` that overrides those variables (and a few
+touches like fonts or uppercase navigation), linked after `style.css`. Each choice in the
+picker shows a strip of its colours (`.swatch-<theme>` classes), so no JS is needed to
+preview.
+
+- `POST /api/theme` with `theme` (one of the ids in `src/themes.ts`; anything else is a
+  400) sets the `theme` cookie (`HttpOnly`, `SameSite=Lax`, 400 days) for this browser.
+  Nothing is stored in the database.
+- Every request runs in a page context (`src/page-context.ts`, set in `src/server.ts`
+  after `authenticate`) with the viewer, the path and the theme, so the frame of every
+  page (`Page` in `src/templates/layout.ts`: header, navigation, footer) and the
+  stylesheet links need nothing from the route.
+
 ## Sign-up limits
 
 One row in `signup_counter` holds the number of sign-ups so far and two limits. The
@@ -594,7 +612,9 @@ responses.
   `'unsafe-inline'`. The same goes for fonts, `fetch()` (`connect-src`), web app
   manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
 - **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
-  at `/static/style.css`. It is cached with ETag/conditional requests (`If-None-Match` /
+  at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see
+  Themes); icons are inline SVG (`src/templates/icons.ts`), not an icon font. Both are
+  cached with ETag/conditional requests (`If-None-Match` /
   `304 Not Modified`) via the static file handler in `src/server.ts`. Pages link it and never use `<style>` or `style="..."`: a per-element value goes in an SVG
   attribute (the map marker is a `<circle cx cy>`) or a class. A test checks every page.
 - Public files under `/static` are served by one `express.static` handler in

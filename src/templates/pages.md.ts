@@ -9,6 +9,7 @@ import {
   toothTypes,
 } from '../avatar.ts'
 import { blurtMaxLength, isWebUrl } from '../limits.ts'
+import { themes } from '../themes.ts'
 import {
   accountDeletionEffects,
   blurtActions,
@@ -356,6 +357,14 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
     Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} to set it (only
     ${gridDescription} is stored), or with ${code('clear')} to remove it. Nobody else can see
     it. Then see ${link('blurts near you', '/near')}.
+
+    ## Theme
+
+    Send ${code('POST /api/theme')} with ${code('theme')}, one of ${join(
+      themes.map((theme) => code(theme.id)),
+      ', ',
+    )},
+    to pick the colours of the HTML pages in this browser (a cookie).
   `
 }
 
@@ -526,11 +535,12 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Cookies
 
-    Three, all needed for the site to work, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
+    At most four, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
 
     - ${code('access_token')}: shows you're logged in. Lasts 5 minutes.
     - ${code('refresh_token')}: keeps you logged in. Renewed as you use the site; expires after 400 days without a visit, or when you log out.
     - ${code('recent_write')}: set for a few seconds after you post or change something, so you see your own change straight away.
+    - ${code('theme')}: only if you pick a colour theme on your edit page, to remember it in this browser. Lasts 400 days.
 
     ## Backups
 

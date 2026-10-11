@@ -1,0 +1,40 @@
+/* Plum Steel: violet haze, thin lines with a halo, glowing current tab. Linked after
+   style.css. */
+:root {
+  --bg: #17121f;
+  --bg-wash: #251d32;
+  --panel: #211a2d;
+  --panel-alt: #2b223a;
+  --text: #efe9f7;
+  --muted: #b5a7ca;
+  --line: #b69ad7;
+  --line-soft: #574573;
+  --accent: #8f6ec4;
+  --accent-strong: #e0c9ff;
+  --accent-soft: #322344;
+  --pop: #b58adf;
+  --pop-strong: #f0c9ff;
+  --signal: #b9a8d5;
+  --warn: #e38fa3;
+  --focus: #f0c9ff;
+  --glow-soft: rgb(181 138 223 / 38%);
+  --glow-strong: rgb(240 201 255 / 54%);
+  --panel-border: 1px;
+  --panel-shadow:
+    0 0 0 1px rgb(224 201 255 / 24%),
+    6px 6px 0 var(--line-soft);
+}
+
+body {
+  background:
+    radial-gradient(circle at 0% 0%, #392a50 0 24%, transparent 48%),
+    radial-gradient(circle at 100% 0%, #2e253f 0 30%, transparent 55%),
+    linear-gradient(145deg, var(--bg) 0%, var(--bg-wash) 100%);
+  background-attachment: fixed;
+  font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+}
+
+.top-nav a[aria-current='page'],
+.tabs a[aria-current='page'] {
+  text-shadow: 0 0 12px rgb(240 201 255 / 45%);
+}

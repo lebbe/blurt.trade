@@ -3,9 +3,12 @@ import htm from 'htm'
 import { renderToString } from 'preact-render-to-string'
 import { publicUrl } from '../config.ts'
 import { searchQueryMaxLength } from '../limits.ts'
+import { pageContext } from '../page-context.ts'
+import { themeStylesheetUrl } from '../themes.ts'
+import { Icon, type IconName } from './icons.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
-// preview tags and canonical link, then the site search, the page and the footer.
+// preview tags, canonical link and stylesheets, then the page (framed by Page) and the footer.
 // Depends on nothing route-specific, so error handlers (src/negotiate.ts, src/logging.ts)
 // can render pages without importing the routes.
 
@@ -49,6 +52,7 @@ function Head({ meta }: { meta: PageMeta }) {
   const title = meta.title ? `${meta.title} · ${siteName}` : siteName
   const canonical = meta.canonical && `${origin}${meta.canonical}`
   const share = meta.share
+  const themeUrl = themeStylesheetUrl(pageContext().theme)
   return html`
     <head>
       <meta charset="utf-8" />
@@ -59,6 +63,7 @@ function Head({ meta }: { meta: PageMeta }) {
       ${canonical && html`<link rel="canonical" href=${canonical} />`}
       <link rel="icon" href=${faviconPath} type="image/svg+xml" />
       <link rel="stylesheet" href=${stylesheetUrl} />
+      ${themeUrl && html`<link rel="stylesheet" href=${themeUrl} />`}
       ${
         share &&
         html`
@@ -80,21 +85,106 @@ function Head({ meta }: { meta: PageMeta }) {
   `
 }
 
-// On every page, above the page's own header: a plain GET form, so it works without JS.
-function SiteSearch({ query = '' }: { query?: string }) {
+// In the header of every page but /search (whose page is a bigger copy of it): a plain GET
+// form, so it works without JS.
+function SiteSearch() {
   return html`
     <form method="get" action="/search" role="search" class="site-search">
-      <label for="site-search-q">Search</label>
+      <label for="site-search-q" class="visually-hidden">Search</label>
       <input
         id="site-search-q"
         type="search"
         name="q"
-        value=${query}
         maxlength=${searchQueryMaxLength}
-        placeholder="Usernames and blurts"
+        placeholder="Search people and blurts"
       />
-      <button type="submit">Search</button>
+      <button type="submit" class="secondary"><${Icon} name="search" /><span>Search</span></button>
     </form>
+  `
+}
+
+type NavItem = { href: string; label: string; icon: IconName; current: boolean }
+
+// Every destination, on every page, always visible: no menus to open. Logged-in viewers
+// get their profile and settings; everyone else the way in.
+function navItems(): NavItem[] {
+  const { viewer, path } = pageContext()
+  const item = (href: string, label: string, icon: IconName, current = path === href) => ({
+    href,
+    label,
+    icon,
+    current,
+  })
+  if (!viewer) {
+    return [
+      item('/', 'Home', 'home'),
+      item('/search', 'Search', 'search'),
+      item('/login', 'Log in', 'login'),
+      item('/createUser', 'Sign up', 'personPlus'),
+    ]
+  }
+  const profile = `/${viewer.username}/`
+  return [
+    item('/', 'Home', 'home'),
+    item('/everyone', 'Everyone', 'globe'),
+    item('/search', 'Search', 'search'),
+    item('/near', 'Near', 'pin'),
+    item(profile, 'Profile', 'person', path === profile || path === `/${viewer.username}/edit`),
+    item('/settings', 'Settings', 'sliders', path.startsWith('/settings')),
+  ]
+}
+
+function TopNav() {
+  return html`
+    <nav class="top-nav" aria-label="Main">
+      ${navItems().map(
+        ({ href, label, icon, current }) =>
+          html`<a href=${href} aria-current=${current ? 'page' : undefined}
+            ><${Icon} name=${icon} /><span>${label}</span></a
+          >`,
+      )}
+    </nav>
+  `
+}
+
+// The frame of every page: the header (title, the page's own buttons, search and the
+// navigation), then the page in <main>, with `aside` beside it on wide screens and under
+// it on narrow ones. `lead` goes before the title (a profile's avatar).
+export function Page({
+  title,
+  tagline,
+  lead,
+  actions,
+  aside,
+  search = true,
+  children,
+}: {
+  title: ComponentChildren
+  tagline?: ComponentChildren
+  lead?: ComponentChildren
+  actions?: ComponentChildren
+  aside?: ComponentChildren
+  search?: boolean
+  children?: ComponentChildren
+}) {
+  return html`
+    <header class="site-head">
+      <div class="brand-row">
+        <div class="brand">
+          ${lead}
+          <div>
+            <h1>${title}</h1>
+            ${tagline && html`<p class="tagline">${tagline}</p>`}
+          </div>
+        </div>
+        ${(actions || search) && html`<div class="head-actions">${actions} ${search && html`<${SiteSearch} />`}</div>`}
+      </div>
+      <${TopNav} />
+    </header>
+    <div class=${aside ? 'layout' : 'layout single'}>
+      <main>${children}</main>
+      ${aside && html`<aside>${aside}</aside>`}
+    </div>
   `
 }
 
@@ -102,7 +192,8 @@ function Footer() {
   return html`
     <footer>
       <nav aria-label="About this site">
-        <a href="/about">About</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+        <a href="/">blurt.trade</a> · <a href="/about">About</a> ·
+        <a href="/terms">Terms</a>${' · '}<a href="/privacy">Privacy</a>
       </nav>
     </footer>
   `
@@ -110,20 +201,14 @@ function Footer() {
 
 // The doctype is added here as a string: htm has no syntax for it, and inside a template
 // it would come out as the text "!doctype html" in the body.
-export function renderDocument(
-  page: ComponentChildren,
-  meta: PageMeta = {},
-  query?: string,
-): string {
+export function renderDocument(page: ComponentChildren, meta: PageMeta = {}): string {
   return (
     '<!doctype html>' +
     renderToString(html`
       <html lang="en">
         <${Head} meta=${meta} />
         <body>
-          <${SiteSearch} query=${query} />
-          ${page}
-          <${Footer} />
+          <div class="shell">${page} <${Footer} /></div>
         </body>
       </html>
     `)
@@ -149,18 +234,21 @@ export type ErrorPageData = { status: number; message: string; requestId?: strin
 function ErrorPage({ status, message, requestId }: ErrorPageData) {
   const title = errorTitles[status] ?? (status >= 500 ? errorTitles[500] : 'Error')
   return html`
-    <header>
-      <h1>${title}</h1>
-      <p class="tagline">Error ${status}</p>
-    </header>
-    <main class="error-page">
-      <p>${message}</p>
-      ${requestId && html`<p>Request id: <code>${requestId}</code></p>`}
-      <p>
-        <a href="/">Back to blurt.trade</a>
-        ${status === 401 && html` · <a href="/login">Log in</a>`}
-      </p>
-    </main>
+    <${Page} title=${title} tagline=${`Error ${status}`}>
+      <section class="panel error-page">
+        <p>${message}</p>
+        ${requestId && html`<p class="tiny">Request id: <code>${requestId}</code></p>`}
+        <div class="actions">
+          <a class="button secondary" href="/"
+            ><${Icon} name="back" /><span>Back to blurt.trade</span></a
+          >
+          ${
+            status === 401 &&
+            html`<a class="button" href="/login"><${Icon} name="login" /><span>Log in</span></a>`
+          }
+        </div>
+      </section>
+    <//>
   `
 }
 

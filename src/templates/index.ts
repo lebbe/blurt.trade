@@ -1,4 +1,4 @@
-import { h } from 'preact'
+import { h, type ComponentChildren } from 'preact'
 import htm from 'htm'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
@@ -12,7 +12,10 @@ import {
   type Avatar,
 } from '../avatar.ts'
 import { AvatarSvg } from './avatar.ts'
-import { preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
+import { Icon, type IconName } from './icons.ts'
+import { pageContext } from '../page-context.ts'
+import { themes } from '../themes.ts'
+import { Page, preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
 import {
   bioMaxLength,
   blurtMaxLength,
@@ -21,6 +24,7 @@ import {
   passwordMaxLength,
   passwordMinLength,
   reportReasonMaxLength,
+  searchQueryMaxLength,
   usernameMaxLength,
 } from '../limits.ts'
 import type {
@@ -171,14 +175,18 @@ export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
 // /settings/delete, the account deletion confirmation.
 export type DeleteAccountData = { viewer: AuthenticatedUser }
 
-// `parentId` makes it a reply form, `reblurtOfId` a quote form.
+// `parentId` makes it a reply form, `reblurtOfId` a quote form. `label` names the text
+// box for screen readers; `id` is the panel's, for links to it (#quote).
 type ComposerProps = {
   text?: string
   validationError?: string
   parentId?: number
   reblurtOfId?: number
+  heading?: string
   label?: string
+  placeholder?: string
   button?: string
+  id?: string
 }
 
 type FormProps = {
@@ -196,32 +204,104 @@ type ProfileEditProps = ProfileEditData & {
   avatarError?: string
 }
 
+// A blurt form in its own panel: the first thing on the pages people read blurts on.
 function Composer({
   text = '',
   validationError,
   parentId,
   reblurtOfId,
+  heading = 'Blurt now',
   label = 'Blurt',
   button = 'Blurt it',
+  placeholder = siteDescription,
+  id,
 }: ComposerProps) {
   return html`
-    <form method="post" action="/api/blurts">
-      ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-      ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
-      ${
-        reblurtOfId !== undefined &&
-        html`<input type="hidden" name="reblurtOfId" value=${reblurtOfId} />`
-      }
-      <label
-        >${label} <textarea name="text" maxlength=${blurtMaxLength} required>${text}</textarea>
-      </label>
-      <button type="submit">${button}</button>
-    </form>
+    <section class="panel composer" id=${id}>
+      <h2>${heading}</h2>
+      <form method="post" action="/api/blurts">
+        ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+        ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
+        ${
+          reblurtOfId !== undefined &&
+          html`<input type="hidden" name="reblurtOfId" value=${reblurtOfId} />`
+        }
+        <textarea
+          name="text"
+          maxlength=${blurtMaxLength}
+          required
+          aria-label=${label}
+          placeholder=${placeholder}
+        >
+${text}</textarea>
+        <div class="row">
+          <span class="tiny">${blurtMaxLength} characters max · public</span>
+          <button type="submit" class="blurt-button">
+            <${Icon} name=${parentId === undefined ? 'megaphone' : 'reply'} /><span>${button}</span>
+          </button>
+        </div>
+      </form>
+    </section>
   `
 }
 
 function ValidationError({ message }: { message?: string }) {
   return message ? html`<p class="validation-error" role="alert">${message}</p>` : null
+}
+
+// A link that looks like a button, with an icon. `kind` '' is the main (filled) style.
+function ButtonLink({
+  href,
+  icon,
+  label,
+  kind = 'secondary',
+}: {
+  href: string
+  icon: IconName
+  label: string
+  kind?: '' | 'secondary' | 'danger'
+}) {
+  return html`<a class=${kind ? `button ${kind}` : 'button'} href=${href}
+    ><${Icon} name=${icon} /><span>${label}</span></a
+  >`
+}
+
+function SubmitButton({
+  icon,
+  label,
+  kind = '',
+}: {
+  icon: IconName
+  label: string
+  kind?: '' | 'secondary' | 'danger'
+}) {
+  return html`<button type="submit" class=${kind || undefined}>
+    <${Icon} name=${icon} /><span>${label}</span>
+  </button>`
+}
+
+// For the asides: a panel with a heading and a list of links.
+function LinkPanel({ title, links }: { title: string; links: [href: string, label: string][] }) {
+  return html`
+    <section class="panel">
+      <h3>${title}</h3>
+      <ul class="list">
+        ${links.map(([href, label]) => html`<li><a href=${href}>${label}</a></li>`)}
+      </ul>
+    </section>
+  `
+}
+
+// The links below every logged-in page's aside, and the whole aside for anonymous ones.
+function SupportLinks() {
+  return html`<${LinkPanel}
+    title="About this site"
+    links=${[
+      ['/about', 'About and contact'],
+      ['/terms', 'Terms'],
+      ['/privacy', 'Privacy'],
+    ]}
+  />`
 }
 
 // The sign-up page in each state. Open sign-up takes an invite code too, optionally, so
@@ -233,32 +313,52 @@ function CreateUserPage({ signup, inviteCode, username, validationError }: Creat
     inviteRequired=${signup === 'invite'}
     validationError=${validationError}
   />`
+  const aside = html`
+    <section class="panel">
+      <h3>Already here?</h3>
+      <p>Welcome back.</p>
+      <${ButtonLink} href="/login" icon="login" label="Log in" />
+    </section>
+    <${SupportLinks} />
+  `
   if (signup === 'open') {
-    return form
+    return html`
+      <${Page}
+        title="Create a profile"
+        tagline="Pick a name. Blurt within a minute."
+        aside=${aside}
+      >
+        <section class="panel">${form}</section>
+      <//>
+    `
   }
   if (signup === 'invite') {
     return html`
-      <section class="signup-closed" aria-label="Invite only">
-        <h2>Invite only</h2>
-        <p>
-          blurt.trade is invite-only right now. You need an invite code from someone who's already
-          here to sign up.
-        </p>
-        ${form}
-        <p>Already have a profile? <a href="/login">Log in</a>.</p>
-      </section>
+      <${Page} title="Create a profile" tagline="Invite only, for now." aside=${aside}>
+        <section class="panel signup-closed" aria-label="Invite only">
+          <h2>Invite only</h2>
+          <p>
+            blurt.trade is invite-only right now. You need an invite code from someone who's already
+            here to sign up.
+          </p>
+          ${form}
+          <p>Already have a profile? <a href="/login">Log in</a>.</p>
+        </section>
+      <//>
     `
   }
   return html`
-    <section class="signup-closed" aria-label="Waitlist">
-      <h2>Sign-up is full</h2>
-      <p>
-        blurt.trade isn't taking new profiles right now. Leave the username you'd like and check
-        back on the <a href="/waitlist">waitlist page</a>: it says when sign-up opens again.
-      </p>
-      <${WaitlistForm} username=${username} validationError=${validationError} />
-      <p>Already have a profile? <a href="/login">Log in</a>.</p>
-    </section>
+    <${Page} title="Create a profile" tagline="We're full right now." aside=${aside}>
+      <section class="panel signup-closed" aria-label="Waitlist">
+        <h2>Sign-up is full</h2>
+        <p>
+          blurt.trade isn't taking new profiles right now. Leave the username you'd like and check
+          back on the <a href="/waitlist">waitlist page</a>: it says when sign-up opens again.
+        </p>
+        <${WaitlistForm} username=${username} validationError=${validationError} />
+        <p>Already have a profile? <a href="/login">Log in</a>.</p>
+      </section>
+    <//>
   `
 }
 
@@ -270,7 +370,7 @@ function WaitlistForm({ username = '', validationError }: FormProps) {
       <label
         >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
       /></label>
-      <button type="submit">Join the waitlist</button>
+      <div class="actions"><${SubmitButton} icon="hourglass" label="Join the waitlist" /></div>
     </form>
   `
 }
@@ -294,22 +394,27 @@ function WaitlistPage({
         ? html`<p>Sign-up has reopened, with an invite code: <a href="/createUser">sign up</a>.</p>`
         : html`<p>Sign-up is full. When it opens again, this page will say so.</p>`
   return html`
-    <header>
-      <h1>Waitlist</h1>
-      <p><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
-      ${status} ${opening}
-      <p>${plural(waiting, 'person', 'people')} waiting.</p>
+    <${Page}
+      title="Waitlist"
+      tagline=${plural(waiting, 'person', 'people') + ' waiting.'}
+      aside=${html`<${SupportLinks} />`}
+    >
+      <section class="panel">
+        ${status} ${opening}
+        <p class="tiny">${plural(waiting, 'person', 'people')} waiting.</p>
+      </section>
       ${
         signup === 'waitlist' &&
-        html`<${WaitlistForm} ...${form ?? {}} />
-          <p>
+        html`<section class="panel">
+          <h2>Join the waitlist</h2>
+          <${WaitlistForm} ...${form ?? {}} />
+          <p class="hint">
             We don't take an email address, so we can't tell you when you're in. Bookmark this page
             after joining and check back.
-          </p>`
+          </p>
+        </section>`
       }
-    </main>
+    <//>
   `
 }
 
@@ -355,74 +460,104 @@ function CreateUserForm({
           required=${inviteRequired}
           value=${inviteCode}
       /></label>
-      <button type="submit">Create user</button>
+      <div class="actions"><${SubmitButton} icon="personPlus" label="Create user" /></div>
     </form>
   `
 }
 
-function AnonymousActions() {
+// Where a composer would be, for anonymous visitors.
+function AnonymousActions({ heading = 'Blurt now' }: { heading?: string }) {
   return html`
-    <p>
-      <a href="/login">Log in</a>
-      or
-      <a href="/createUser">create a profile</a>
-      to blurt.
-    </p>
+    <section class="panel composer">
+      <h2>${heading}</h2>
+      <p>Make a profile to blurt. It takes a username and a password, nothing else.</p>
+      <div class="actions">
+        <${ButtonLink} href="/createUser" icon="personPlus" label="Create a profile" kind="" />
+        <${ButtonLink} href="/login" icon="login" label="Log in" />
+      </div>
+    </section>
   `
 }
 
-function LoginForm({ username = '', validationError }: LoginProps) {
+function LoginPage({ username = '', validationError }: LoginProps) {
   return html`
-    <form method="post" action="/login">
-      ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-      <label
-        >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
-      /></label>
-      <label
-        >Password <input name="password" type="password" maxlength=${passwordMaxLength} required
-      /></label>
-      <button type="submit">Log in</button>
-      <p class="hint">${forgotPassword} <a href="/privacy">Privacy</a>.</p>
-    </form>
-  `
-}
-
-function LogoutForm() {
-  return html`
-    <form method="post" action="/api/logout">
-      <a href="/near">Near you</a>
-      <a href="/settings">Settings</a>
-      <button type="submit">Log out</button>
-    </form>
+    <${Page}
+      title="Log in"
+      tagline="Back for more blurting."
+      aside=${html`
+        <section class="panel">
+          <h3>New here?</h3>
+          <p>A username and a password is all it takes. No email, no phone number.</p>
+          <${ButtonLink} href="/createUser" icon="personPlus" label="Create a profile" />
+        </section>
+        <${SupportLinks} />
+      `}
+    >
+      <section class="panel">
+        <form method="post" action="/login">
+          ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+          <label
+            >Username
+            <input name="username" maxlength=${usernameMaxLength} required value=${username}
+          /></label>
+          <label
+            >Password
+            <input name="password" type="password" maxlength=${passwordMaxLength} required
+          /></label>
+          <div class="actions"><${SubmitButton} icon="login" label="Log in" /></div>
+          <p class="hint">${forgotPassword} <a href="/privacy">Privacy</a>.</p>
+        </form>
+      </section>
+    <//>
   `
 }
 
 function SettingsPage({ viewer, activeSessions }: SettingsData) {
+  const edit = `/${viewer.username}/edit`
   return html`
-    <header>
-      <h1>Settings: ${viewer.username}</h1>
-      <p><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
-      <section aria-label="Sessions">
+    <${Page}
+      title="Settings"
+      tagline=${`Account and safety controls for ${viewer.username}, all in plain sight.`}
+      aside=${html`<${SupportLinks} />`}
+    >
+      <section class="panel" aria-label="Sessions">
         <h2>Sessions</h2>
         <p>
           You're logged in on ${plural(activeSessions, 'browser or device', 'browsers or devices')}.
         </p>
-        <p>
+        <p class="tiny">
           Lost a phone, or logged in somewhere you shouldn't have? Log out everywhere, this browser
           included. Other devices are logged out within 5 minutes.
         </p>
-        <form method="post" action="/api/logout-everywhere">
-          <button type="submit">Log out everywhere</button>
-        </form>
+        <div class="actions">
+          <form method="post" action="/api/logout" class="inline">
+            <${SubmitButton} icon="logout" label="Log out" kind="secondary" />
+          </form>
+          <form method="post" action="/api/logout-everywhere" class="inline">
+            <${SubmitButton} icon="shield" label="Log out everywhere" />
+          </form>
+        </div>
       </section>
-      <section aria-label="Delete account">
-        <h2>Delete account</h2>
+      <section class="panel" aria-label="Profile and appearance">
+        <h2>Profile and appearance</h2>
+        <div class="actions">
+          <${ButtonLink} href=${edit} icon="edit" label="Edit profile" />
+          <${ButtonLink} href=${`${edit}#avatar`} icon="person" label="Avatar" />
+          <${ButtonLink} href=${`${edit}#location`} icon="pin" label="Location" />
+          <${ButtonLink} href=${`${edit}#theme`} icon="palette" label="Theme" />
+        </div>
+      </section>
+      <section class="panel" aria-label="Delete account">
+        <h2 class="warn">Delete account</h2>
         <p>Deletes your profile and your blurts for good. You'll be asked for your password.</p>
-        <p><a href="/settings/delete">Delete my account</a></p>
+        <${ButtonLink}
+          href="/settings/delete"
+          icon="warning"
+          label="Delete my account"
+          kind="danger"
+        />
       </section>
-    </main>
+    <//>
   `
 }
 
@@ -436,28 +571,33 @@ export const accountDeletionEffects = [
 
 function DeleteAccountPage({ viewer, validationError }: DeleteAccountData & FormProps) {
   return html`
-    <header>
-      <h1>Delete account: ${viewer.username}</h1>
-      <p><a href="/settings">Back to settings</a></p>
-    </header>
-    <main>
-      <ul>
-        ${accountDeletionEffects.map((effect) => html`<li>${effect}</li>`)}
-      </ul>
-      <form method="post" action="/settings/delete">
-        ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-        <label
-          >Your password, to confirm
-          <input
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            maxlength=${passwordMaxLength}
-            required
-        /></label>
-        <button type="submit">Delete my account for good</button>
-      </form>
-    </main>
+    <${Page}
+      title=${`Delete account: ${viewer.username}`}
+      tagline="For good. There is no undo."
+      actions=${html`<${ButtonLink} href="/settings" icon="back" label="Back to settings" />`}
+    >
+      <section class="panel">
+        <h2 class="warn">What happens</h2>
+        <ul>
+          ${accountDeletionEffects.map((effect) => html`<li>${effect}</li>`)}
+        </ul>
+        <form method="post" action="/settings/delete">
+          ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+          <label
+            >Your password, to confirm
+            <input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              maxlength=${passwordMaxLength}
+              required
+          /></label>
+          <div class="actions">
+            <${SubmitButton} icon="warning" label="Delete my account for good" kind="danger" />
+          </div>
+        </form>
+      </section>
+    <//>
   `
 }
 
@@ -530,13 +670,15 @@ export function blurtAnchor(blurt: Blurt): string {
 function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
   const count = plural(blurt.likeCount, 'like')
   if (!viewer) {
-    return html`<span class="like-count">${count}</span>`
+    return html`<span class="action-count"
+      ><${Icon} name="heart" /><span class="like-count">${count}</span></span
+    >`
   }
   return html`
     <form method="post" action=${blurt.viewerLikes ? '/api/unlike' : '/api/like'} class="like-form">
       <input type="hidden" name="blurtId" value=${blurt.id} />
-      <button type="submit" aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}>
-        ${blurt.viewerLikes ? 'Unlike' : 'Like'}
+      <button type="submit" class="action" aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}>
+        <${Icon} name="heart" /><span>${blurt.viewerLikes ? 'Unlike' : 'Like'}</span>
       </button>
       <span class="like-count">${count}</span>
     </form>
@@ -548,20 +690,32 @@ function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
 function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
   const count = html`<span class="like-count">${plural(blurt.reblurtCount, 'reblurt')}</span>`
   const action = reblurtAction(viewer, blurt)
-  const quote = viewer && html`<a href=${quoteUrl(blurt)}>Quote</a>`
+  const quote =
+    viewer &&
+    html`<a href=${quoteUrl(blurt)} class="action"><${Icon} name="quote" /><span>Quote</span></a>`
   if (!action) {
-    return html`${count} ${quote}`
+    return html`<span class="action-count"><${Icon} name="reblurt" />${count}</span> ${quote}`
   }
   return html`
     <form method="post" action="/api/${action}" class="like-form">
       <input type="hidden" name="blurtId" value=${blurt.id} />
-      <button type="submit" aria-pressed=${action === 'unreblurt' ? 'true' : 'false'}>
-        ${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
+      <button
+        type="submit"
+        class="action"
+        aria-pressed=${action === 'unreblurt' ? 'true' : 'false'}
+      >
+        <${Icon} name="reblurt" /><span
+          >${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}</span
+        >
       </button>
       ${count}
     </form>
     ${quote}
   `
+}
+
+function Timestamp({ date }: { date: Date }) {
+  return html`<time datetime=${date.toISOString()}>${date.toLocaleString()}</time>`
 }
 
 // The blurt a quote quotes, under its text: one level, so a quote in it shows only its own
@@ -574,11 +728,7 @@ function QuotedCard({ quoted }: { quoted: QuotedBlurt }) {
     <blockquote class="quoted">
       <div class="blurt-meta">
         <strong><a href="/${quoted.username}/">${quoted.username}</a></strong>
-        <a href=${blurtUrl(quoted)}
-          ><time datetime=${quoted.createdAt.toISOString()}
-            >${quoted.createdAt.toLocaleString()}</time
-          ></a
-        >
+        <a href=${blurtUrl(quoted)}><${Timestamp} date=${quoted.createdAt} /></a>
       </div>
       <p>${quoted.text}</p>
     </blockquote>
@@ -599,10 +749,10 @@ function ReplyingTo({ blurt }: { blurt: Blurt }) {
 function DeleteForm({ blurt }: { blurt: Blurt }) {
   return html`
     <details class="blurt-action">
-      <summary>Delete</summary>
+      <summary><${Icon} name="trash" /><span>Delete</span></summary>
       <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
         <span>Delete this blurt for good?</span>
-        <button type="submit">Delete</button>
+        <button type="submit" class="danger">Delete</button>
       </form>
     </details>
   `
@@ -611,12 +761,12 @@ function DeleteForm({ blurt }: { blurt: Blurt }) {
 function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
   return html`
     <details class="blurt-action" open=${Boolean(error)}>
-      <summary>Report</summary>
+      <summary><${Icon} name="flag" /><span>Report</span></summary>
       <form method="post" action="/api/report" class="inline-form">
         <${ValidationError} message=${error} />
         <input type="hidden" name="blurtId" value=${blurt.id} />
         <label>Reason (optional) <input name="reason" maxlength=${reportReasonMaxLength} /></label>
-        <button type="submit">Report</button>
+        <button type="submit" class="danger">Report</button>
       </form>
     </details>
   `
@@ -653,6 +803,7 @@ function BlurtCard({
       : replies.length > 0
         ? plural(hiddenReplies, 'more reply', 'more replies')
         : plural(hiddenReplies, 'reply', 'replies')
+  const threadIcon: IconName = hiddenReplies <= 0 && !blurt.deleted ? 'reply' : 'thread'
   const action = blurtActions(viewer, blurt)
   const replyCards =
     replies.length > 0 &&
@@ -666,17 +817,17 @@ function BlurtCard({
         <div class="blurt-body">
           <div class="blurt-meta">
             <em>Deleted</em>
-            <a href=${blurtUrl(blurt)}
-              ><time datetime=${blurt.createdAt.toISOString()}
-                >${blurt.createdAt.toLocaleString()}</time
-              ></a
-            >
+            <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
           </div>
           <p class="empty">This blurt was deleted.</p>
           ${replyCards}
           ${
             showActions &&
-            html`<p class="blurt-actions"><a href=${blurtUrl(blurt)}>${threadLink}</a></p>`
+            html`<div class="blurt-actions">
+              <a href=${blurtUrl(blurt)} class="action"
+                ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
+              >
+            </div>`
           }
         </div>
       </article>
@@ -685,7 +836,7 @@ function BlurtCard({
 
   // The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
-    <article class="blurt" id=${blurtAnchor(blurt)}>
+    <article class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'} id=${blurtAnchor(blurt)}>
       <${AvatarSvg} avatar=${blurt.avatar} />
       <div class="blurt-body">
         ${
@@ -697,18 +848,19 @@ function BlurtCard({
         ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
         <div class="blurt-meta">
           <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
-          <a href=${blurtUrl(blurt)}
-            ><time datetime=${blurt.createdAt.toISOString()}
-              >${blurt.createdAt.toLocaleString()}</time
-            ></a
-          >
+          <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
         </div>
         <p>${blurt.text}</p>
-        ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`} ${replyCards}
+        ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`}
         <div class="blurt-actions">
+          ${
+            showActions &&
+            html`<a href=${blurtUrl(blurt)} class="action"
+              ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
+            >`
+          }
           <${Likes} blurt=${blurt} viewer=${viewer} />
           <${Reblurts} blurt=${blurt} viewer=${viewer} />
-          ${showActions && html`<a href=${blurtUrl(blurt)}>${threadLink}</a>`}
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
           ${
             action === 'report' &&
@@ -717,8 +869,27 @@ function BlurtCard({
               : html`<${ReportForm} blurt=${blurt} error=${reportError} />`)
           }
         </div>
+        ${replyCards}
       </div>
     </article>
+  `
+}
+
+// Related blurts, in the thread page's aside: just enough to pick one.
+function RelatedList({ blurts }: { blurts: Blurt[] }) {
+  return html`
+    <ul class="related">
+      ${blurts.map(
+        (blurt) => html`
+          <li>
+            <a href=${blurtUrl(blurt)}
+              >${blurt.deleted ? 'A deleted blurt' : preview(blurt.text, 90)}</a
+            >
+            ${blurt.username && html`<span class="tiny"> · ${blurt.username}</span>`}
+          </li>
+        `,
+      )}
+    </ul>
   `
 }
 
@@ -735,88 +906,93 @@ function BlurtPage({
   composer,
   reportError,
 }: BlurtPageProps) {
+  const quoting = composer?.reblurtOfId !== undefined
+  const aside = html`
+    ${
+      viewer &&
+      !blurt.deleted &&
+      html`<${Composer}
+        ...${quoting ? composer : {}}
+        id="quote"
+        reblurtOfId=${blurt.id}
+        heading="Quote"
+        label="Your take, with this blurt under it"
+        placeholder="Your take, with this blurt under it"
+        button="Quote it"
+      />`
+    }
+    <section class="panel" aria-label="Related blurts">
+      <h3>Related blurts</h3>
+      ${
+        related.length > 0
+          ? html`<${RelatedList} blurts=${related} />`
+          : html`<p class="empty">Nothing related yet.</p>`
+      }
+    </section>
+  `
   return html`
-    <header>
-      <h1>${blurt.username ?? 'Deleted blurt'}</h1>
-      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
+    <${Page}
+      title=${blurt.username ?? 'Deleted blurt'}
+      tagline="One blurt, its replies, and related chaos."
+      aside=${aside}
+    >
       ${
         parent &&
-        html`<section aria-label="In reply to">
+        html`<section class="panel" aria-label="In reply to">
           <h2>In reply to</h2>
           <${BlurtCard} blurt=${parent} viewer=${viewer} />
         </section>`
       }
-      <${BlurtCard}
-        blurt=${blurt}
-        viewer=${viewer}
-        showActions=${false}
-        inThread
-        reported=${reported}
-        reportError=${reportError}
-      />
+      <section class="panel thread-main" aria-label="Blurt">
+        <${BlurtCard}
+          blurt=${blurt}
+          viewer=${viewer}
+          showActions=${false}
+          inThread
+          reported=${reported}
+          reportError=${reportError}
+        />
+      </section>
       ${
-        viewer &&
-        !blurt.deleted &&
-        html`<section aria-label="Quote" id="quote">
-          <h2>Quote</h2>
-          <${Composer}
-            ...${composer?.reblurtOfId === undefined ? {} : composer}
-            reblurtOfId=${blurt.id}
-            label="Your take, with this blurt under it"
-            button="Quote it"
-          />
-        </section>`
+        blurt.deleted
+          ? null
+          : viewer
+            ? html`<${Composer}
+                ...${quoting ? {} : (composer ?? {})}
+                parentId=${blurt.id}
+                heading="Reply"
+                label="Reply"
+                placeholder="Reply to this blurt…"
+                button="Reply"
+              />`
+            : html`<${AnonymousActions} heading="Reply" />`
       }
-      <section aria-label="Replies">
+      <section class="panel" aria-label="Replies">
         <h2>Replies</h2>
-        ${
-          blurt.deleted
-            ? null
-            : viewer
-              ? html`<${Composer}
-                  ...${composer?.reblurtOfId === undefined ? (composer ?? {}) : {}}
-                  parentId=${blurt.id}
-                  label="Reply"
-                  button="Reply"
-                />`
-              : html`<${AnonymousActions} />`
-        }
-        ${
-          replies.length > 0
-            ? replies.map(
-                (reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} inThread />`,
-              )
-            : html`<p class="empty">No replies yet.</p>`
-        }
+        <div class="thread-children">
+          ${
+            replies.length > 0
+              ? replies.map(
+                  (reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} inThread />`,
+                )
+              : html`<p class="empty">No replies yet.</p>`
+          }
+        </div>
         ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
       </section>
-      <section aria-label="Related blurts">
-        <h2>Related blurts</h2>
-        ${
-          related.length > 0
-            ? related.map((other) => html`<${BlurtCard} blurt=${other} viewer=${viewer} />`)
-            : html`<p class="empty">Nothing related yet.</p>`
-        }
-      </section>
-    </main>
+    <//>
   `
 }
 
 // Moderation: blurts with open reports, each with Delete and Dismiss buttons.
 function AdminReportsPage({ reports }: AdminReportsData) {
   return html`
-    <header>
-      <h1>Reports</h1>
-      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
+    <${Page} title="Reports" tagline="Open reports, the one waiting longest first.">
       ${
         reports.length > 0
           ? reports.map(
               ({ blurt, reports: open }) => html`
-                <section class="report" aria-label="Reported blurt ${blurt.id}">
+                <section class="panel report" aria-label="Reported blurt ${blurt.id}">
                   <${BlurtCard} blurt=${blurt} />
                   <ul>
                     ${open.map(
@@ -828,21 +1004,21 @@ function AdminReportsPage({ reports }: AdminReportsData) {
                         </li>`,
                     )}
                   </ul>
-                  <div class="report-buttons">
-                    <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
-                      <button type="submit">Delete blurt</button>
+                  <div class="actions">
+                    <form method="post" action=${deleteBlurtPath(blurt)} class="inline">
+                      <${SubmitButton} icon="trash" label="Delete blurt" kind="danger" />
                     </form>
-                    <form method="post" action="/api/admin/reports/dismiss" class="inline-form">
+                    <form method="post" action="/api/admin/reports/dismiss" class="inline">
                       <input type="hidden" name="blurtId" value=${blurt.id} />
-                      <button type="submit">Dismiss</button>
+                      <${SubmitButton} icon="shield" label="Dismiss" kind="secondary" />
                     </form>
                   </div>
                 </section>
               `,
             )
-          : html`<p class="empty">No open reports.</p>`
+          : html`<section class="panel"><p class="empty">No open reports.</p></section>`
       }
-    </main>
+    <//>
   `
 }
 
@@ -858,35 +1034,26 @@ function renderSocial(value: string): unknown {
   return html`<span>${value}</span>`
 }
 
-function ProfileData({ profile, canEdit }: { profile: UserProfile; canEdit: boolean }) {
+const socialFields = [
+  ['homepage', 'Homepage'],
+  ['x', 'X'],
+  ['instagram', 'Instagram'],
+  ['tiktok', 'TikTok'],
+  ['youtube', 'YouTube'],
+  ['github', 'GitHub'],
+  ['linkedin', 'LinkedIn'],
+] as const
+
+function ProfileLinks({ profile }: { profile: UserProfile }) {
   return html`
-    <section aria-label="Profile">
-      <div class="section-title">
-        <h2>Profile</h2>
-        ${
-          canEdit &&
-          html`<a class="button-link" href="/${profile.username}/edit" aria-label="Edit profile"
-            >Edit profile</a
-          >`
-        }
-      </div>
+    <section class="panel" aria-label="Links">
+      <h3>Links</h3>
       <dl class="profile-data">
-        <dt>Homepage</dt>
-        <dd>${renderSocial(profile.homepage)}</dd>
-        <dt>X</dt>
-        <dd>${renderSocial(profile.x)}</dd>
-        <dt>Instagram</dt>
-        <dd>${renderSocial(profile.instagram)}</dd>
-        <dt>TikTok</dt>
-        <dd>${renderSocial(profile.tiktok)}</dd>
-        <dt>YouTube</dt>
-        <dd>${renderSocial(profile.youtube)}</dd>
-        <dt>GitHub</dt>
-        <dd>${renderSocial(profile.github)}</dd>
-        <dt>LinkedIn</dt>
-        <dd>${renderSocial(profile.linkedin)}</dd>
-        <dt>Bio</dt>
-        <dd>${profile.bio || html`<span class="empty">Not set</span>`}</dd>
+        ${socialFields.map(
+          ([key, label]) =>
+            html`<dt>${label}</dt>
+              <dd>${renderSocial(profile[key])}</dd>`,
+        )}
       </dl>
     </section>
   `
@@ -898,7 +1065,7 @@ function ProfileData({ profile, canEdit }: { profile: UserProfile; canEdit: bool
 function LocationForms({ location, error }: { location: GeoPoint | null; error?: string }) {
   const marker = location && pointToPixel(location)
   return html`
-    <section aria-label="Location">
+    <section class="panel" aria-label="Location" id="location">
       <h2>Location</h2>
       <p>
         Optional. Set it to see <a href="/near">blurts near you</a>. Only ${gridDescription} is
@@ -946,7 +1113,7 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
           </div>
         </div>
       </form>
-      <form method="post" action="/api/location">
+      <form method="post" action="/api/location" class="field-row">
         <label
           >Latitude (-90 to 90, south is negative)
           <input
@@ -971,13 +1138,13 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
             value=${location?.lon ?? ''}
           />
         </label>
-        <button type="submit">Set location</button>
+        <div class="actions"><${SubmitButton} icon="pin" label="Set location" /></div>
       </form>
       ${
         location &&
-        html`<form method="post" action="/api/location">
+        html`<form method="post" action="/api/location" class="inline">
           <input type="hidden" name="clear" value="1" />
-          <button type="submit">Remove my location</button>
+          <${SubmitButton} icon="trash" label="Remove my location" kind="secondary" />
         </form>`
       }
     </section>
@@ -1016,7 +1183,7 @@ function ColorInput({ name, label, value }: { name: keyof Avatar; label: string;
 // server pick a new random avatar instead. Both work without JS.
 function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
   return html`
-    <section aria-label="Avatar">
+    <section class="panel" aria-label="Avatar" id="avatar">
       <h2>Avatar</h2>
       <${ValidationError} message=${error} />
       <form method="post" action="/api/avatar" class="avatar-form">
@@ -1045,10 +1212,39 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
           />
           <${ColorInput} name="toothColor" label="Tooth colour" value=${avatar.toothColor} />
         </div>
-        <div class="avatar-buttons">
-          <button type="submit">Save avatar</button>
+        <div class="actions avatar-buttons">
+          <button type="submit"><${Icon} name="save" /><span>Save avatar</span></button>
           <button type="submit" name="random" value="1" formnovalidate>Random</button>
         </div>
+      </form>
+    </section>
+  `
+}
+
+// The colour theme, for this browser (a cookie, see src/themes.ts). Each choice shows a
+// strip of its colours (classes in public/style.css), so no JS is needed to preview.
+function ThemeForm() {
+  const current = pageContext().theme
+  return html`
+    <section class="panel" aria-label="Theme" id="theme">
+      <h2>Theme</h2>
+      <p class="tiny">Saved in this browser, for every page.</p>
+      <form method="post" action="/api/theme">
+        <fieldset class="theme-choices">
+          <legend class="visually-hidden">Theme</legend>
+          ${themes.map(
+            ({ id, label }) => html`
+              <label class="theme-choice">
+                <input type="radio" name="theme" value=${id} checked=${id === current} required />
+                <span class="swatch swatch-${id}" aria-hidden="true"
+                  ><span></span><span></span><span></span><span></span
+                ></span>
+                <span>${label}</span>
+              </label>
+            `,
+          )}
+        </fieldset>
+        <div class="actions"><${SubmitButton} icon="palette" label="Use this theme" /></div>
       </form>
     </section>
   `
@@ -1061,93 +1257,82 @@ function ProfileEditForm({
   locationError,
   avatarError,
 }: ProfileEditProps) {
+  const aside = html`
+    <${LinkPanel}
+      title="On this page"
+      links=${[
+        ['#profile', 'Profile and links'],
+        ['#avatar', 'Avatar'],
+        ['#location', 'Location'],
+        ['#theme', 'Theme'],
+      ]}
+    />
+    <${LinkPanel}
+      title="Elsewhere"
+      links=${[
+        [`/${profile.username}/`, 'Your profile'],
+        ['/settings', 'Account settings'],
+      ]}
+    />
+  `
   return html`
-    <header>
-      <h1>Edit profile: ${profile.username}</h1>
-      <p><a href="/${profile.username}/">Back to profile</a></p>
-    </header>
-    <main>
-      <form method="post" action="/${profile.username}/edit">
-        ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
-        <label
-          >Homepage
-          <input
-            name="homepage"
-            maxlength=${linkMaxLength}
-            value=${profile.homepage}
-            placeholder="https://example.com"
-          />
-        </label>
-        <label
-          >X
-          <input
-            name="x"
-            maxlength=${linkMaxLength}
-            value=${profile.x}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >Instagram
-          <input
-            name="instagram"
-            maxlength=${linkMaxLength}
-            value=${profile.instagram}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >TikTok
-          <input
-            name="tiktok"
-            maxlength=${linkMaxLength}
-            value=${profile.tiktok}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >YouTube
-          <input
-            name="youtube"
-            maxlength=${linkMaxLength}
-            value=${profile.youtube}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >GitHub
-          <input
-            name="github"
-            maxlength=${linkMaxLength}
-            value=${profile.github}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >LinkedIn
-          <input
-            name="linkedin"
-            maxlength=${linkMaxLength}
-            value=${profile.linkedin}
-            placeholder="@handle or full URL"
-          />
-        </label>
-        <label
-          >Bio
-          <textarea name="bio" maxlength=${bioMaxLength} placeholder="Say the thing.">
+    <${Page}
+      title=${`Edit profile: ${profile.username}`}
+      tagline="Identity, looks, whereabouts and colours."
+      actions=${html`<${ButtonLink}
+        href=${`/${profile.username}/`}
+        icon="back"
+        label="Back to profile"
+      />`}
+      aside=${aside}
+    >
+      <section class="panel" aria-label="Profile" id="profile">
+        <h2>Profile</h2>
+        <form method="post" action="/${profile.username}/edit">
+          ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
+          <label
+            >Bio
+            <textarea name="bio" maxlength=${bioMaxLength} placeholder="Say the thing.">
 ${profile.bio}</textarea>
-        </label>
-        <button type="submit">Save profile</button>
-      </form>
+          </label>
+          <div class="field-grid">
+            <label
+              >Homepage
+              <input
+                name="homepage"
+                maxlength=${linkMaxLength}
+                value=${profile.homepage}
+                placeholder="https://example.com"
+              />
+            </label>
+            ${socialFields
+              .filter(([key]) => key !== 'homepage')
+              .map(
+                ([key, label]) =>
+                  html`<label
+                    >${label}
+                    <input
+                      name=${key}
+                      maxlength=${linkMaxLength}
+                      value=${profile[key]}
+                      placeholder="@handle or full URL"
+                    />
+                  </label>`,
+              )}
+          </div>
+          <div class="actions"><${SubmitButton} icon="save" label="Save profile" /></div>
+        </form>
+      </section>
       <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
       <${LocationForms} location=${location} error=${locationError} />
-    </main>
+      <${ThemeForm} />
+    <//>
   `
 }
 
 function FeedTabs({ feed }: { feed: FeedData['feed'] }) {
   return html`
-    <nav class="tabs" aria-label="Feeds">
+    <nav class="panel tabs" aria-label="Feeds">
       <a href="/" aria-current=${feed === 'following' ? 'page' : undefined}>Following</a>
       <a href="/everyone" aria-current=${feed === 'everyone' ? 'page' : undefined}>Everyone</a>
     </nav>
@@ -1165,6 +1350,39 @@ function Discovery({ section, viewer }: { section: DiscoverySection; viewer: Vie
   `
 }
 
+// The feed pages' aside: shortcuts for logged-in viewers, the way in for everyone else.
+function FeedAside({ viewer }: { viewer: Viewer }) {
+  if (!viewer) {
+    return html`
+      <section class="panel">
+        <h3>What is this?</h3>
+        <p>
+          Short posts, blurts, of up to ${blurtMaxLength} characters. No ads, no tracking, no
+          JavaScript, no email address needed.
+        </p>
+        <div class="actions">
+          <${ButtonLink} href="/createUser" icon="personPlus" label="Sign up" kind="" />
+          <${ButtonLink} href="/login" icon="login" label="Log in" />
+        </div>
+      </section>
+      <${SupportLinks} />
+    `
+  }
+  return html`
+    <${LinkPanel}
+      title="Your corner"
+      links=${[
+        [`/${viewer.username}/`, 'Your profile'],
+        [`/${viewer.username}/edit`, 'Edit profile, avatar and theme'],
+        ['/near', 'Blurts near you'],
+        ['/search', 'Search people and blurts'],
+        ['/settings', 'Account settings'],
+      ]}
+    />
+    <${SupportLinks} />
+  `
+}
+
 function FeedPage(data: FeedData & { composer?: ComposerProps }) {
   const { viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next, composer } = data
   const cards = (items: FeedItem[]) =>
@@ -1175,23 +1393,25 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
     discoveryAfter(discovery, count).map(
       (section) => html`<${Discovery} section=${section} viewer=${viewer} />`,
     )
+  const everyonePage = feed === 'everyone' && hasFollowingFeed
 
   return html`
-    <header>
-      <h1>blurt.trade</h1>
-      <p class="tagline">Say the thing. Regret it later.</p>
-    </header>
-    <main>
+    <${Page}
+      title=${everyonePage ? 'Everyone' : 'blurt.trade'}
+      tagline=${everyonePage ? 'Every blurt, newest first.' : siteDescription}
+      aside=${html`<${FeedAside} viewer=${viewer} />`}
+    >
       ${viewer ? html`<${Composer} ...${composer ?? {}} />` : html`<${AnonymousActions} />`}
-      ${viewer && html`<${LogoutForm} />`} ${hasFollowingFeed && html`<${FeedTabs} feed=${feed} />`}
+      ${hasFollowingFeed && html`<${FeedTabs} feed=${feed} />`}
       ${
         followedBlurts.length > 0 &&
-        html`<section aria-label="From people you follow" class="followed">
+        html`<section aria-label="From people you follow" class="panel followed">
           <h2>From people you follow</h2>
           ${cards(followedBlurts)}
         </section>`
       }
-      <section aria-label="Blurts">
+      <section aria-label="Blurts" class="panel">
+        <h2>${feed === 'following' ? 'Following' : 'Everyone'}</h2>
         ${
           blurts.length > 0
             ? blurts.map((blurt, index) => [cards([blurt]), discoverySections(index + 1)])
@@ -1212,36 +1432,57 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
           />`
         }
       </section>
-    </main>
+    <//>
   `
 }
 
 function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
+  const edit = `/${viewer.username}/edit`
   return html`
-    <header>
-      <h1>Blurts near you</h1>
-      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
+    <${Page}
+      title="Blurts near you"
+      tagline="What people around you are blurting."
+      actions=${html`<${ButtonLink}
+        href=${`${edit}#location`}
+        icon="pin"
+        label="Change location"
+      />`}
+      aside=${html`
+        <section class="panel">
+          <h3>Local context</h3>
+          <p class="tiny">
+            Only ${gridDescription} is stored for anyone, never the exact spot, and nobody sees
+            yours. Set or remove it on <a href=${`${edit}#location`}>your edit page</a>.
+          </p>
+        </section>
+        <${SupportLinks} />
+      `}
+    >
+      <${Composer} heading="Blurt from your area" placeholder="Local thought? Share it." />
       ${
         location
           ? html`
-              <p>
-                From people within ${radius} km of ${formatLocation(location)}.${' '}
-                <a href="/${viewer.username}/edit">Change your location</a>
-              </p>
-              <form method="get" action="/near" class="radius-form">
-                <label
-                  >Radius
-                  <select name="radius">
-                    ${radii.map(
-                      (km) => html`<option value=${km} selected=${km === radius}>${km} km</option>`,
-                    )}
-                  </select>
-                </label>
-                <button type="submit">Show</button>
-              </form>
-              <section aria-label="Blurts">
+              <section class="panel" aria-label="Radius">
+                <h2>Radius</h2>
+                <p>
+                  From people within ${radius} km of ${formatLocation(location)}.${' '}
+                  <a href=${edit}>Change your location</a>
+                </p>
+                <form method="get" action="/near" class="radius-form">
+                  <label
+                    >Radius
+                    <select name="radius">
+                      ${radii.map(
+                        (km) =>
+                          html`<option value=${km} selected=${km === radius}>${km} km</option>`,
+                      )}
+                    </select>
+                  </label>
+                  <${SubmitButton} icon="pin" label="Show" kind="secondary" />
+                </form>
+              </section>
+              <section aria-label="Blurts" class="panel">
+                <h2>Nearby blurts</h2>
                 ${
                   blurts.length > 0
                     ? blurts.map(
@@ -1260,13 +1501,15 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                 }
               </section>
             `
-          : html`<p>
-              You haven't set a location.${' '}
-              <a href="/${viewer.username}/edit">Click the map on your edit page</a> to see blurts
-              from people near you.
-            </p>`
+          : html`<section class="panel">
+              <p>
+                You haven't set a location.${' '}
+                <a href=${edit}>Click the map on your edit page</a> to see blurts from people near
+                you.
+              </p>
+            </section>`
       }
-    </main>
+    <//>
   `
 }
 
@@ -1274,7 +1517,11 @@ function FollowForm({ username, following }: { username: string; following: bool
   return html`
     <form method="post" action=${following ? '/api/unfollow' : '/api/follow'} class="follow-form">
       <input type="hidden" name="username" value=${username} />
-      <button type="submit">${following ? 'Unfollow' : 'Follow'}</button>
+      <button type="submit" class=${following ? 'secondary' : undefined}>
+        <${Icon} name=${following ? 'personMinus' : 'personPlus'} /><span
+          >${following ? 'Unfollow' : 'Follow'}</span
+        >
+      </button>
     </form>
   `
 }
@@ -1299,12 +1546,12 @@ function InviteCodes({ codes }: { codes: InviteCode[] }) {
     return html`<li><code>${invite.code}</code> · ${status}</li>`
   })
   return html`
-    <section aria-label="Your invite codes">
-      <h2>Your invite codes</h2>
-      <p>Each code lets one person sign up, even while blurt.trade is invite-only.</p>
+    <section class="panel" aria-label="Your invite codes">
+      <h3>Your invite codes</h3>
+      <p class="tiny">Each code lets one person sign up, even while blurt.trade is invite-only.</p>
       ${
         items.length > 0
-          ? html`<ul class="invite-codes">
+          ? html`<ul class="list invite-codes">
               ${items}
             </ul>`
           : html`<p class="empty">You have no invite codes.</p>`
@@ -1322,29 +1569,34 @@ function ProfilePage({
   blurts,
   next,
 }: ProfilePageData) {
+  const own = viewer?.id === profile.userId
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)
+  const actions = own
+    ? html`<${ButtonLink} href="/${profile.username}/edit" icon="edit" label="Edit profile" />`
+    : viewer &&
+      html`<${FollowForm} username=${profile.username} following=${follows.viewerFollows} />`
 
   return html`
-    <header class="profile-header">
-      <${AvatarSvg} avatar=${profile.avatar} label="${profile.username}'s avatar" size="large" />
-      <div>
-        <h1>${profile.username}</h1>
-        <p class="tagline"><a href="/">Back to blurt.trade</a></p>
-      </div>
-    </header>
-    <main>
-      <p class="follow-counts">
-        ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
-      </p>
-      ${invitedBy && html`<p class="invited-by">Invited by <a href="/${invitedBy}/">${invitedBy}</a></p>`}
-      ${
-        viewer &&
-        viewer.id !== profile.userId &&
-        html`<${FollowForm} username=${profile.username} following=${follows.viewerFollows} />`
-      }
-      <${ProfileData} profile=${profile} canEdit=${viewer?.id === profile.userId} />
-      ${inviteCodes && html`<${InviteCodes} codes=${inviteCodes} />`}
-      <section aria-label="${profile.username} blurts">
+    <${Page}
+      title=${profile.username}
+      tagline=${`${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following`}
+      lead=${html`<${AvatarSvg}
+        avatar=${profile.avatar}
+        label="${profile.username}'s avatar"
+        size="large"
+      />`}
+      actions=${actions}
+      aside=${html`
+        <${ProfileLinks} profile=${profile} />
+        ${inviteCodes && html`<${InviteCodes} codes=${inviteCodes} />`}
+      `}
+    >
+      <section class="panel" aria-label="Profile">
+        <h2>Profile</h2>
+        ${invitedBy && html`<p class="invited-by">Invited by <a href="/${invitedBy}/">${invitedBy}</a></p>`}
+        <p class="bio">${profile.bio || html`<span class="empty">No bio yet.</span>`}</p>
+      </section>
+      <section class="panel" aria-label="${profile.username} blurts">
         <h2>Blurts</h2>
         ${feed.length > 0 ? feed : html`<p class="empty">Nothing has been blurted yet.</p>`}
         ${
@@ -1355,7 +1607,7 @@ function ProfilePage({
           />`
         }
       </section>
-    </main>
+    <//>
   `
 }
 
@@ -1366,20 +1618,27 @@ function PrivateContact({ contact }: { contact: Contact }) {
     : html`the contact on the <a href="/about">About page</a>`
 }
 
-function InfoHeader({ title }: { title: string }) {
+// About, Terms and Privacy: one panel of text.
+function InfoPage({
+  title,
+  tagline,
+  children,
+}: {
+  title: string
+  tagline: string
+  children?: ComponentChildren
+}) {
   return html`
-    <header>
-      <h1>${title}</h1>
-      <p><a href="/">Back to blurt.trade</a></p>
-    </header>
+    <${Page} title=${title} tagline=${tagline} aside=${html`<${SupportLinks} />`}>
+      <section class="panel prose">${children}</section>
+    <//>
   `
 }
 
 function AboutPage({ contact }: InfoPageData) {
   const { email, issuesUrl, securityUrl } = contact
   return html`
-    <${InfoHeader} title="About blurt.trade" />
-    <main>
+    <${InfoPage} title="About blurt.trade" tagline="A small hobby site for blurting.">
       <p>
         blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength}
         characters. It works without JavaScript, has no ads and no tracking, and collects as little
@@ -1422,14 +1681,13 @@ function AboutPage({ contact }: InfoPageData) {
             </ul>`
         }
       </section>
-    </main>
+    <//>
   `
 }
 
 function TermsPage({ contact }: InfoPageData) {
   return html`
-    <${InfoHeader} title="Terms" />
-    <main>
+    <${InfoPage} title="Terms" tagline="Short on purpose.">
       <p>By using blurt.trade you agree to these terms. They're short on purpose.</p>
       <h2>Your posts</h2>
       <p>
@@ -1459,14 +1717,13 @@ function TermsPage({ contact }: InfoPageData) {
         These terms may change; this page always has the current version. Questions:
         <${PrivateContact} contact=${contact} />.
       </p>
-    </main>
+    <//>
   `
 }
 
 function PrivacyPage({ contact }: InfoPageData) {
   return html`
-    <${InfoHeader} title="Privacy" />
-    <main>
+    <${InfoPage} title="Privacy" tagline="As little as we can.">
       <p>
         blurt.trade collects as little as it can. No email address, no real name, no phone number.
         No analytics, no ads, no tracking, and nothing loaded from other sites.
@@ -1540,8 +1797,8 @@ function PrivacyPage({ contact }: InfoPageData) {
       </ul>
       <h2>Cookies</h2>
       <p>
-        Three, all needed for the site to work, none for tracking, so there's no cookie banner. All
-        are HttpOnly and only sent to blurt.trade.
+        At most four, none for tracking, so there's no cookie banner. All are HttpOnly and only sent
+        to blurt.trade.
       </p>
       <ul>
         <li><code>access_token</code>: shows you're logged in. Lasts 5 minutes.</li>
@@ -1552,6 +1809,10 @@ function PrivacyPage({ contact }: InfoPageData) {
         <li>
           <code>recent_write</code>: set for a few seconds after you post or change something, so
           you see your own change straight away.
+        </li>
+        <li>
+          <code>theme</code>: only if you pick a colour theme on your edit page, to remember it in
+          this browser. Lasts 400 days.
         </li>
       </ul>
       <h2>Backups</h2>
@@ -1581,25 +1842,56 @@ function PrivacyPage({ contact }: InfoPageData) {
         You can ask what is stored about you, and have it corrected or deleted:
         <${PrivateContact} contact=${contact} />.
       </p>
-    </main>
+    <//>
   `
 }
 
+// The search box is the page here, so the header leaves its own out.
 function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
   return html`
-    <header>
-      <h1>Search</h1>
-      <p class="tagline"><a href="/">Back to blurt.trade</a></p>
-    </header>
-    <main>
+    <${Page}
+      title="Search"
+      tagline="Find people and blurts."
+      search=${false}
+      aside=${html`
+        <${LinkPanel}
+          title="Browse instead"
+          links=${[
+            ['/everyone', 'Everyone'],
+            ...(viewer ? ([['/near', 'Near you']] as [string, string][]) : []),
+          ]}
+        />
+        <${SupportLinks} />
+      `}
+    >
+      <section class="panel composer">
+        <h2>Search people and blurts</h2>
+        <form method="get" action="/search" role="search" class="search-form">
+          <label for="site-search-q" class="visually-hidden">Search</label>
+          <input
+            id="site-search-q"
+            type="search"
+            name="q"
+            value=${query}
+            maxlength=${searchQueryMaxLength}
+            placeholder="Usernames and blurts"
+          />
+          <div class="row">
+            <span class="tiny">Usernames by name, blurts by every word.</span>
+            <${SubmitButton} icon="search" label="Search" />
+          </div>
+        </form>
+      </section>
       ${
         query === ''
-          ? html`<p class="empty">Type a username or some words in the search box above.</p>`
+          ? html`<section class="panel">
+              <p class="empty">Type a username or some words in the search box above.</p>
+            </section>`
           : html`
-              <p>Results for <q>${query}</q></p>
+              <p class="results-for">Results for <q>${query}</q></p>
               ${
                 users.length > 0 &&
-                html`<section aria-label="People">
+                html`<section aria-label="People" class="panel">
                   <h2>People</h2>
                   <ul class="user-matches">
                     ${users.map(
@@ -1613,7 +1905,7 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
                   </ul>
                 </section>`
               }
-              <section aria-label="Blurts">
+              <section aria-label="Blurts" class="panel">
                 <h2>Blurts</h2>
                 ${
                   blurts.length > 0
@@ -1627,7 +1919,7 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
               </section>
             `
       }
-    </main>
+    <//>
   `
 }
 
@@ -1697,7 +1989,7 @@ export function renderFeedPage(data: FeedData, composer?: ComposerProps): string
 }
 
 export function renderLoginPage(props: LoginProps = {}): string {
-  return renderDocument(h(LoginForm, props), { title: 'Log in', noindex: true })
+  return renderDocument(h(LoginPage, props), { title: 'Log in', noindex: true })
 }
 
 export function renderCreateUserPage(props: CreateUserProps): string {
@@ -1741,11 +2033,12 @@ export function renderSearchPage(data: SearchData): string {
     data.query === ''
       ? 'Search usernames and blurts.'
       : `Search results for “${preview(data.query, 80)}”.`
-  return renderDocument(
-    h(SearchPage, data),
-    { title, description, canonical: searchCanonical(data.query), noindex: true },
-    data.query,
-  )
+  return renderDocument(h(SearchPage, data), {
+    title,
+    description,
+    canonical: searchCanonical(data.query),
+    noindex: true,
+  })
 }
 
 export function renderNearPage(data: NearData): string {

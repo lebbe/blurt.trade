@@ -1,0 +1,36 @@
+/* Tarnished Teal: warm brown with verdigris lines, monospaced and shouty. Linked after
+   style.css. */
+:root {
+  --bg: #191615;
+  --bg-wash: #26201e;
+  --panel: #28211f;
+  --panel-alt: #322927;
+  --text: #f0e8df;
+  --muted: #c1ae9d;
+  --line: #7fa6a0;
+  --line-soft: #3f5f5a;
+  --accent: #5f8e87;
+  --accent-strong: #b9e1da;
+  --accent-soft: #233835;
+  --pop: #d48a62;
+  --pop-strong: #f4c9a8;
+  --signal: #8eb5ac;
+  --warn: #d5766e;
+  --focus: #b9e1da;
+  --glow-soft: rgb(212 138 98 / 40%);
+  --glow-strong: rgb(244 201 168 / 52%);
+  --panel-border: 2px;
+  --panel-shadow: 4px 4px 0 var(--line-soft);
+}
+
+body {
+  font-family: 'Azeret Mono', 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+.top-nav a,
+.tabs a,
+button,
+.button {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

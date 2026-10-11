@@ -6,12 +6,14 @@ import { migrate } from '../db/migrate.ts'
 import { checkConfig } from './config.ts'
 import { closeDb } from './db.ts'
 import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
-import { authenticate, deleteDeadSessions } from './middleware/auth.ts'
+import { authenticate, deleteDeadSessions, getViewer } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
+import { runWithPageContext } from './page-context.ts'
+import { defaultTheme, isTheme, themeCookie } from './themes.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
@@ -22,6 +24,7 @@ import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
+import { themeRouter } from './routes/theme.ts'
 import { usersRouter } from './routes/users.ts'
 import { crawlRouter } from './routes/crawl.ts'
 
@@ -46,6 +49,18 @@ app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())
 app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
+// After auth: who is looking, on which page and in which theme, for every page's frame.
+app.use((request, _response, next) => {
+  const theme: unknown = request.cookies?.[themeCookie]
+  runWithPageContext(
+    {
+      viewer: getViewer(request),
+      path: request.path,
+      theme: isTheme(theme) ? theme : defaultTheme,
+    },
+    next,
+  )
+})
 app.use(homeRouter)
 app.use(infoRouter)
 app.use(blurtsRouter)
@@ -53,6 +68,7 @@ app.use(usersRouter)
 app.use(avatarRouter)
 app.use(adminRouter)
 app.use(searchRouter)
+app.use(themeRouter)
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.
