@@ -10,6 +10,7 @@ import {
 } from '../avatar.ts'
 import { blurtMaxLength, isWebUrl } from '../limits.ts'
 import { themes } from '../themes.ts'
+import { pageContext } from '../page-context.ts'
 import {
   accountDeletionEffects,
   blurtActions,
@@ -360,11 +361,13 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
 
     ## Theme
 
+    Yours: ${code(pageContext().theme)}.
+
     Send ${code('POST /api/theme')} with ${code('theme')}, one of ${join(
       themes.map((theme) => code(theme.id)),
       ', ',
     )},
-    to pick the colours of the HTML pages in this browser (a cookie).
+    to pick the colours of the HTML pages, on every device you're logged in on.
   `
 }
 
@@ -511,7 +514,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     For each account:
 
     - Your username, a hash of your password (Argon2id: the password itself is never stored), and when you signed up.
-    - The profile fields you fill in: bio, homepage and social links, and your avatar's settings.
+    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, and the colour theme you picked.
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - Who you follow.
@@ -535,12 +538,11 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Cookies
 
-    At most four, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
+    Three, all needed for the site to work, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
 
-    - ${code('access_token')}: shows you're logged in. Lasts 5 minutes.
+    - ${code('access_token')}: shows you're logged in, and which colour theme you picked. Lasts 5 minutes.
     - ${code('refresh_token')}: keeps you logged in. Renewed as you use the site; expires after 400 days without a visit, or when you log out.
     - ${code('recent_write')}: set for a few seconds after you post or change something, so you see your own change straight away.
-    - ${code('theme')}: only if you pick a colour theme on your edit page, to remember it in this browser. Lasts 400 days.
 
     ## Backups
 

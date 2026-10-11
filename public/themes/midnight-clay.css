@@ -1,0 +1,32 @@
+/* Midnight Clay: warm clay lines on charcoal, thick borders. Linked after style.css. */
+:root {
+  --bg: #121416;
+  --bg-wash: #1b1f22;
+  --panel: #1b2025;
+  --panel-alt: #232a31;
+  --text: #ece7df;
+  --muted: #b6aa9a;
+  --line: #d08c5e;
+  --line-soft: #5f4635;
+  --accent: #b86a3f;
+  --accent-strong: #ffd3ae;
+  --accent-soft: #3a291d;
+  --pop: #e0694d;
+  --pop-strong: #ffc091;
+  --signal: #7baea0;
+  --warn: #d26e66;
+  --focus: #ffd3ae;
+  --glow-soft: rgb(224 105 77 / 40%);
+  --glow-strong: rgb(255 192 145 / 54%);
+  --panel-border: 3px;
+}
+
+body {
+  background: var(--bg);
+}
+
+.top-nav a,
+.tabs a {
+  text-transform: none;
+  letter-spacing: inherit;
+}

@@ -28,6 +28,7 @@ const defaults = {
   profileEdit: '30/10m',
   location: '30/10m',
   avatar: '60/10m',
+  theme: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
   // Reblurt and unreblurt share it. Quotes are blurts, under `blurt`.

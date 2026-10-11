@@ -4,6 +4,7 @@ import type { CookieOptions, NextFunction, Request, RequestHandler, Response } f
 import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
 import { isAdmin } from '../routes/state.ts'
+import { defaultTheme, isTheme, type ThemeId } from '../themes.ts'
 
 // Two tokens, each in its own HttpOnly cookie:
 //
@@ -24,6 +25,11 @@ import { isAdmin } from '../routes/state.ts'
 // Sessions never expire while they're used: every refresh restarts a 400-day clock, the
 // longest a browser keeps a cookie. Revoking a session (log out, log out everywhere, a
 // replayed token) takes effect at its next refresh, so within the access token's lifetime.
+//
+// The access token also carries the user's colour theme (user_profiles.theme), read with
+// the same query at login and at each refresh, so pages get it without a database call.
+// Picking a theme reissues the access token (setSessionTheme); other devices pick it up
+// at their next refresh.
 
 const production = process.env.NODE_ENV === 'production'
 
@@ -60,8 +66,9 @@ export type AuthenticatedUser = {
   username: string
 }
 
-// The session id stays out of AuthenticatedUser, which goes out as `viewer` in page JSON.
-type Session = { user: AuthenticatedUser; sessionId: string }
+// The session id and theme stay out of AuthenticatedUser, which goes out as `viewer` in
+// page JSON.
+type Session = { user: AuthenticatedUser; sessionId: string; theme: ThemeId }
 
 type RefreshClaims = { userId: number; sessionId: string; generation: number }
 
@@ -125,7 +132,11 @@ async function verifyAccessToken(token: unknown): Promise<Session | undefined> {
     typeof payload?.username === 'string' &&
     typeof payload.sid === 'string' &&
     !isDeletedSession(payload.sid)
-    ? { user: { id, username: payload.username }, sessionId: payload.sid }
+    ? {
+        user: { id, username: payload.username },
+        sessionId: payload.sid,
+        theme: isTheme(payload.theme) ? payload.theme : defaultTheme,
+      }
     : undefined
 }
 
@@ -153,12 +164,12 @@ function cookieOptions(maxAgeSeconds: number): CookieOptions {
 // A new access token, and a refresh token too unless `generation` is left out.
 async function setSessionCookies(
   response: Response,
-  { user, sessionId }: Session,
+  { user, sessionId, theme }: Session,
   generation?: number,
 ): Promise<void> {
   const accessToken = await signJwt(
     accessKey,
-    { username: user.username, sid: sessionId },
+    { username: user.username, sid: sessionId, theme },
     user.id,
     accessTokenSeconds,
   )
@@ -190,28 +201,34 @@ async function refreshSession(
   const { userId, sessionId, generation } = claims
   // Only one of several requests racing with the same token gets past the WHERE: the row
   // lock makes the others re-check it after the first one's update.
-  const rotated = await db().query<{ generation: number; username: string }>(
+  const theme = (value: string | null): ThemeId => (isTheme(value) ? value : defaultTheme)
+  const themeColumn = '(SELECT theme FROM user_profiles WHERE user_id = u.id) AS theme'
+  const rotated = await db().query<{ generation: number; username: string; theme: string | null }>(
     `UPDATE sessions s
      SET current_generation = s.current_generation + 1, last_used_at = now()
      FROM users u
      WHERE s.id = $1 AND s.user_id = $2 AND u.id = s.user_id
        AND s.current_generation = $3 AND s.revoked_at IS NULL
        AND s.last_used_at > now() - $4 * interval '1 second'
-     RETURNING s.current_generation AS generation, u.username`,
+     RETURNING s.current_generation AS generation, u.username, ${themeColumn}`,
     [sessionId, userId, generation, sessionIdleSeconds],
   )
   if (rotated.rows[0]) {
     const { generation: next, username } = rotated.rows[0]
-    return { session: { user: { id: userId, username }, sessionId }, generation: next }
+    return {
+      session: { user: { id: userId, username }, sessionId, theme: theme(rotated.rows[0].theme) },
+      generation: next,
+    }
   }
 
   const { rows } = await db().query<{
     current: number
     username: string
+    theme: string | null
     active: boolean
     racing: boolean
   }>(
-    `SELECT s.current_generation AS current, u.username,
+    `SELECT s.current_generation AS current, u.username, ${themeColumn},
        s.revoked_at IS NULL AND s.last_used_at > now() - $3 * interval '1 second' AS active,
        s.last_used_at > now() - $4 * interval '1 second' AS racing
      FROM sessions s JOIN users u ON u.id = s.user_id
@@ -224,7 +241,7 @@ async function refreshSession(
   }
   if (generation === row.current - 1 && row.racing) {
     return {
-      session: { user: { id: userId, username: row.username }, sessionId },
+      session: { user: { id: userId, username: row.username }, sessionId, theme: theme(row.theme) },
       generation: undefined,
     }
   }
@@ -268,6 +285,12 @@ export const authenticate: RequestHandler = (
       next()
     })
     .catch(next)
+}
+
+// The logged-in user's colour theme, from their access token; the default for anonymous
+// visitors.
+export function getTheme(request: Request): ThemeId {
+  return sessions.get(request)?.theme ?? defaultTheme
 }
 
 // The logged-in user, or null (not undefined, so it survives JSON) for anonymous visitors.
@@ -316,11 +339,28 @@ export async function startSession(
   { id, username }: AuthenticatedUser,
 ): Promise<void> {
   await revokeCurrentSession(request)
-  const { rows } = await db().query<{ id: string }>(
-    'INSERT INTO sessions (user_id) VALUES ($1) RETURNING id',
+  const { rows } = await db().query<{ id: string; theme: string | null }>(
+    `INSERT INTO sessions (user_id) VALUES ($1)
+     RETURNING id, (SELECT theme FROM user_profiles WHERE user_id = $1) AS theme`,
     [id],
   )
-  await setSessionCookies(response, { user: { id, username }, sessionId: rows[0].id }, 0)
+  const theme = isTheme(rows[0].theme) ? rows[0].theme : defaultTheme
+  await setSessionCookies(response, { user: { id, username }, sessionId: rows[0].id, theme }, 0)
+}
+
+// After the user picks a theme (saved in user_profiles): a new access token carrying it,
+// so this browser's next page has it. Other sessions get it at their next refresh.
+export async function setSessionTheme(
+  request: Request,
+  response: Response,
+  theme: ThemeId,
+): Promise<void> {
+  const session = sessions.get(request)
+  if (session) {
+    const updated = { ...session, theme }
+    sessions.set(request, updated)
+    await setSessionCookies(response, updated)
+  }
 }
 
 async function revokeCurrentSession(request: Request): Promise<void> {

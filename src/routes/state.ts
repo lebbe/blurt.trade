@@ -4,6 +4,7 @@ import { db, dbRead } from '../db.ts'
 import type { GeoPoint } from '../geo.ts'
 import { randomAvatar, type Avatar } from '../avatar.ts'
 import { cursorMaxLength } from '../limits.ts'
+import type { ThemeId } from '../themes.ts'
 
 // A deleted blurt stays in its thread as a placeholder: `deleted` is true and `username`,
 // `text`, `avatar` and `quoted` are null (see deleteBlurts).
@@ -1018,6 +1019,15 @@ export async function setAvatar(userId: number, avatar: Avatar): Promise<boolean
   const { rowCount } = await db().query(
     'UPDATE user_profiles SET avatar = $2::jsonb, updated_at = now() WHERE user_id = $1',
     [userId, JSON.stringify(avatar)],
+  )
+  return rowCount === 1
+}
+
+// The colour theme (src/themes.ts). False when the user no longer exists.
+export async function setTheme(userId: number, theme: ThemeId): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'UPDATE user_profiles SET theme = $2, updated_at = now() WHERE user_id = $1',
+    [userId, theme],
   )
   return rowCount === 1
 }

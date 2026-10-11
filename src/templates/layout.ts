@@ -4,7 +4,7 @@ import { renderToString } from 'preact-render-to-string'
 import { publicUrl } from '../config.ts'
 import { searchQueryMaxLength } from '../limits.ts'
 import { pageContext } from '../page-context.ts'
-import { themeStylesheetUrl } from '../themes.ts'
+import { criticalCss, themeStylesheetUrl } from '../themes.ts'
 import { Icon, type IconName } from './icons.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
@@ -52,7 +52,8 @@ function Head({ meta }: { meta: PageMeta }) {
   const title = meta.title ? `${meta.title} · ${siteName}` : siteName
   const canonical = meta.canonical && `${origin}${meta.canonical}`
   const share = meta.share
-  const themeUrl = themeStylesheetUrl(pageContext().theme)
+  const { theme } = pageContext()
+  const themeUrl = themeStylesheetUrl(theme)
   return html`
     <head>
       <meta charset="utf-8" />
@@ -62,6 +63,7 @@ function Head({ meta }: { meta: PageMeta }) {
       ${meta.noindex && html`<meta name="robots" content="noindex" />`}
       ${canonical && html`<link rel="canonical" href=${canonical} />`}
       <link rel="icon" href=${faviconPath} type="image/svg+xml" />
+      <style dangerouslySetInnerHTML=${{ __html: criticalCss(theme) }}></style>
       <link rel="stylesheet" href=${stylesheetUrl} />
       ${themeUrl && html`<link rel="stylesheet" href=${themeUrl} />`}
       ${

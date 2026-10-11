@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { db } from '../src/db.ts'
@@ -12,6 +13,7 @@ import {
   strictTransportSecurity,
 } from '../src/middleware/security-headers.ts'
 import { stylesheetUrl } from '../src/templates/layout.ts'
+import { criticalCss, criticalCssMaxLines, defaultTheme, themes } from '../src/themes.ts'
 import { createSession, request, stylesheet } from './helpers.ts'
 
 test('refuses to start in production without a strong JWT_SECRET', () => {
@@ -75,9 +77,26 @@ test('pages use no inline styles or scripts, so the CSP needs no unsafe-inline',
   for (const path of ['/', '/login', '/createUser', '/Lars/', `/Lars/${id}`, '/Lars/edit']) {
     const page = await request('GET', path, '', { cookie })
     assert.equal(page.statusCode, 200, path)
-    assert.doesNotMatch(page.body, /<style|\sstyle=|<script|\son\w+=|javascript:/i, path)
+    // The one inline <style> is the theme's above-the-fold CSS, allowed by its hash.
+    const critical = `<style>${criticalCss(defaultTheme)}</style>`
+    assert.ok(page.body.includes(critical), path)
+    const rest = page.body.replace(critical, '')
+    assert.doesNotMatch(rest, /<style|\sstyle=|<script|\son\w+=|javascript:/i, path)
     assert.ok(page.body.includes(`<link rel="stylesheet" href="${stylesheetUrl}"/>`), path)
   }
+
+  // Each theme's above-the-fold CSS is short, and the CSP allows exactly it by hash.
+  for (const { id } of themes) {
+    const css = criticalCss(id)
+    assert.ok(css.split('\n').length <= criticalCssMaxLines, id)
+    const hash = createHash('sha256').update(css, 'utf8').digest('base64')
+    assert.ok(contentSecurityPolicy.includes(`'sha256-${hash}'`), id)
+    const picked = await request('POST', '/api/theme', `theme=${id}`, { cookie })
+    const access = picked.setCookie?.[0]?.split(';', 1)[0] ?? ''
+    const themed = await request('GET', '/about', '', { cookie: access })
+    assert.ok(themed.body.includes(`<style>${css}</style>`), id)
+  }
+  assert.doesNotMatch(contentSecurityPolicy, /unsafe-inline/)
 
   // The linked stylesheet is ours (style-src 'self') and holds the avatar animation.
   const css = await request('GET', stylesheetUrl)

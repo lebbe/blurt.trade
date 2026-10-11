@@ -1228,7 +1228,7 @@ function ThemeForm() {
   return html`
     <section class="panel" aria-label="Theme" id="theme">
       <h2>Theme</h2>
-      <p class="tiny">Saved in this browser, for every page.</p>
+      <p class="tiny">Saved on your account, so it follows you to every device.</p>
       <form method="post" action="/api/theme">
         <fieldset class="theme-choices">
           <legend class="visually-hidden">Theme</legend>
@@ -1736,8 +1736,8 @@ function PrivacyPage({ contact }: InfoPageData) {
           and when you signed up.
         </li>
         <li>
-          The profile fields you fill in: bio, homepage and social links, and your avatar's
-          settings.
+          The profile fields you fill in: bio, homepage and social links, your avatar's settings,
+          and the colour theme you picked.
         </li>
         <li>
           Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts
@@ -1797,11 +1797,14 @@ function PrivacyPage({ contact }: InfoPageData) {
       </ul>
       <h2>Cookies</h2>
       <p>
-        At most four, none for tracking, so there's no cookie banner. All are HttpOnly and only sent
-        to blurt.trade.
+        Three, all needed for the site to work, none for tracking, so there's no cookie banner. All
+        are HttpOnly and only sent to blurt.trade.
       </p>
       <ul>
-        <li><code>access_token</code>: shows you're logged in. Lasts 5 minutes.</li>
+        <li>
+          <code>access_token</code>: shows you're logged in, and which colour theme you picked.
+          Lasts 5 minutes.
+        </li>
         <li>
           <code>refresh_token</code>: keeps you logged in. Renewed as you use the site; expires
           after 400 days without a visit, or when you log out.
@@ -1809,10 +1812,6 @@ function PrivacyPage({ contact }: InfoPageData) {
         <li>
           <code>recent_write</code>: set for a few seconds after you post or change something, so
           you see your own change straight away.
-        </li>
-        <li>
-          <code>theme</code>: only if you pick a colour theme on your edit page, to remember it in
-          this browser. Lasts 400 days.
         </li>
       </ul>
       <h2>Backups</h2>

@@ -135,8 +135,8 @@ carry `Vary: Accept`.
   with a fixed list, so a migration that changes them fails until the page (and the
   list) is updated.
 - Data minimisation is a standing rule: no email addresses, no analytics, no
-  third-party scripts, fonts or embeds, no cookies beyond the session, `recent_write` and
-  `theme` cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
+  third-party scripts, fonts or embeds, no cookies beyond the session and `recent_write`
+  cookies (so no cookie banner), no IP addresses stored. There is no password reset: a
   lost password can't be recovered, and sign-up and the login page say so. This was
   decided over email reset and recovery codes (ticket 024): don't add a reset route.
 
@@ -415,15 +415,23 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
 ## Themes
 
 Five colour themes, picked on the profile edit page (`#theme`), listed in `src/themes.ts`.
-The default, Midnight Clay, is the variables at the top of `public/style.css`; each other
-theme is a small stylesheet in `public/themes/` that overrides those variables (and a few
-touches like fonts or uppercase navigation), linked after `style.css`. Each choice in the
+The default, Cobalt Quietude (`defaultTheme`), is `public/style.css` itself: the variables
+at the top, its grid background and uppercase navigation. Each other theme is a small
+stylesheet in `public/themes/` that overrides those (and adds touches of its own, like
+fonts), linked after `style.css`. Changing the default means swapping which theme lives
+in `style.css`. Each choice in the
 picker shows a strip of its colours (`.swatch-<theme>` classes), so no JS is needed to
 preview.
 
-- `POST /api/theme` with `theme` (one of the ids in `src/themes.ts`; anything else is a
-  400) sets the `theme` cookie (`HttpOnly`, `SameSite=Lax`, 400 days) for this browser.
-  Nothing is stored in the database.
+- The pick is saved on the account, in `user_profiles.theme` (`NULL` until the user picks
+  one: they get `defaultTheme`, whatever it is at the time; a `CHECK` lists the ids, so a
+  new theme needs a migration too). `POST /api/theme` with
+  `theme` (one of the ids in `src/themes.ts`; anything else is a 400) saves it.
+- Pages get it from the access token, not the database: login and every token refresh
+  read the theme in the same query they already make, and put it in the access token
+  next to the username (see Sessions). `POST /api/theme` reissues this browser's access
+  token, so the next page already has the new theme; other devices get it at their next
+  refresh, within 5 minutes. Logged-out visitors get the default.
 - Every request runs in a page context (`src/page-context.ts`, set in `src/server.ts`
   after `authenticate`) with the viewer, the path and the theme, so the frame of every
   page (`Page` in `src/templates/layout.ts`: header, navigation, footer) and the
@@ -481,7 +489,7 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 
 | Cookie          | Lifetime | Checked by                                                 |
 | --------------- | -------- | ---------------------------------------------------------- |
-| `access_token`  | 5 min    | its signature only, no database                            |
+| `access_token`  | 5 min    | its signature only, no database; carries the username and theme |
 | `refresh_token` | 400 days | one row in `sessions`, then rotated to the next generation |
 
 - When the access token is missing or expired, any request (page load, form POST,
@@ -519,6 +527,7 @@ error table below.
 | `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |
 | `LOCATION`             | `/api/location`                | account              | 30/10m  |
 | `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |
+| `THEME`                | `/api/theme`                   | account              | 60/10m  |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
 | `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |
@@ -596,7 +605,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
+| `Content-Security-Policy`               | `default-src 'none'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `same-origin`                                            |
@@ -615,8 +624,15 @@ responses.
   at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see
   Themes); icons are inline SVG (`src/templates/icons.ts`), not an icon font. Both are
   cached with ETag/conditional requests (`If-None-Match` /
-  `304 Not Modified`) via the static file handler in `src/server.ts`. Pages link it and never use `<style>` or `style="..."`: a per-element value goes in an SVG
+  `304 Not Modified`) via the static file handler in `src/server.ts`. Pages link it and never use `style="..."`: a per-element value goes in an SVG
   attribute (the map marker is a `<circle cx cy>`) or a class. A test checks every page.
+- **One inline `<style>`, allowed by hash.** Each page inlines its theme's above-the-fold
+  CSS (`criticalCss` in `src/themes.ts`, at most 15 lines: the colours, the page frame and
+  the sizes of the inline SVGs), so a slow connection shows a dark, laid-out page instead
+  of a white flash while the stylesheets load. The CSP allows exactly those blocks by
+  their SHA-256 hashes, computed at startup, never `'unsafe-inline'`. Change the CSS
+  there and the hashes follow; any other inline style is still blocked. A test checks the
+  line limit, the hashes, and that the colours match the theme stylesheets.
 - Public files under `/static` are served by one `express.static` handler in
   `src/server.ts`, with ETag and conditional GET support.
 - Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
@@ -639,7 +655,7 @@ responses.
   out, and `toJson()` drops those keys anyway.
 - Usernames are letters, digits and `_` only, and case-insensitive.
 - A POST that costs CPU or can be spammed gets a `rateLimit()` (see Rate limits).
-- No inline `<style>`, `style="..."` or scripts: the CSP blocks them (see Security
+- No inline `<style>` (beyond the hashed above-the-fold CSS), `style="..."` or scripts: the CSP blocks them (see Security
   headers).
 
 ## Markdown templates

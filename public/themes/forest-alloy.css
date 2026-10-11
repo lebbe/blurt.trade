@@ -33,3 +33,13 @@ body {
 .blurt:nth-of-type(even) {
   border-right-color: var(--line);
 }
+
+body {
+  background: var(--bg);
+}
+
+.top-nav a,
+.tabs a {
+  text-transform: none;
+  letter-spacing: inherit;
+}

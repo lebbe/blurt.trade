@@ -6,14 +6,13 @@ import { migrate } from '../db/migrate.ts'
 import { checkConfig } from './config.ts'
 import { closeDb } from './db.ts'
 import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
-import { authenticate, deleteDeadSessions, getViewer } from './middleware/auth.ts'
+import { authenticate, deleteDeadSessions, getTheme, getViewer } from './middleware/auth.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { runWithPageContext } from './page-context.ts'
-import { defaultTheme, isTheme, themeCookie } from './themes.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
@@ -49,15 +48,11 @@ app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())
 app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
-// After auth: who is looking, on which page and in which theme, for every page's frame.
+// After auth: who is looking, on which page and in which theme (from their access token),
+// for every page's frame.
 app.use((request, _response, next) => {
-  const theme: unknown = request.cookies?.[themeCookie]
   runWithPageContext(
-    {
-      viewer: getViewer(request),
-      path: request.path,
-      theme: isTheme(theme) ? theme : defaultTheme,
-    },
+    { viewer: getViewer(request), path: request.path, theme: getTheme(request) },
     next,
   )
 })

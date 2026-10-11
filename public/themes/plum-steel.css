@@ -38,3 +38,9 @@ body {
 .tabs a[aria-current='page'] {
   text-shadow: 0 0 12px rgb(240 201 255 / 45%);
 }
+
+.top-nav a,
+.tabs a {
+  text-transform: none;
+  letter-spacing: inherit;
+}
