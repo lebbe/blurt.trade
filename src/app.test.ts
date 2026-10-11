@@ -33,6 +33,7 @@ import {
   avatarPalettes,
   eyeTypes,
   hairTypes,
+  headWidths,
   randomAvatar,
   toothTypes,
   type Avatar,
@@ -2374,6 +2375,7 @@ test('the poster sees their new blurt at once with a real streaming replica', as
 })
 
 const avatarForm = {
+  headWidth: 'broad',
   skin: '#123abc',
   hairType: 'mohawk',
   hairColor: '#ff0000',
@@ -2409,6 +2411,7 @@ test('new users get a random avatar from the palettes', async () => {
     assert.ok(hairTypes.includes(avatar.hairType), username)
     assert.ok(eyeTypes.includes(avatar.eyeType), username)
     assert.ok(toothTypes.includes(avatar.toothType), username)
+    assert.ok(headWidths.includes(avatar.headWidth), username)
   }
 
   const avatars = new Set(Array.from({ length: 50 }, () => JSON.stringify(randomAvatar())))
@@ -2434,7 +2437,13 @@ test("blurts show the blurter's avatar, on alternating sides, talking on hover",
   assert.match(stylesheet, /\.blurt:nth-of-type\(even\) \{\s*flex-direction: row-reverse;/)
   assert.match(stylesheet, /\.avatar:hover \.avatar-top,/)
   assert.match(stylesheet, /@keyframes avatar-talk/)
+  assert.match(stylesheet, /@keyframes avatar-jaw/)
   assert.equal((feed.body.match(/class="avatar-top"/g) ?? []).length, 4) // 2 per avatar
+  assert.equal((feed.body.match(/class="avatar-jaw"/g) ?? []).length, 4) // 2 per avatar
+  // A broad head: stretched sideways, in a bigger box.
+  assert.match(feed.body, /<g transform="translate\(50 0\) scale\(1\.15 1\) translate\(-50 0\)">/)
+  assert.match(feed.body, /viewBox="-1\.6 -1\.6 103\.2 103\.2"/)
+  assert.doesNotMatch(feed.body, /viewBox="0 0 100 100"/)
   assertSafeSvgs(feed.body)
 
   const data = JSON.parse((await request('GET', '/', '', json)).body)
@@ -2449,7 +2458,7 @@ test("blurts show the blurter's avatar, on alternating sides, talking on hover",
   assert.deepEqual(profileData.profile.avatar, avatarForm)
   assert.match(
     (await request('GET', '/Lars/', '', { accept: 'text/markdown' })).body,
-    /- Avatar: skin #123abc, mohawk #ff0000 hair, angry #fefefe eyes with #00ff00 pupils, buck tooth \(#eeeeee\)/,
+    /- Avatar: broad head, skin #123abc, mohawk #ff0000 hair, angry #fefefe eyes with #00ff00 pupils, buck tooth \(#eeeeee\)/,
   )
 })
 
@@ -2460,7 +2469,7 @@ test('edits the avatar with colour pickers and selects, without JS', async () =>
   for (const name of ['skin', 'hairColor', 'eyeColor', 'pupilColor', 'toothColor']) {
     assert.match(edit.body, new RegExp(`<input type="color" name="${name}" value="#[0-9a-f]{6}"`))
   }
-  for (const name of ['hairType', 'eyeType', 'toothType']) {
+  for (const name of ['headWidth', 'hairType', 'eyeType', 'toothType']) {
     assert.match(edit.body, new RegExp(`<select name="${name}">`))
   }
   assert.match(edit.body, /<button type="submit" name="random" value="1" formnovalidate>Random</)
@@ -2510,6 +2519,7 @@ test('rejects avatar values that are not colours or known types', async () => {
     [{ pupilColor: 'url(https://evil.example/x)' }, 'pupilColor'],
     [{ eyeType: 'laser' }, 'eyeType'],
     [{ toothType: '<g onload=alert(1)>' }, 'toothType'],
+    [{ headWidth: '1e9' }, 'headWidth'],
   ]
   for (const [change, field] of cases) {
     const response = await sendJson('/api/avatar', { ...avatarForm, ...change }, { cookie })
@@ -2543,10 +2553,15 @@ test('rejects avatar values that are not colours or known types', async () => {
     db().query(`UPDATE user_profiles SET avatar = avatar - 'eyeType'`),
     /user_profiles_avatar_valid/,
   )
+  await assert.rejects(
+    db().query(`UPDATE user_profiles SET avatar = avatar || '{"headWidth": "1e9"}'`),
+    /user_profiles_avatar_valid/,
+  )
 })
 
 test('the avatar template only draws known shapes and #rrggbb colours', () => {
   const hostile = {
+    headWidth: '2) scale(31337',
     skin: '"/><script>alert(1)</script>',
     hairType: '<image href="https://evil.example/x.png"/>',
     hairColor: 'url(#x)',
@@ -2557,7 +2572,8 @@ test('the avatar template only draws known shapes and #rrggbb colours', () => {
     toothColor: '#00000g',
   } as unknown as Avatar
   const svg = renderToString(h(AvatarSvg, { avatar: hostile, label: '<b>x</b>' }))
-  assert.doesNotMatch(svg, /<script|<image|evil|javascript|url\(|<b>/)
+  assert.doesNotMatch(svg, /<script|<image|evil|javascript|url\(|<b>|31337/)
+  assert.match(svg, /viewBox="0 0 100 100"/) // an unknown width is a regular head
   assertSafeSvgs(svg)
   for (const [, color] of svg.matchAll(/(?:fill|stroke)="([^"]*)"/g)) {
     assert.match(color, /^(#[0-9a-f]{6}|none)$/)

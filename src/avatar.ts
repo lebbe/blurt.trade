@@ -8,12 +8,15 @@ import { z } from 'zod'
 export const hairTypes = ['bald', 'tuft', 'flat', 'spiky', 'mohawk', 'afro'] as const
 export const eyeTypes = ['classic', 'dots', 'round', 'wide', 'sleepy', 'angry'] as const
 export const toothTypes = ['none', 'two', 'buck', 'gap', 'full'] as const
+export const headWidths = ['thin', 'slim', 'regular', 'broad', 'huge'] as const
 
 export type HairType = (typeof hairTypes)[number]
 export type EyeType = (typeof eyeTypes)[number]
 export type ToothType = (typeof toothTypes)[number]
+export type HeadWidth = (typeof headWidths)[number]
 
 export type Avatar = {
+  headWidth: HeadWidth
   skin: string
   hairType: HairType
   hairColor: string
@@ -24,7 +27,12 @@ export type Avatar = {
   toothColor: string
 }
 
-export const avatarLabels: Record<HairType | EyeType | ToothType, string> = {
+export const avatarLabels: Record<HairType | EyeType | ToothType | HeadWidth, string> = {
+  thin: 'Thin',
+  slim: 'Slim',
+  regular: 'Regular',
+  broad: 'Broad',
+  huge: 'Huge',
   bald: 'Bald',
   tuft: 'Tuft',
   flat: 'Flat',
@@ -71,6 +79,7 @@ function pick<T>(values: readonly T[]): T {
 
 export function randomAvatar(): Avatar {
   return {
+    headWidth: pick(headWidths),
     skin: pick(avatarPalettes.skin),
     hairType: pick(hairTypes),
     hairColor: pick(avatarPalettes.hairColor),
@@ -94,6 +103,7 @@ const color = (label: string) =>
     .regex(colorPattern, `${label} must be a colour like #a1b2c3`)
 
 export const avatarSchema = z.object({
+  headWidth: z.enum(headWidths, 'Pick a head width'),
   skin: color('Skin colour'),
   hairType: z.enum(hairTypes, 'Pick a hair type'),
   hairColor: color('Hair colour'),
@@ -104,9 +114,10 @@ export const avatarSchema = z.object({
   toothColor: color('Tooth colour'),
 })
 
-// For text representations, e.g. "skin #f1c27d, flat #2c222b hair, ...".
+// For text representations, e.g. "regular head, skin #f1c27d, flat #2c222b hair, ...".
 export function describeAvatar(avatar: Avatar): string {
   return [
+    `${avatarLabels[avatar.headWidth]?.toLowerCase() ?? 'regular'} head`,
     `skin ${avatar.skin}`,
     `${avatarLabels[avatar.hairType]?.toLowerCase()} ${avatar.hairType === 'bald' ? 'head' : `${avatar.hairColor} hair`}`,
     `${avatarLabels[avatar.eyeType]?.toLowerCase()} ${avatar.eyeColor} eyes with ${avatar.pupilColor} pupils`,

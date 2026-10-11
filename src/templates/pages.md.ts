@@ -1,6 +1,13 @@
 import type { Blurt, InviteCode, QuotedBlurt, UserProfile } from '../routes/state.ts'
 import type { Contact } from '../config.ts'
-import { avatarSchema, describeAvatar, eyeTypes, hairTypes, toothTypes } from '../avatar.ts'
+import {
+  avatarSchema,
+  describeAvatar,
+  eyeTypes,
+  hairTypes,
+  headWidths,
+  toothTypes,
+} from '../avatar.ts'
 import { blurtMaxLength, isWebUrl } from '../limits.ts'
 import {
   accountDeletionEffects,
@@ -338,8 +345,8 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
     Yours: ${describeAvatar(profile.avatar)}.
 
     Send ${code('POST /api/avatar')} with all of ${join(Object.keys(avatarSchema.shape).map(code), ', ')}
-    to change it, or with ${code('random')} for a random one. Colours are ${code('#rrggbb')}. Hair
-    is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
+    to change it, or with ${code('random')} for a random one. Colours are ${code('#rrggbb')}. The
+    head is one of ${join(headWidths.map(code), ', ')} wide. Hair is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
     teeth one of ${join(toothTypes.map(code), ', ')}.
 
     ## Location

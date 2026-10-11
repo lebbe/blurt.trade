@@ -1,6 +1,14 @@
 import { h } from 'preact'
 import htm from 'htm'
-import { colorPattern, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
+import {
+  colorPattern,
+  eyeTypes,
+  hairTypes,
+  headWidths,
+  toothTypes,
+  type Avatar,
+  type HeadWidth,
+} from '../avatar.ts'
 
 const html = htm.bind(h)
 
@@ -11,27 +19,48 @@ const html = htm.bind(h)
 //
 // Talking is CSS only (in public/style.css): on hover over the avatar or
 // its blurt, the two `avatar-top` groups (the upper teeth and the top of the head) flap up
-// and down around a hinge at the back of the head, showing the dark mouth behind them.
+// and down around a hinge at the back of the head (on the right), showing the dark mouth
+// behind them, and the `avatar-jaw` group (the jaw and the lower teeth) bobs along.
 // Drawing order makes that work without clip paths:
-//   1. the mouth: a dark copy of the top of the head, in place (shows wherever it lifts)
-//   2. the lower teeth
+//   1. the mouth: a dark copy of the top of the head, reaching a little below the cut
+//      (shows wherever the top lifts or the jaw drops)
+//   2. the lower teeth (moving with the jaw)
 //   3. the upper teeth (moving), hanging below the cut, so hidden behind...
-//   4. the jaw, while the mouth is shut
+//   4. the jaw (moving), while the mouth is shut
 //   5. the top of the head (moving): hair, skin, eyes
+//
+// The head width stretches all of that sideways around the middle (a transform on one
+// group, so the hinge in the CSS moves with it), except the eyes, which keep their shape
+// and only move apart. Heads wider than the box get a bigger viewBox.
 
 const outline = '#1a1410'
 const mouthColor = '#3a0d12'
 const cut = 58 // y of the mouth line
 
 const domePath = `M10 ${cut} C10 28 28 10 50 10 C72 10 90 28 90 ${cut} Z`
+const mouthPath = `M10 ${cut} C10 28 28 10 50 10 C72 10 90 28 90 ${cut} V${cut + 6} H10 Z`
 const jawPath = `M10 ${cut} H90 C90 80 74 92 50 92 C26 92 10 80 10 ${cut} Z`
 
 function safeColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && colorPattern.test(value) ? value : fallback
 }
 
-function oneOf<T extends string>(values: readonly T[], value: unknown): T {
-  return values.includes(value as T) ? (value as T) : values[0]
+function oneOf<T extends string>(values: readonly T[], value: unknown, fallback = values[0]): T {
+  return values.includes(value as T) ? (value as T) : fallback
+}
+
+// Two decimals are plenty in a 100-wide box, and keep the markup short.
+function round(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+// How much each head width stretches the head sideways.
+const headScales: Record<HeadWidth, number> = {
+  thin: 0.72,
+  slim: 0.86,
+  regular: 1,
+  broad: 1.15,
+  huge: 1.3,
 }
 
 const stroke = { stroke: outline, 'stroke-width': 1.5, 'stroke-linejoin': 'round' }
@@ -76,21 +105,23 @@ function HairFront({ type, color }: { type: string; color: string }) {
   }
 }
 
-const eyeX = [35, 65]
 const eyeY = 38
 
+// `spread`: how far each eye is from the middle.
 function Eyes({
   type,
   white,
   pupil,
   skin,
+  spread,
 }: {
   type: string
   white: string
   pupil: string
   skin: string
+  spread: number
 }) {
-  return eyeX.map((x) => {
+  return [50 - spread, 50 + spread].map((x) => {
     switch (type) {
       case 'dots':
         return html`<circle cx=${x} cy=${eyeY} r="3" fill=${pupil} />`
@@ -180,25 +211,42 @@ export function AvatarSvg({
   const pupilColor = safeColor(avatar?.pupilColor, '#000000')
   const toothType = oneOf(toothTypes, avatar?.toothType)
   const toothColor = safeColor(avatar?.toothColor, '#ffffff')
+  const scale = headScales[oneOf(headWidths, avatar?.headWidth, 'regular')]
+
+  // Square, centred on the middle of the default box, wide enough for the widest part
+  // (the afro).
+  const box = round(Math.max(100, 2 * (44 * scale + 1)))
+  const stretch = `translate(50 0) scale(${scale} 1) translate(-50 0)`
+  const unstretch = `translate(50 0) scale(${round(1 / scale)} 1) translate(-50 0)`
 
   return html`<svg
     class="avatar avatar-${size}"
-    viewBox="0 0 100 100"
+    viewBox="${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}"
     xmlns="http://www.w3.org/2000/svg"
     role=${label ? 'img' : undefined}
     aria-label=${label}
     aria-hidden=${label ? undefined : 'true'}
     focusable="false"
   >
-    <path d=${domePath} fill=${mouthColor} />
-    <${LowerTeeth} type=${toothType} color=${toothColor} />
-    <g class="avatar-top"><${UpperTeeth} type=${toothType} color=${toothColor} /></g>
-    <path d=${jawPath} fill=${skin} ...${stroke} />
-    <g class="avatar-top">
-      <${HairBack} type=${hairType} color=${hairColor} />
-      <path d=${domePath} fill=${skin} ...${stroke} />
-      <${HairFront} type=${hairType} color=${hairColor} />
-      <${Eyes} type=${eyeType} white=${eyeColor} pupil=${pupilColor} skin=${skin} />
+    <g transform=${scale === 1 ? undefined : stretch}>
+      <path d=${mouthPath} fill=${mouthColor} />
+      <g class="avatar-jaw"><${LowerTeeth} type=${toothType} color=${toothColor} /></g>
+      <g class="avatar-top"><${UpperTeeth} type=${toothType} color=${toothColor} /></g>
+      <g class="avatar-jaw"><path d=${jawPath} fill=${skin} ...${stroke} /></g>
+      <g class="avatar-top">
+        <${HairBack} type=${hairType} color=${hairColor} />
+        <path d=${domePath} fill=${skin} ...${stroke} />
+        <${HairFront} type=${hairType} color=${hairColor} />
+        <g transform=${scale === 1 ? undefined : unstretch}>
+          <${Eyes}
+            type=${eyeType}
+            white=${eyeColor}
+            pupil=${pupilColor}
+            skin=${skin}
+            spread=${round(15 * Math.sqrt(scale))}
+          />
+        </g>
+      </g>
     </g>
   </svg>`
 }

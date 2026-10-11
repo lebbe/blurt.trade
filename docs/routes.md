@@ -386,18 +386,19 @@ Every profile has a cartoon face instead of a profile picture, in the style of T
 and Phillip: the whole top of the head flaps up and down when it talks. Code in
 `src/avatar.ts` (the data, palettes, validation) and `src/templates/avatar.ts` (the SVG).
 
-- `avatar` is `{ skin, hairType, hairColor, eyeType, eyeColor, pupilColor, toothType,
-  toothColor }`, stored as JSON in `user_profiles.avatar`. Colours are lower-case
-  `#rrggbb` (any colour). `hairType` is `bald`, `tuft`, `flat`, `spiky`, `mohawk` or
+- `avatar` is `{ headWidth, skin, hairType, hairColor, eyeType, eyeColor, pupilColor,
+  toothType, toothColor }`, stored as JSON in `user_profiles.avatar`. Colours are lower-case
+  `#rrggbb` (any colour). `headWidth` is `thin`, `slim`, `regular`, `broad` or `huge`
+  (the head is stretched sideways, the eyes just move apart); `hairType` is `bald`, `tuft`, `flat`, `spiky`, `mohawk` or
   `afro`; `eyeType` `classic`, `dots`, `round`, `wide`, `sleepy` or `angry`; `toothType`
   `none`, `two`, `buck`, `gap` or `full`.
 - Sign-up gives every new profile a random avatar, with colours from fixed palettes so it
   looks normal-ish (`avatarPalettes`). Profiles from before avatars got one in the
-  migration.
+  migration, and the head width came later (`regular` for the avatars that existed then).
 - The edit page has an avatar form: `<input type="color">` for the colours, `<select>` for
   the types, a live preview, and two submit buttons. "Save avatar" sends every field;
   "Random" (`name="random"`) makes the server pick a new random avatar and save it, so it
-  works without JS. `POST /api/avatar` takes all eight fields, or `random` (any non-empty
+  works without JS. `POST /api/avatar` takes all nine fields, or `random` (any non-empty
   value, or JSON `{ "random": true }`). A missing or invalid field is a 400 on that field;
   forms get the edit page again with the error.
 - Nobody uploads SVG. The server draws it from these fields only, as inline SVG with no
@@ -406,7 +407,8 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
   (anything unexpected gets a default).
 - Blurts show the blurter's avatar, on the left of odd blurts and the right of even ones
   (`.blurt:nth-of-type(even)`). It talks (CSS animation, no JS) while the pointer is over
-  the avatar or its blurt, and holds still with `prefers-reduced-motion`. The profile page
+  the avatar or its blurt (an uneven chatter of big and small flaps, the jaw bobbing along),
+  and holds still with `prefers-reduced-motion`. The profile page
   shows it large.
 
 ## Sign-up limits

@@ -3,7 +3,14 @@ import htm from 'htm'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import type { Contact } from '../config.ts'
-import { avatarLabels, eyeTypes, hairTypes, toothTypes, type Avatar } from '../avatar.ts'
+import {
+  avatarLabels,
+  eyeTypes,
+  hairTypes,
+  headWidths,
+  toothTypes,
+  type Avatar,
+} from '../avatar.ts'
 import { AvatarSvg } from './avatar.ts'
 import { preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
 import {
@@ -1018,6 +1025,12 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
           <p class="empty">Hover it to hear it talk.</p>
         </div>
         <div class="avatar-fields">
+          <${TypeSelect}
+            name="headWidth"
+            label="Head"
+            types=${headWidths}
+            value=${avatar.headWidth ?? 'regular'}
+          />
           <${ColorInput} name="skin" label="Skin colour" value=${avatar.skin} />
           <${TypeSelect} name="hairType" label="Hair" types=${hairTypes} value=${avatar.hairType} />
           <${ColorInput} name="hairColor" label="Hair colour" value=${avatar.hairColor} />

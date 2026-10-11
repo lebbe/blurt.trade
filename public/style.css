@@ -140,6 +140,7 @@ select {
 
   .avatar {
     flex: none;
+    overflow: visible; /* the top of the head flaps out of the box when it talks */
     width: 3rem;
     height: 3rem;
   }
@@ -154,21 +155,44 @@ select {
   .avatar-top {
     transform-origin: 86px 58px;
   }
+  /* Chatter, not a metronome: big and small flaps, a few quick ones, a pause. The jaw
+     drops a little with the bigger ones. */
   @keyframes avatar-talk {
-    from {
-      transform: none;
-    }
-    to {
-      transform: translateY(-4px) rotate(-12deg);
-    }
+    0%, 100% { transform: none; }
+    8% { transform: translateY(-3px) rotate(17deg); }
+    14% { transform: rotate(3deg); }
+    20% { transform: translateY(-2px) rotate(11deg); }
+    25% { transform: none; }
+    33% { transform: translateY(-4px) rotate(21deg); }
+    40% { transform: translateY(-1px) rotate(7deg); }
+    45% { transform: translateY(-2px) rotate(13deg); }
+    50% { transform: rotate(2deg); }
+    55% { transform: translateY(-1px) rotate(8deg); }
+    60% { transform: none; }
+    70% { transform: translateY(-3px) rotate(18deg); }
+    76% { transform: rotate(5deg); }
+    82% { transform: translateY(-2px) rotate(12deg); }
+    88% { transform: none; }
+  }
+  @keyframes avatar-jaw {
+    0%, 25%, 60%, 88%, 100% { transform: none; }
+    8%, 70% { transform: translateY(2px); }
+    33% { transform: translateY(3px); }
+    45% { transform: translateY(1.5px); }
   }
   .avatar:hover .avatar-top,
   .blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-top {
-    animation: avatar-talk 0.16s ease-in-out infinite alternate;
+    animation: avatar-talk 1.6s ease-in-out infinite;
+  }
+  .avatar:hover .avatar-jaw,
+  .blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-jaw {
+    animation: avatar-jaw 1.6s ease-in-out infinite;
   }
   @media (prefers-reduced-motion: reduce) {
     .avatar:hover .avatar-top,
-    .blurt:hover .avatar .avatar-top {
+    .blurt:hover .avatar .avatar-top,
+    .avatar:hover .avatar-jaw,
+    .blurt:hover .avatar .avatar-jaw {
       animation: none;
     }
   }
