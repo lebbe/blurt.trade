@@ -369,6 +369,15 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
       ', ',
     )},
     to pick the colours of the HTML pages, on every device you're logged in on.
+
+    ## Time zone
+
+    Yours: ${code(pageContext().timeZone)} (UTC until you pick one), written the way
+    ${code(pageContext().locale)} does (your browser's language until you pick one).
+
+    Send ${code('POST /api/timezone')} with ${code('timezone')}, an IANA name like
+    ${code('Europe/Oslo')}, and/or ${code('locale')}, like ${code('nb-NO')} or ${code('en-US')}
+    (empty for your browser's language), to set how the HTML pages show times.
   `
 }
 
@@ -515,7 +524,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     For each account:
 
     - Your username, a hash of your password (Argon2id: the password itself is never stored), and when you signed up.
-    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme and share card colour you picked.
+    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked.
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - Who you follow.
@@ -541,7 +550,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     Three, all needed for the site to work, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
 
-    - ${code('access_token')}: shows you're logged in, and which colour theme you picked. Lasts 5 minutes.
+    - ${code('access_token')}: shows you're logged in, and which colour theme and time zone you picked. Lasts 5 minutes.
     - ${code('refresh_token')}: keeps you logged in. Renewed as you use the site; expires after 400 days without a visit, or when you log out.
     - ${code('recent_write')}: set for a few seconds after you post or change something, so you see your own change straight away.
 

@@ -6,7 +6,15 @@ import { migrate } from '../db/migrate.ts'
 import { checkConfig } from './config.ts'
 import { closeDb } from './db.ts'
 import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
-import { authenticate, deleteDeadSessions, getTheme, getViewer } from './middleware/auth.ts'
+import {
+  authenticate,
+  deleteDeadSessions,
+  getLocale,
+  getTheme,
+  getTimeZone,
+  getViewer,
+} from './middleware/auth.ts'
+import { localeFrom } from './timezones.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
@@ -25,6 +33,7 @@ import { locationRouter } from './routes/location.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
 import { themeRouter } from './routes/theme.ts'
+import { timeZoneRouter } from './routes/timezone.ts'
 import { usersRouter } from './routes/users.ts'
 import { crawlRouter } from './routes/crawl.ts'
 import { ogRouter } from './routes/og.ts'
@@ -58,7 +67,15 @@ app.use((request, _response, next) => {
   ;(viewer ? isAdmin(viewer.id) : Promise.resolve(false))
     .then((admin) => {
       runWithPageContext(
-        { viewer, isAdmin: admin, path: request.path, theme: getTheme(request) },
+        {
+          viewer,
+          isAdmin: admin,
+          path: request.path,
+          theme: getTheme(request),
+          timeZone: getTimeZone(request),
+          locale: getLocale(request) ?? localeFrom(request.acceptsLanguages()),
+          pickedLocale: getLocale(request),
+        },
         next,
       )
     })
@@ -72,6 +89,7 @@ app.use(avatarRouter)
 app.use(adminRouter)
 app.use(searchRouter)
 app.use(themeRouter)
+app.use(timeZoneRouter)
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.

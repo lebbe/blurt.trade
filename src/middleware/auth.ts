@@ -5,6 +5,7 @@ import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
 import { isAdmin } from '../routes/state.ts'
 import { defaultTheme, isTheme, type ThemeId } from '../themes.ts'
+import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 
 // Two tokens, each in its own HttpOnly cookie:
 //
@@ -68,7 +69,13 @@ export type AuthenticatedUser = {
 
 // The session id and theme stay out of AuthenticatedUser, which goes out as `viewer` in
 // page JSON.
-type Session = { user: AuthenticatedUser; sessionId: string; theme: ThemeId }
+type Session = {
+  user: AuthenticatedUser
+  sessionId: string
+  theme: ThemeId
+  timeZone: string
+  locale: string | null // null: follow the browser's Accept-Language
+}
 
 type RefreshClaims = { userId: number; sessionId: string; generation: number }
 
@@ -136,6 +143,8 @@ async function verifyAccessToken(token: unknown): Promise<Session | undefined> {
         user: { id, username: payload.username },
         sessionId: payload.sid,
         theme: isTheme(payload.theme) ? payload.theme : defaultTheme,
+        timeZone: timeZoneOrDefault(payload.tz),
+        locale: isLocale(payload.lc) ? payload.lc : null,
       }
     : undefined
 }
@@ -164,12 +173,12 @@ function cookieOptions(maxAgeSeconds: number): CookieOptions {
 // A new access token, and a refresh token too unless `generation` is left out.
 async function setSessionCookies(
   response: Response,
-  { user, sessionId, theme }: Session,
+  { user, sessionId, theme, timeZone, locale }: Session,
   generation?: number,
 ): Promise<void> {
   const accessToken = await signJwt(
     accessKey,
-    { username: user.username, sid: sessionId, theme },
+    { username: user.username, sid: sessionId, theme, tz: timeZone, lc: locale },
     user.id,
     accessTokenSeconds,
   )
@@ -202,21 +211,35 @@ async function refreshSession(
   // Only one of several requests racing with the same token gets past the WHERE: the row
   // lock makes the others re-check it after the first one's update.
   const theme = (value: string | null): ThemeId => (isTheme(value) ? value : defaultTheme)
-  const themeColumn = '(SELECT theme FROM user_profiles WHERE user_id = u.id) AS theme'
-  const rotated = await db().query<{ generation: number; username: string; theme: string | null }>(
+  const profileColumns = `(SELECT theme FROM user_profiles WHERE user_id = u.id) AS theme,
+       (SELECT timezone FROM user_profiles WHERE user_id = u.id) AS timezone,
+       (SELECT locale FROM user_profiles WHERE user_id = u.id) AS locale`
+  const rotated = await db().query<{
+    generation: number
+    username: string
+    theme: string | null
+    timezone: string | null
+    locale: string | null
+  }>(
     `UPDATE sessions s
      SET current_generation = s.current_generation + 1, last_used_at = now()
      FROM users u
      WHERE s.id = $1 AND s.user_id = $2 AND u.id = s.user_id
        AND s.current_generation = $3 AND s.revoked_at IS NULL
        AND s.last_used_at > now() - $4 * interval '1 second'
-     RETURNING s.current_generation AS generation, u.username, ${themeColumn}`,
+     RETURNING s.current_generation AS generation, u.username, ${profileColumns}`,
     [sessionId, userId, generation, sessionIdleSeconds],
   )
   if (rotated.rows[0]) {
-    const { generation: next, username } = rotated.rows[0]
+    const { generation: next, username, timezone, locale } = rotated.rows[0]
     return {
-      session: { user: { id: userId, username }, sessionId, theme: theme(rotated.rows[0].theme) },
+      session: {
+        user: { id: userId, username },
+        sessionId,
+        theme: theme(rotated.rows[0].theme),
+        timeZone: timeZoneOrDefault(timezone),
+        locale: isLocale(locale) ? locale : null,
+      },
       generation: next,
     }
   }
@@ -225,10 +248,12 @@ async function refreshSession(
     current: number
     username: string
     theme: string | null
+    timezone: string | null
+    locale: string | null
     active: boolean
     racing: boolean
   }>(
-    `SELECT s.current_generation AS current, u.username, ${themeColumn},
+    `SELECT s.current_generation AS current, u.username, ${profileColumns},
        s.revoked_at IS NULL AND s.last_used_at > now() - $3 * interval '1 second' AS active,
        s.last_used_at > now() - $4 * interval '1 second' AS racing
      FROM sessions s JOIN users u ON u.id = s.user_id
@@ -241,7 +266,13 @@ async function refreshSession(
   }
   if (generation === row.current - 1 && row.racing) {
     return {
-      session: { user: { id: userId, username: row.username }, sessionId, theme: theme(row.theme) },
+      session: {
+        user: { id: userId, username: row.username },
+        sessionId,
+        theme: theme(row.theme),
+        timeZone: timeZoneOrDefault(row.timezone),
+        locale: isLocale(row.locale) ? row.locale : null,
+      },
       generation: undefined,
     }
   }
@@ -293,6 +324,17 @@ export function getTheme(request: Request): ThemeId {
   return sessions.get(request)?.theme ?? defaultTheme
 }
 
+// The logged-in user's time zone, from their access token; UTC for anonymous visitors.
+export function getTimeZone(request: Request): string {
+  return sessions.get(request)?.timeZone ?? defaultTimeZone
+}
+
+// The language the logged-in user picked for dates and times, or null (not picked, and for
+// anonymous visitors): then the browser's Accept-Language decides.
+export function getLocale(request: Request): string | null {
+  return sessions.get(request)?.locale ?? null
+}
+
 // The logged-in user, or null (not undefined, so it survives JSON) for anonymous visitors.
 export function getViewer(request: Request): AuthenticatedUser | null {
   return sessions.get(request)?.user ?? null
@@ -339,13 +381,41 @@ export async function startSession(
   { id, username }: AuthenticatedUser,
 ): Promise<void> {
   await revokeCurrentSession(request)
-  const { rows } = await db().query<{ id: string; theme: string | null }>(
+  const { rows } = await db().query<{
+    id: string
+    theme: string | null
+    timezone: string | null
+    locale: string | null
+  }>(
     `INSERT INTO sessions (user_id) VALUES ($1)
-     RETURNING id, (SELECT theme FROM user_profiles WHERE user_id = $1) AS theme`,
+     RETURNING id, (SELECT theme FROM user_profiles WHERE user_id = $1) AS theme,
+       (SELECT timezone FROM user_profiles WHERE user_id = $1) AS timezone,
+       (SELECT locale FROM user_profiles WHERE user_id = $1) AS locale`,
     [id],
   )
   const theme = isTheme(rows[0].theme) ? rows[0].theme : defaultTheme
-  await setSessionCookies(response, { user: { id, username }, sessionId: rows[0].id, theme }, 0)
+  const timeZone = timeZoneOrDefault(rows[0].timezone)
+  const locale = isLocale(rows[0].locale) ? rows[0].locale : null
+  await setSessionCookies(
+    response,
+    { user: { id, username }, sessionId: rows[0].id, theme, timeZone, locale },
+    0,
+  )
+}
+
+// After the user picks a time zone and/or language (saved in user_profiles): a new access
+// token carrying them, like setSessionTheme.
+export async function setSessionTime(
+  request: Request,
+  response: Response,
+  changes: { timeZone?: string; locale?: string | null },
+): Promise<void> {
+  const session = sessions.get(request)
+  if (session) {
+    const updated = { ...session, ...changes }
+    sessions.set(request, updated)
+    await setSessionCookies(response, updated)
+  }
 }
 
 // After the user picks a theme (saved in user_profiles): a new access token carrying it,

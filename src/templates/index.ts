@@ -15,6 +15,7 @@ import { AvatarSvg } from './avatar.ts'
 import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
 import { themes } from '../themes.ts'
+import { formatTimestamp, localeLabel, locales, timeZones } from '../timezones.ts'
 import { Page, preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
 import { blurtOgInput, ogHash, ogImagePath, ogProfileImagePath, profileCardText } from '../og.ts'
 import { cardColors, type CardColorId } from '../card-colors.ts'
@@ -742,8 +743,13 @@ function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
   `
 }
 
+// In the viewer's time zone (UTC until they pick one) and the clock their browser's
+// language uses. `datetime` stays UTC.
 function Timestamp({ date }: { date: Date }) {
-  return html`<time datetime=${date.toISOString()}>${date.toLocaleString()}</time>`
+  const { timeZone, locale } = pageContext()
+  return html`<time datetime=${date.toISOString()}
+    >${formatTimestamp(date, timeZone, locale)}</time
+  >`
 }
 
 // The blurt a quote quotes, under its text: one level, so a quote in it shows only its own
@@ -1350,6 +1356,42 @@ function ThemeForm() {
   `
 }
 
+// The time zone and language of dates and times. <select>s, so no JS is needed.
+function TimeZoneForm() {
+  const { timeZone: current, pickedLocale: locale } = pageContext()
+  return html`
+    <section class="panel" aria-label="Time zone" id="timezone">
+      <h2>Time zone and language</h2>
+      <p class="tiny">
+        Times are shown in UTC until you pick your time zone. The language decides how dates and
+        times are written (17.10.2026 14:37 or 10/17/2026 02:37 PM); until you pick one, your
+        browser's language is used. Saved on your account, so it follows you to every device.
+      </p>
+      <form method="post" action="/api/timezone">
+        <label>
+          Time zone
+          <select name="timezone" required>
+            ${timeZones.map(
+              (zone) => html`<option value=${zone} selected=${zone === current}>${zone}</option>`,
+            )}
+          </select>
+        </label>
+        <label>
+          Language
+          <select name="locale">
+            <option value="" selected=${locale === null}>Same as my browser</option>
+            ${locales.map(
+              (id) =>
+                html`<option value=${id} selected=${id === locale}>${localeLabel(id)}</option>`,
+            )}
+          </select>
+        </label>
+        <div class="actions"><${SubmitButton} icon="save" label="Save time settings" /></div>
+      </form>
+    </section>
+  `
+}
+
 // The colour of the share cards. Its inputs and button belong to the profile form above
 // (the `form` attribute), so one POST saves everything and no JavaScript is needed.
 function CardForm({ profile }: { profile: UserProfile }) {
@@ -1476,6 +1518,7 @@ ${profile.bio}</textarea>
       <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
+      <${TimeZoneForm} />
     <//>
   `
 }

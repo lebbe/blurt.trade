@@ -1047,6 +1047,24 @@ export async function setTheme(userId: number, theme: ThemeId): Promise<boolean>
   return rowCount === 1
 }
 
+// The time zone and the language of dates and times (src/timezones.ts); a field left out
+// stays as it was, a null locale goes back to the browser's. False when the user no longer
+// exists.
+export async function setTimeSettings(
+  userId: number,
+  { timeZone, locale }: { timeZone?: string; locale?: string | null },
+): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `UPDATE user_profiles
+     SET timezone = CASE WHEN $2::boolean THEN $3 ELSE timezone END,
+         locale = CASE WHEN $4::boolean THEN $5 ELSE locale END,
+         updated_at = now()
+     WHERE user_id = $1`,
+    [userId, timeZone !== undefined, timeZone ?? null, locale !== undefined, locale ?? null],
+  )
+  return rowCount === 1
+}
+
 export async function countFollowing(userId: number): Promise<number> {
   const { rows } = await db().query<{ count: number }>(
     'SELECT count(*)::int AS count FROM follows WHERE user_id = $1',

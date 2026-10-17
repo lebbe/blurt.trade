@@ -29,6 +29,7 @@ const defaults = {
   location: '30/10m',
   avatar: '60/10m',
   theme: '60/10m',
+  timezone: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
   mintInvites: '20/1h',
