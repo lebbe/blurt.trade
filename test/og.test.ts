@@ -81,7 +81,7 @@ test('crawler requests receive exact metadata and an immutable PNG, then deleted
   assert.equal(example.bodyBytes.readUInt32BE(20), OG_HEIGHT)
 
   const staleImage = await request('GET', `/og/${id}-${'0'.repeat(64)}.png`)
-  assert.equal(staleImage.statusCode, 301)
+  assert.equal(staleImage.statusCode, 302)
   assert.equal(staleImage.location, imagePath)
 
   await request('POST', `/api/blurts/${id}/delete`, '', { cookie })
@@ -124,7 +124,7 @@ test('a blurt card takes the author’s chosen colour, or ?color= on the image l
   const plum = await request('GET', newPath)
   assert.equal(plum.statusCode, 200)
   assert.notDeepEqual(plum.bodyBytes, navy.bodyBytes)
-  assert.equal((await request('GET', imagePath)).statusCode, 301)
+  assert.equal((await request('GET', imagePath)).statusCode, 302)
 
   assert.equal((await sendJson('/poet/edit', { cardColor: 'red' }, { cookie })).statusCode, 400)
 })
@@ -144,7 +144,7 @@ test('a profile with a bio gets its own card, and one without keeps the site ima
   assert.equal(image.bodyBytes.readUInt32BE(16), OG_WIDTH)
   assert.equal(image.bodyBytes.readUInt32BE(20), OG_HEIGHT)
   assert.equal((await request('GET', `${imagePath}?color=teal`)).statusCode, 200)
-  assert.equal((await request('GET', `/og/u/poet/${'0'.repeat(64)}.png`)).statusCode, 301)
+  assert.equal((await request('GET', `/og/u/poet/${'0'.repeat(64)}.png`)).statusCode, 302)
   assert.equal((await request('GET', `/og/u/nobody/${'0'.repeat(64)}.png`)).statusCode, 404)
 })
 

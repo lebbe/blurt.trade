@@ -97,7 +97,7 @@ ogRouter.get('/og/u/:username/:filename', async (request, response) => {
   const hash = ogHash(stored)
   const override = colorOverride(request)
   if (hash !== match[1] || profile.username !== request.params.username) {
-    response.redirect(301, withQuery(ogProfileImagePath(profile.username, hash), override))
+    response.redirect(302, withQuery(ogProfileImagePath(profile.username, hash), override))
     return
   }
   const input = override ? { ...stored, color: override } : stored
@@ -128,8 +128,9 @@ ogRouter.get('/og/:filename', async (request, response) => {
   const hash = ogHash(stored)
   const override = colorOverride(request)
   if (hash !== match[2]) {
-    // A stale hash gets a permanent redirect, a missing one (a hand-written link) a temporary one.
-    response.redirect(match[2] ? 301 : 302, withQuery(ogImagePath(id, hash), override))
+    // A stale or missing hash (a hand-written link) gets a temporary redirect: a permanent one
+    // would stick in browsers, and be wrong if the colour is later changed back.
+    response.redirect(302, withQuery(ogImagePath(id, hash), override))
     return
   }
   const input = override && stored.style !== 'blurt' ? { ...stored, color: override } : stored

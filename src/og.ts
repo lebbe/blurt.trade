@@ -254,6 +254,9 @@ async function drawFace(context: SKRSContext2D, svg: string): Promise<void> {
       }
     }
   }
+  if (right < left || bottom < top) {
+    return // nothing painted (cannot happen with a valid avatar): a card without a face
+  }
   const paintedWidth = right - left + 1
   const paintedHeight = bottom - top + 1
   const scale = Math.min(faceBox.width / paintedWidth, faceBox.height / paintedHeight)
