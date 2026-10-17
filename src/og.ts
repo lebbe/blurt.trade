@@ -184,12 +184,6 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
   gradient.addColorStop(1, special ? '#a90017' : '#242b4a')
   context.fillStyle = gradient
   context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
-  context.globalAlpha = 0.12
-  context.fillStyle = special ? '#ffbd59' : '#6879c4'
-  context.beginPath()
-  context.arc(190, 315, 190, 0, Math.PI * 2)
-  context.fill()
-  context.globalAlpha = 1
   if (special) {
     context.fillStyle = '#d4001c'
     context.fillRect(0, 0, OG_WIDTH, 136)

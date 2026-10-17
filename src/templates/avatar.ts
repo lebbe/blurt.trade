@@ -225,10 +225,13 @@ export function AvatarSvg({
   const unstretch = `translate(50 0) scale(${round(1 / scale)} 1) translate(-50 0)`
   const topFlap = openMouth ? 'translate(0 -4) rotate(21 86 58)' : undefined
   const jawFlop = openMouth ? 'translate(0 3)' : undefined
+  const viewBox = openMouth
+    ? `${round(50 - box / 2 - 24)} -32 ${box + 36} 132`
+    : `${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}`
 
   return html`<svg
     class="avatar avatar-${size}"
-    viewBox="${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}"
+    viewBox=${viewBox}
     xmlns="http://www.w3.org/2000/svg"
     role=${label ? 'img' : undefined}
     aria-label=${label}

@@ -97,6 +97,7 @@ test('every example renders as a compact 1200-by-630 PNG', async () => {
 
 test('open-mouth avatar is the static peak flap pose, not an extra mouth drawing', () => {
   const svg = renderToString(h(AvatarSvg, { avatar, openMouth: true }))
+  assert.match(svg, /viewBox="-24 -32 136 132"/)
   assert.equal(
     (svg.match(/class="avatar-top" transform="translate\(0 -4\) rotate\(21 86 58\)"/g) ?? [])
       .length,
@@ -106,6 +107,7 @@ test('open-mouth avatar is the static peak flap pose, not an extra mouth drawing
   assert.doesNotMatch(svg, /<ellipse cx="50" cy="68"/)
 
   const talking = renderToString(h(AvatarSvg, { avatar }))
+  assert.match(talking, /viewBox="0 0 100 100"/)
   assert.doesNotMatch(talking, /class="avatar-top" transform=/)
   assert.doesNotMatch(talking, /class="avatar-jaw" transform=/)
 })
