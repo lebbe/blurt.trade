@@ -938,7 +938,8 @@ button.danger,
 }
 
 /* Chatter, not a metronome: big and small flaps, a few quick ones, a pause. The jaw
-   drops a little with the bigger ones. */
+   drops a little with the bigger ones. The biggest still pose is copied in
+   src/templates/avatar.ts for its openMouth option; update both when changing it. */
 @keyframes avatar-talk {
   0%,
   100% {

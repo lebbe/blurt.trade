@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { h } from 'preact'
+import { renderToString } from 'preact-render-to-string'
 import { blurtMaxLength } from '../src/limits.ts'
 import {
   OG_AVATAR_VERSION,
@@ -16,6 +18,7 @@ import {
   wrapOgText,
 } from '../src/og.ts'
 import { renderBlurtPage } from '../src/templates/index.ts'
+import { AvatarSvg } from '../src/templates/avatar.ts'
 import type { Blurt } from '../src/routes/state.ts'
 
 const avatar = {
@@ -90,6 +93,21 @@ test('every example renders as a compact 1200-by-630 PNG', async () => {
     assert.equal(image.readUInt32BE(20), OG_HEIGHT)
     assert.ok(image.length < 1_000_000)
   }
+})
+
+test('open-mouth avatar is the static peak flap pose, not an extra mouth drawing', () => {
+  const svg = renderToString(h(AvatarSvg, { avatar, openMouth: true }))
+  assert.equal(
+    (svg.match(/class="avatar-top" transform="translate\(0 -4\) rotate\(21 86 58\)"/g) ?? [])
+      .length,
+    2,
+  )
+  assert.equal((svg.match(/class="avatar-jaw" transform="translate\(0 3\)"/g) ?? []).length, 2)
+  assert.doesNotMatch(svg, /<ellipse cx="50" cy="68"/)
+
+  const talking = renderToString(h(AvatarSvg, { avatar }))
+  assert.doesNotMatch(talking, /class="avatar-top" transform=/)
+  assert.doesNotMatch(talking, /class="avatar-jaw" transform=/)
 })
 
 test('blurt metadata preserves and escapes full text and hides deleted content', () => {

@@ -29,6 +29,9 @@ const html = htm.bind(h)
 //   4. the jaw (moving), while the mouth is shut
 //   5. the top of the head (moving): hair, skin, eyes
 //
+// `openMouth` is a still of the biggest flap (33% of `avatar-talk` in
+// public/style.css). Keep its transforms in sync with that keyframe.
+//
 // The head width stretches all of that sideways around the middle (a transform on one
 // group, so the hinge in the CSS moves with it), except the eyes, which keep their shape
 // and only move apart. Heads wider than the box get a bigger viewBox.
@@ -220,6 +223,8 @@ export function AvatarSvg({
   const box = round(Math.max(100, 2 * (44 * scale + 1)))
   const stretch = `translate(50 0) scale(${scale} 1) translate(-50 0)`
   const unstretch = `translate(50 0) scale(${round(1 / scale)} 1) translate(-50 0)`
+  const topFlap = openMouth ? 'translate(0 -4) rotate(21 86 58)' : undefined
+  const jawFlop = openMouth ? 'translate(0 3)' : undefined
 
   return html`<svg
     class="avatar avatar-${size}"
@@ -232,10 +237,14 @@ export function AvatarSvg({
   >
     <g transform=${scale === 1 ? undefined : stretch}>
       <path d=${mouthPath} fill=${mouthColor} />
-      <g class="avatar-jaw"><${LowerTeeth} type=${toothType} color=${toothColor} /></g>
-      <g class="avatar-top"><${UpperTeeth} type=${toothType} color=${toothColor} /></g>
-      <g class="avatar-jaw"><path d=${jawPath} fill=${skin} ...${stroke} /></g>
-      <g class="avatar-top">
+      <g class="avatar-jaw" transform=${jawFlop}>
+        <${LowerTeeth} type=${toothType} color=${toothColor} />
+      </g>
+      <g class="avatar-top" transform=${topFlap}>
+        <${UpperTeeth} type=${toothType} color=${toothColor} />
+      </g>
+      <g class="avatar-jaw" transform=${jawFlop}><path d=${jawPath} fill=${skin} ...${stroke} /></g>
+      <g class="avatar-top" transform=${topFlap}>
         <${HairBack} type=${hairType} color=${hairColor} />
         <path d=${domePath} fill=${skin} ...${stroke} />
         <${HairFront} type=${hairType} color=${hairColor} />
@@ -249,13 +258,6 @@ export function AvatarSvg({
           />
         </g>
       </g>
-      ${
-        openMouth &&
-        html`<g transform=${scale === 1 ? undefined : stretch}>
-          <ellipse cx="50" cy="68" rx="14" ry="16" fill=${mouthColor} ...${stroke} />
-          <path d="M40 58 H60 V63 Q50 66 40 63 Z" fill=${toothColor} />
-        </g>`
-      }
     </g>
   </svg>`
 }
