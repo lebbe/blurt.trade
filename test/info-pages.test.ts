@@ -125,7 +125,7 @@ test('the privacy page is in step with the database columns', async () => {
     sessions: 'created_at current_generation id last_used_at revoked_at user_id',
     signup_counter: 'current_count hard_limit id soft_limit',
     user_profiles:
-      'avatar bio github homepage instagram linkedin location theme tiktok updated_at user_id x youtube',
+      'avatar bio card_color github homepage instagram linkedin location theme tiktok updated_at user_id x youtube',
     users: 'created_at deleted_at id is_admin password_hash username',
     waitlist: 'created_at id status username',
   })

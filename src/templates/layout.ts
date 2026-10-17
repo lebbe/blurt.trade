@@ -32,7 +32,15 @@ export type PageMeta = {
   canonical?: string // the page's path without cursors, e.g. /Lars/
   noindex?: boolean
   // Open Graph / Twitter card tags, for pages people share: profiles, blurts, feeds.
-  share?: { type: 'website' | 'profile' | 'article'; title: string; description: string }
+  share?: {
+    type: 'website' | 'profile' | 'article'
+    title: string
+    description: string
+    image?: string
+    imageAlt?: string
+    publishedTime?: string
+    themeColor?: string
+  }
 }
 
 // Text for a title or description: whitespace collapsed, at most `max` characters (code
@@ -74,13 +82,23 @@ function Head({ meta }: { meta: PageMeta }) {
           <meta property="og:title" content=${share.title} />
           <meta property="og:description" content=${share.description} />
           ${canonical && html`<meta property="og:url" content=${canonical} />`}
-          <meta property="og:image" content=${`${origin}${previewImagePath}`} />
+          <meta property="og:image" content=${`${origin}${share.image ?? previewImagePath}`} />
+          <meta property="og:image:type" content="image/png" />
           <meta property="og:image:width" content=${String(previewImageSize.width)} />
           <meta property="og:image:height" content=${String(previewImageSize.height)} />
-          <meta property="og:image:alt" content=${`${siteName}: ${siteDescription}`} />
+          <meta
+            property="og:image:alt"
+            content=${share.imageAlt ?? `${siteName}: ${siteDescription}`}
+          />
+          ${
+            share.publishedTime &&
+            html`<meta property="article:published_time" content=${share.publishedTime} />`
+          }
           <meta name="twitter:card" content="summary_large_image" />
           <meta name="twitter:title" content=${share.title} />
           <meta name="twitter:description" content=${share.description} />
+          <meta name="twitter:image" content=${`${origin}${share.image ?? previewImagePath}`} />
+          ${share.themeColor && html`<meta name="theme-color" content=${share.themeColor} />`}
         `
       }
     </head>
@@ -147,10 +165,14 @@ function TopNav() {
             ><${Icon} name=${icon} /><span>${label}</span></a
           >`,
       )}
-      ${viewer &&
-      html`<form method="post" action="/api/logout" class="logout">
-        <button type="submit" class="secondary"><${Icon} name="logout" /><span>Log out</span></button>
-      </form>`}
+      ${
+        viewer &&
+        html`<form method="post" action="/api/logout" class="logout">
+          <button type="submit" class="secondary">
+            <${Icon} name="logout" /><span>Log out</span>
+          </button>
+        </form>`
+      }
     </nav>
   `
 }

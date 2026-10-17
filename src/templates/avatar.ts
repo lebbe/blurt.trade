@@ -29,6 +29,9 @@ const html = htm.bind(h)
 //   4. the jaw (moving), while the mouth is shut
 //   5. the top of the head (moving): hair, skin, eyes
 //
+// `openMouth` is a still of the biggest flap (33% of `avatar-talk` in
+// public/style.css). Keep its transforms in sync with that keyframe.
+//
 // The head width stretches all of that sideways around the middle (a transform on one
 // group, so the hinge in the CSS moves with it), except the eyes, which keep their shape
 // and only move apart. Heads wider than the box get a bigger viewBox.
@@ -198,10 +201,12 @@ export function AvatarSvg({
   avatar,
   label,
   size = 'small',
+  openMouth = false,
 }: {
   avatar: Avatar
   label?: string // without one, the avatar is decoration (aria-hidden)
   size?: 'small' | 'large'
+  openMouth?: boolean
 }) {
   const skin = safeColor(avatar?.skin, '#f1c27d')
   const hairType = oneOf(hairTypes, avatar?.hairType)
@@ -218,10 +223,15 @@ export function AvatarSvg({
   const box = round(Math.max(100, 2 * (44 * scale + 1)))
   const stretch = `translate(50 0) scale(${scale} 1) translate(-50 0)`
   const unstretch = `translate(50 0) scale(${round(1 / scale)} 1) translate(-50 0)`
+  const topFlap = openMouth ? 'translate(0 -4) rotate(21 86 58)' : undefined
+  const jawFlop = openMouth ? 'translate(0 3)' : undefined
+  const viewBox = openMouth
+    ? `${round(50 - box / 2 - 24)} -32 ${box + 36} 132`
+    : `${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}`
 
   return html`<svg
     class="avatar avatar-${size}"
-    viewBox="${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}"
+    viewBox=${viewBox}
     xmlns="http://www.w3.org/2000/svg"
     role=${label ? 'img' : undefined}
     aria-label=${label}
@@ -230,10 +240,14 @@ export function AvatarSvg({
   >
     <g transform=${scale === 1 ? undefined : stretch}>
       <path d=${mouthPath} fill=${mouthColor} />
-      <g class="avatar-jaw"><${LowerTeeth} type=${toothType} color=${toothColor} /></g>
-      <g class="avatar-top"><${UpperTeeth} type=${toothType} color=${toothColor} /></g>
-      <g class="avatar-jaw"><path d=${jawPath} fill=${skin} ...${stroke} /></g>
-      <g class="avatar-top">
+      <g class="avatar-jaw" transform=${jawFlop}>
+        <${LowerTeeth} type=${toothType} color=${toothColor} />
+      </g>
+      <g class="avatar-top" transform=${topFlap}>
+        <${UpperTeeth} type=${toothType} color=${toothColor} />
+      </g>
+      <g class="avatar-jaw" transform=${jawFlop}><path d=${jawPath} fill=${skin} ...${stroke} /></g>
+      <g class="avatar-top" transform=${topFlap}>
         <${HairBack} type=${hairType} color=${hairColor} />
         <path d=${domePath} fill=${skin} ...${stroke} />
         <${HairFront} type=${hairType} color=${hairColor} />

@@ -92,11 +92,14 @@ adminRouter.post(
       response.status(201).json({ username: user.username, codes })
       return
     }
-    response.status(201).type('html').send(
-      renderAdminToolsPage({
-        viewer: response.locals.authenticatedUser,
-        minted: { username: user.username, codes },
-      }),
-    )
+    response
+      .status(201)
+      .type('html')
+      .send(
+        renderAdminToolsPage({
+          viewer: response.locals.authenticatedUser,
+          minted: { username: user.username, codes },
+        }),
+      )
   },
 )

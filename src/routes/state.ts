@@ -5,6 +5,7 @@ import type { GeoPoint } from '../geo.ts'
 import { randomAvatar, type Avatar } from '../avatar.ts'
 import { cursorMaxLength } from '../limits.ts'
 import type { ThemeId } from '../themes.ts'
+import type { CardColorId } from '../card-colors.ts'
 
 // A deleted blurt stays in its thread as a placeholder: `deleted` is true and `username`,
 // `text`, `avatar` and `quoted` are null (see deleteBlurts).
@@ -74,6 +75,8 @@ export type UserProfile = {
   linkedin: string
   bio: string
   avatar: Avatar
+  // The background of their share cards; null is the default (src/card-colors.ts).
+  cardColor: CardColorId | null
 }
 
 export type UserProfileInput = Omit<UserProfile, 'userId' | 'username' | 'avatar'>
@@ -252,7 +255,8 @@ async function listPage(
 }
 
 const profileColumns = `p.user_id AS "userId", u.username, p.homepage, p.x, p.instagram,
-  p.tiktok, p.youtube, p.github, p.linkedin, p.bio, p.avatar`
+  p.tiktok, p.youtube, p.github, p.linkedin, p.bio, p.avatar,
+  p.card_color AS "cardColor"`
 
 const followedBy = (userId: string) =>
   `(SELECT followed_user_id FROM follows WHERE user_id = ${userId})`
@@ -992,7 +996,7 @@ export async function updateUserProfile(
 ): Promise<UserProfile> {
   const { rows } = await db().query<UserProfile>(
     `UPDATE user_profiles p SET homepage = $2, x = $3, instagram = $4, tiktok = $5,
-       youtube = $6, github = $7, linkedin = $8, bio = $9, updated_at = now()
+       youtube = $6, github = $7, linkedin = $8, bio = $9, card_color = $10, updated_at = now()
      FROM users u WHERE u.id = p.user_id AND p.user_id = $1
      RETURNING ${profileColumns}`,
     [
@@ -1005,12 +1009,23 @@ export async function updateUserProfile(
       input.github,
       input.linkedin,
       input.bio,
+      input.cardColor,
     ],
   )
   if (!rows[0]) {
     throw new Error(`Missing profile for user ${userId}`)
   }
   return rows[0]
+}
+
+// The card colour of a user, by username: null for the default, and for no such user.
+export async function getCardColor(username: string): Promise<CardColorId | null> {
+  const { rows } = await dbRead().query<{ cardColor: CardColorId | null }>(
+    `SELECT p.card_color AS "cardColor" FROM user_profiles p JOIN users u ON u.id = p.user_id
+     WHERE lower(u.username) = lower($1)`,
+    [username],
+  )
+  return rows[0]?.cardColor ?? null
 }
 
 // Replaces the user's avatar (already validated: avatarSchema in src/avatar.ts). False if

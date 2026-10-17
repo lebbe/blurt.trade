@@ -163,8 +163,11 @@ test('the admin tools page, header link, and its delete and invite forms', async
     400,
   )
   assert.equal(
-    (await request('POST', '/api/admin/invites', 'username=Nobody&count=1', { cookie: ownerCookie }))
-      .statusCode,
+    (
+      await request('POST', '/api/admin/invites', 'username=Nobody&count=1', {
+        cookie: ownerCookie,
+      })
+    ).statusCode,
     404,
   )
   const minted = await sendJson(
@@ -174,7 +177,10 @@ test('the admin tools page, header link, and its delete and invite forms', async
   )
   assert.equal(minted.statusCode, 201)
   assert.equal(JSON.parse(minted.body).codes.length, 3)
-  const { rows } = await db().query('SELECT count(*)::int AS n FROM invite_codes WHERE code = ANY($1)', [JSON.parse(minted.body).codes])
+  const { rows } = await db().query(
+    'SELECT count(*)::int AS n FROM invite_codes WHERE code = ANY($1)',
+    [JSON.parse(minted.body).codes],
+  )
   assert.equal(rows[0].n, 3)
 
   assert.equal(
