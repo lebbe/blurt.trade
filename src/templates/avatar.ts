@@ -198,10 +198,12 @@ export function AvatarSvg({
   avatar,
   label,
   size = 'small',
+  openMouth = false,
 }: {
   avatar: Avatar
   label?: string // without one, the avatar is decoration (aria-hidden)
   size?: 'small' | 'large'
+  openMouth?: boolean
 }) {
   const skin = safeColor(avatar?.skin, '#f1c27d')
   const hairType = oneOf(hairTypes, avatar?.hairType)
@@ -247,6 +249,13 @@ export function AvatarSvg({
           />
         </g>
       </g>
+      ${
+        openMouth &&
+        html`<g transform=${scale === 1 ? undefined : stretch}>
+          <ellipse cx="50" cy="68" rx="14" ry="16" fill=${mouthColor} ...${stroke} />
+          <path d="M40 58 H60 V63 Q50 66 40 63 Z" fill=${toothColor} />
+        </g>`
+      }
     </g>
   </svg>`
 }

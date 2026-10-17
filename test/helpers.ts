@@ -39,6 +39,7 @@ export function request(
   retryAfter?: string
   headers: http.IncomingHttpHeaders
   body: string
+  bodyBytes: Buffer
 }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, () => {
@@ -64,12 +65,11 @@ export function request(
           },
         },
         (response: http.IncomingMessage) => {
-          let responseBody = ''
-          response.on('data', (chunk: Buffer) => {
-            responseBody += chunk.toString()
-          })
+          const responseChunks: Buffer[] = []
+          response.on('data', (chunk: Buffer) => responseChunks.push(chunk))
           response.on('end', () => {
             server.close()
+            const bodyBytes = Buffer.concat(responseChunks)
             resolve({
               statusCode: response.statusCode ?? 0,
               contentType: response.headers['content-type'],
@@ -77,7 +77,8 @@ export function request(
               setCookie: response.headers['set-cookie'],
               retryAfter: response.headers['retry-after'],
               headers: response.headers,
-              body: responseBody,
+              body: bodyBytes.toString(),
+              bodyBytes,
             })
           })
         },

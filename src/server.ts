@@ -27,6 +27,7 @@ import { searchRouter } from './routes/search.ts'
 import { themeRouter } from './routes/theme.ts'
 import { usersRouter } from './routes/users.ts'
 import { crawlRouter } from './routes/crawl.ts'
+import { ogRouter } from './routes/og.ts'
 
 const publicDir = join(import.meta.dirname, '..', 'public')
 
@@ -49,6 +50,7 @@ app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())
 app.use(readYourWrites) // before anything reads: decides replica or primary for the request
 app.use(authenticate)
+app.use(ogRouter)
 // After auth: who is looking, on which page and in which theme (from their access token),
 // for every page's frame.
 app.use((request, _response, next) => {

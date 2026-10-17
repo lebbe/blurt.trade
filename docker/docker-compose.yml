@@ -24,6 +24,8 @@ services:
         condition: service_healthy
     ports:
       - '127.0.0.1:3001:3000'
+    volumes:
+      - ogcache:/app/og-cache
     environment:
       NODE_ENV: production
       TRUST_PROXY: '1'
@@ -37,3 +39,4 @@ services:
 
 volumes:
   pgdata:
+  ogcache:

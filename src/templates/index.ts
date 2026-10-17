@@ -16,6 +16,7 @@ import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
 import { themes } from '../themes.ts'
 import { Page, preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
+import { ogHash, ogImagePath } from '../og.ts'
 import {
   bioMaxLength,
   blurtMaxLength,
@@ -1017,8 +1018,7 @@ function AdminToolsPage({ minted }: AdminToolsData) {
         <h2>Delete a blurt</h2>
         <form method="post" action="/api/admin/blurts/delete">
           <label
-            >Blurt id
-            <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
+            >Blurt id <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
           /></label>
           <div class="actions">
             <${SubmitButton} icon="trash" label="Delete blurt" kind="danger" />
@@ -1030,8 +1030,7 @@ function AdminToolsPage({ minted }: AdminToolsData) {
         <p class="tiny">Closes every open report on the blurt, which stays up.</p>
         <form method="post" action="/api/admin/reports/dismiss">
           <label
-            >Blurt id
-            <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
+            >Blurt id <input name="blurtId" inputmode="numeric" pattern="[0-9]+" required
           /></label>
           <div class="actions">
             <${SubmitButton} icon="shield" label="Dismiss reports" kind="secondary" />
@@ -1898,9 +1897,7 @@ function PrivacyPage({ contact }: InfoPageData) {
         </li>
       </ul>
       <h2>Backups</h2>
-      <p>
-        No backups of the database are currently being made.
-      </p>
+      <p>No backups of the database are currently being made.</p>
       <h2>Deleting your account</h2>
       <p>
         <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It
@@ -2027,13 +2024,35 @@ function profilePageMeta({ profile }: ProfilePageData): PageMeta {
 function blurtPageMeta({ blurt }: BlurtPageData): PageMeta {
   const canonical = blurtUrl(blurt)
   const deleted = blurt.deleted || blurt.username === null
-  const description = deleted ? 'This blurt was deleted.' : preview(blurt.text, metaDescriptionMax)
-  const title = deleted ? 'Deleted blurt' : preview(blurt.text, shareTitleMax)
+  const description = deleted ? 'This blurt was deleted.' : blurt.text!
+  const username = blurt.username ?? 'deleted'
+  const title = deleted ? 'Deleted blurt' : `${username} blurted`
+  const image = deleted
+    ? undefined
+    : ogImagePath(
+        blurt.id,
+        ogHash({
+          text: blurt.text!,
+          username,
+          avatar: blurt.avatar,
+          style: blurt.text === 'BLURT' ? 'blurt' : 'post',
+        }),
+      )
   return {
     title,
     description,
     canonical,
-    share: { type: 'article', title, description },
+    share: deleted
+      ? { type: 'article', title, description }
+      : {
+          type: 'article',
+          title: `${username} blurted:`,
+          description,
+          image,
+          imageAlt: `${username}: ${description}`,
+          publishedTime: blurt.createdAt.toISOString(),
+          themeColor: blurt.text === 'BLURT' ? '#d4001c' : '#11152c',
+        },
   }
 }
 

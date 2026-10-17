@@ -1,0 +1,29 @@
+body {
+  margin: 2rem;
+  background: #11152c;
+  color: #fff;
+  font: 16px system-ui, sans-serif;
+}
+
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1rem;
+}
+
+figure {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 12px;
+  background: #242b4a;
+}
+
+img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+figcaption {
+  padding-top: 0.6rem;
+}
