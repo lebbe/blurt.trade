@@ -16,7 +16,8 @@ import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
 import { themes } from '../themes.ts'
 import { Page, preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
-import { ogHash, ogImagePath } from '../og.ts'
+import { blurtOgInput, ogHash, ogImagePath, ogProfileImagePath, profileCardText } from '../og.ts'
+import { cardColors, type CardColorId } from '../card-colors.ts'
 import {
   bioMaxLength,
   blurtMaxLength,
@@ -93,6 +94,8 @@ export type BlurtPageData = {
   replies: Blurt[]
   next: string | null // for replies
   related: Blurt[]
+  // The author's card colour, for the share image (null: the default).
+  cardColor?: CardColorId | null
 }
 
 // `invitedBy` is the username of whoever invited them (null if nobody did).
@@ -271,6 +274,12 @@ function ButtonLink({
   return html`<a class=${kind ? `button ${kind}` : 'button'} href=${href}
     ><${Icon} name=${icon} /><span>${label}</span></a
   >`
+}
+
+// Today a plain link to the share card image, which works without JavaScript. With
+// JavaScript it can become the share button of the browser or a social network.
+function ShareLink({ href }: { href: string }) {
+  return html`<${ButtonLink} href=${href} icon="share" label="Share" />`
 }
 
 function SubmitButton({
@@ -804,6 +813,7 @@ function BlurtCard({
   inThread = false,
   reported = false,
   reportError,
+  sharePath,
 }: {
   blurt: Blurt
   viewer?: Viewer
@@ -812,6 +822,8 @@ function BlurtCard({
   inThread?: boolean
   reported?: boolean
   reportError?: string
+  // What Share opens: the blurt's page, or on the blurt's own page its card image.
+  sharePath?: string
 }) {
   const hiddenReplies = blurt.replyCount - replies.length
   const threadLink =
@@ -880,6 +892,9 @@ function BlurtCard({
           }
           <${Likes} blurt=${blurt} viewer=${viewer} />
           <${Reblurts} blurt=${blurt} viewer=${viewer} />
+          <a href=${sharePath ?? blurtUrl(blurt)} class="action"
+            ><${Icon} name="share" /><span>Share</span></a
+          >
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
           ${
             action === 'report' &&
@@ -924,7 +939,9 @@ function BlurtPage({
   related,
   composer,
   reportError,
+  cardColor = null,
 }: BlurtPageProps) {
+  const cardPath = blurtCardPath(blurt, cardColor)
   const quoting = composer?.reblurtOfId !== undefined
   const aside = html`
     ${
@@ -970,6 +987,7 @@ function BlurtPage({
           inThread
           reported=${reported}
           reportError=${reportError}
+          sharePath=${cardPath}
         />
       </section>
       ${
@@ -1332,6 +1350,54 @@ function ThemeForm() {
   `
 }
 
+// The colour of the share cards. Its inputs and button belong to the profile form above
+// (the `form` attribute), so one POST saves everything and no JavaScript is needed.
+function CardForm({ profile }: { profile: UserProfile }) {
+  const cardPath = profileCardPath(profile)
+  return html`
+    <section class="panel" aria-label="Share card" id="card">
+      <h2>Share card</h2>
+      <p class="tiny">
+        The image shown when your profile or blurts are shared. Your profile's card shows the first
+        ${blurtMaxLength} characters of your bio.
+      </p>
+      <fieldset class="theme-choices">
+        <legend>Share card colour</legend>
+        ${cardColors.map(
+          ({ id, label }) => html`
+            <label class="theme-choice">
+              <input
+                type="radio"
+                name="cardColor"
+                form="profile-form"
+                value=${id}
+                checked=${id === (profile.cardColor ?? cardColors[0].id)}
+              />
+              <span class="swatch card-swatch-${id}" aria-hidden="true"><span></span></span>
+              <span>${label}</span>
+            </label>
+          `,
+        )}
+      </fieldset>
+      <div class="actions">
+        <button type="submit" form="profile-form">
+          <${Icon} name="save" /><span>Save profile and colour</span>
+        </button>
+        ${
+          cardPath
+            ? html`<${ButtonLink}
+                href=${cardPath}
+                icon="share"
+                label="Open card image"
+                kind="secondary"
+              />`
+            : html`<span class="tiny">Write a bio to get a profile card.</span>`
+        }
+      </div>
+    </section>
+  `
+}
+
 function ProfileEditForm({
   profile,
   location,
@@ -1344,6 +1410,7 @@ function ProfileEditForm({
       title="On this page"
       links=${[
         ['#profile', 'Profile and links'],
+        ['#card', 'Share card'],
         ['#avatar', 'Avatar'],
         ['#location', 'Location'],
         ['#theme', 'Theme'],
@@ -1370,7 +1437,7 @@ function ProfileEditForm({
     >
       <section class="panel" aria-label="Profile" id="profile">
         <h2>Profile</h2>
-        <form method="post" action="/${profile.username}/edit">
+        <form method="post" action="/${profile.username}/edit" id="profile-form">
           ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
           <label
             >Bio
@@ -1405,6 +1472,7 @@ ${profile.bio}</textarea>
           <div class="actions"><${SubmitButton} icon="save" label="Save profile" /></div>
         </form>
       </section>
+      <${CardForm} profile=${profile} />
       <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
@@ -1653,10 +1721,26 @@ function ProfilePage({
 }: ProfilePageData) {
   const own = viewer?.id === profile.userId
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)
-  const actions = own
-    ? html`<${ButtonLink} href="/${profile.username}/edit" icon="edit" label="Edit profile" />`
-    : viewer &&
-      html`<${FollowForm} username=${profile.username} following=${follows.viewerFollows} />`
+  const cardPath = profileCardPath(profile)
+  const actions =
+    cardPath || own || viewer
+      ? html`
+          ${cardPath && html`<${ShareLink} href=${cardPath} />`}
+          ${
+            own
+              ? html`<${ButtonLink}
+                  href="/${profile.username}/edit"
+                  icon="edit"
+                  label="Edit profile"
+                />`
+              : viewer &&
+                html`<${FollowForm}
+                  username=${profile.username}
+                  following=${follows.viewerFollows}
+                />`
+          }
+        `
+      : undefined
 
   return html`
     <${Page}
@@ -1819,7 +1903,7 @@ function PrivacyPage({ contact }: InfoPageData) {
         </li>
         <li>
           The profile fields you fill in: bio, homepage and social links, your avatar's settings,
-          and the colour theme you picked.
+          the colour theme and share card colour you picked.
         </li>
         <li>
           Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts
@@ -2001,6 +2085,36 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
   `
 }
 
+// The share card image of a profile (none without a bio) and of a blurt (none when deleted).
+function profileCardPath(profile: UserProfile): string | undefined {
+  const text = profileCardText(profile.bio)
+  return text
+    ? ogProfileImagePath(
+        profile.username,
+        ogHash({
+          text,
+          username: profile.username,
+          avatar: profile.avatar,
+          color: profile.cardColor,
+        }),
+      )
+    : undefined
+}
+
+function blurtCardPath(blurt: Blurt, cardColor: CardColorId | null): string | undefined {
+  return blurt.deleted || blurt.username === null || blurt.text === null
+    ? undefined
+    : ogImagePath(
+        blurt.id,
+        ogHash(
+          blurtOgInput(
+            { text: blurt.text, username: blurt.username, avatar: blurt.avatar },
+            cardColor,
+          ),
+        ),
+      )
+}
+
 const metaDescriptionMax = 160
 const shareTitleMax = 70
 
@@ -2009,6 +2123,7 @@ function profilePageMeta({ profile }: ProfilePageData): PageMeta {
     profile.bio.trim() === ''
       ? `${profile.username} on blurt.trade`
       : preview(profile.bio, metaDescriptionMax)
+  const image = profileCardPath(profile)
   return {
     title: profile.username,
     description,
@@ -2017,11 +2132,13 @@ function profilePageMeta({ profile }: ProfilePageData): PageMeta {
       type: 'profile',
       title: preview(`${profile.username} on blurt.trade`, shareTitleMax),
       description,
+      image,
+      imageAlt: image && `${profile.username}: ${profileCardText(profile.bio)}`,
     },
   }
 }
 
-function blurtPageMeta({ blurt }: BlurtPageData): PageMeta {
+function blurtPageMeta({ blurt, cardColor = null }: BlurtPageData): PageMeta {
   const canonical = blurtUrl(blurt)
   const deleted = blurt.deleted || blurt.username === null
   const description = deleted ? 'This blurt was deleted.' : blurt.text!
@@ -2031,12 +2148,7 @@ function blurtPageMeta({ blurt }: BlurtPageData): PageMeta {
     ? undefined
     : ogImagePath(
         blurt.id,
-        ogHash({
-          text: blurt.text!,
-          username,
-          avatar: blurt.avatar,
-          style: blurt.text === 'BLURT' ? 'blurt' : 'post',
-        }),
+        ogHash(blurtOgInput({ text: blurt.text!, username, avatar: blurt.avatar }, cardColor)),
       )
   return {
     title,

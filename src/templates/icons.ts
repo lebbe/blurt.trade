@@ -54,6 +54,13 @@ const paths = {
     circle(10, 7, 1),
     circle(15, 7, 1),
   ],
+  share: [
+    circle(6, 12, 2.5),
+    circle(18, 6, 2.5),
+    circle(18, 18, 2.5),
+    'M8.3 10.8l7.4-3.6',
+    'M8.3 13.2l7.4 3.6',
+  ],
   save: ['M5 4h11l3 3v13H5z', 'M8 4v5h7V4', 'M8 20v-6h8v6'],
   hourglass: [
     'M6 3h12',

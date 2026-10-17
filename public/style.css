@@ -1227,6 +1227,12 @@ button.danger,
 .swatch-tarnished-teal span:nth-child(3) { background: #d48a62; }
 .swatch-tarnished-teal span:nth-child(4) { background: #8eb5ac; }
 
+.card-swatch-navy span { background: linear-gradient(135deg, #11152c, #242b4a); }
+.card-swatch-forest span { background: linear-gradient(135deg, #0f2a1f, #1f4a37); }
+.card-swatch-plum span { background: linear-gradient(135deg, #231436, #4a2a6a); }
+.card-swatch-clay span { background: linear-gradient(135deg, #2a1a12, #5a3422); }
+.card-swatch-teal span { background: linear-gradient(135deg, #0d2a2c, #1c5256); }
+
 /* --- Narrow screens ---------------------------------------------------------------------- */
 
 @media (max-width: 920px) {

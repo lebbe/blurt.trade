@@ -515,7 +515,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     For each account:
 
     - Your username, a hash of your password (Argon2id: the password itself is never stored), and when you signed up.
-    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, and the colour theme you picked.
+    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme and share card colour you picked.
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - Who you follow.
@@ -666,7 +666,14 @@ export function adminToolsMarkdown({ minted }: AdminToolsData): Markdown {
 
     ${minted ? md`Minted for ${minted.username}:` : ''}
 
-    ${minted ? join(minted.codes.map((minted) => md`- ${code(minted)}`), '\n') : ''}
+    ${
+      minted
+        ? join(
+            minted.codes.map((minted) => md`- ${code(minted)}`),
+            '\n',
+          )
+        : ''
+    }
 
     - ${link('Open reports', '/admin/reports')}
     - Delete a blurt: ${code('POST /api/admin/blurts/delete')} with ${code('blurtId')}

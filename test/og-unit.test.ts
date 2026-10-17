@@ -65,7 +65,13 @@ test('the image hash changes with every image input and is otherwise stable', ()
   assert.notEqual(ogHash({ ...original, text: 'goodbye' }), hash)
   assert.notEqual(ogHash({ ...original, username: 'writer' }), hash)
   assert.notEqual(ogHash({ ...original, avatar: { ...avatar, skin: '#000000' } }), hash)
-  assert.notEqual(ogHash(original, 2), hash)
+  assert.notEqual(ogHash(original, 99), hash)
+  assert.notEqual(ogHash({ ...original, color: 'forest' }), hash)
+  assert.equal(ogHash({ ...original, color: 'navy' }), hash)
+  assert.equal(
+    ogHash({ ...original, style: 'blurt', color: 'plum' }),
+    ogHash({ ...original, style: 'blurt' }),
+  )
   assert.notEqual(ogHash(original, undefined, OG_AVATAR_VERSION + 1), hash)
 })
 
@@ -87,7 +93,7 @@ test('concurrent cache misses generate an image only once', async () => {
 })
 
 test('debug examples cover all requested image inputs and fit without clipping', () => {
-  assert.equal(debugExamples.length, 10)
+  assert.equal(debugExamples.length, 13)
   assert.equal(debugExamples.find(({ id }) => id === 'maximum')?.input.text.length, blurtMaxLength)
   assert.equal(debugExamples.find(({ id }) => id === 'blurt')?.input.style, 'blurt')
   for (const { input } of debugExamples) {

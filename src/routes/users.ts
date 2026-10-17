@@ -60,11 +60,13 @@ export const reservedUsernames = new Set([
   'admin',
   'api',
   'createuser',
+  'debug', // /debug/og, the share card previews
   'deleted', // /deleted/:id, a deleted blurt's placeholder
   'everyone',
   'healthz',
   'login',
   'near',
+  'og', // /og/:file, the share card images
   'privacy',
   'robots.txt',
   'robots',

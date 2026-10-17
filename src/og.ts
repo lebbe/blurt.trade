@@ -1,25 +1,35 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas'
+import {
+  createCanvas,
+  GlobalFonts,
+  loadImage,
+  type Image,
+  type SKRSContext2D,
+} from '@napi-rs/canvas'
 import { h } from 'preact'
 import { renderToString } from 'preact-render-to-string'
 import { blurtMaxLength } from './limits.ts'
+import { cardColorOf, type CardColorId } from './card-colors.ts'
 import type { Avatar } from './avatar.ts'
 import { AvatarSvg } from './templates/avatar.ts'
 
-export const OG_TEMPLATE_VERSION = 1
+export const OG_TEMPLATE_VERSION = 2
 export const OG_AVATAR_VERSION = 1
 export const OG_WIDTH = 1200
 export const OG_HEIGHT = 630
 export const OG_MIN_FONT_SIZE = 30
 export const OG_MAX_FONT_SIZE = 240
+const OG_MIN_WHOLE_FONT_SIZE = 60
 
 export type OgInput = {
   text: string
   username: string
   avatar: Avatar | null
   style?: 'post' | 'blurt'
+  // The background (src/card-colors.ts); null or missing is the default. The red BLURT card ignores it.
+  color?: CardColorId | null
 }
 
 export type TextLayout = { fontSize: number; lines: string[]; width: number; height: number }
@@ -61,6 +71,20 @@ function normalizedAvatar(avatar: Avatar | null, version: number): string {
   ])
 }
 
+// The card of a blurt (the red one when it says just BLURT) or of a profile's bio.
+export function blurtOgInput(
+  blurt: { text: string; username: string; avatar: Avatar | null },
+  color: CardColorId | null,
+): OgInput {
+  return {
+    text: blurt.text,
+    username: blurt.username,
+    avatar: blurt.avatar,
+    style: blurt.text === 'BLURT' ? 'blurt' : 'post',
+    color,
+  }
+}
+
 export function ogHash(
   input: OgInput,
   templateVersion = OG_TEMPLATE_VERSION,
@@ -73,6 +97,7 @@ export function ogHash(
         input.username,
         normalizedAvatar(input.avatar, avatarVersion),
         input.style ?? 'post',
+        input.style === 'blurt' ? null : cardColorOf(input.color).id,
         templateVersion,
       ]),
     )
@@ -146,7 +171,12 @@ export function fitOgText(
   text: string,
   { width = textBox.width, height = textBox.height } = {},
 ): TextLayout {
-  const fit = (wrap: (text: string, fontSize: number, width: number) => string[]) => {
+  const words = text.split(/s+/).filter(Boolean)
+  // `whole`: only sizes at which no word has to be broken across lines.
+  const fit = (
+    wrap: (text: string, fontSize: number, width: number) => string[],
+    whole: boolean,
+  ) => {
     const fits = (fontSize: number) => {
       const lines = wrap(text, fontSize, width)
       return {
@@ -162,7 +192,10 @@ export function fitOgText(
     while (low <= high) {
       const middle = Math.floor((low + high) / 2)
       const candidate = fits(middle)
-      if (candidate.height <= height) {
+      if (
+        candidate.height <= height &&
+        (!whole || words.every((word) => measureText(word, middle) <= width))
+      ) {
         best = candidate
         low = middle + 1
       } else {
@@ -171,9 +204,14 @@ export function fitOgText(
     }
     return best
   }
-  const preserved = fit(wrapPreservedOgText)
-  const collapsed = fit((value, fontSize, textWidth) => wrapOgText(value, fontSize, textWidth))
-  return collapsed.fontSize > preserved.fontSize * 1.25 ? collapsed : preserved
+  const layout = (whole: boolean) => {
+    const preserved = fit(wrapPreservedOgText, whole)
+    const collapsed = fit(wrapOgText, whole)
+    return collapsed.fontSize > preserved.fontSize * 1.25 ? collapsed : preserved
+  }
+  // Break a word only when keeping words whole would make the text tiny.
+  const whole = layout(true)
+  return whole.fontSize >= OG_MIN_WHOLE_FONT_SIZE ? whole : layout(false)
 }
 
 function escapeHtml(value: string): string {
@@ -185,11 +223,52 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&apos;')
 }
 
+// The face area, left of the text: equal to the margin at the right of the card.
+const faceBox = { x: 50, y: 95, width: 400, height: 500 }
+
+async function rasterize(svg: string, width: number): Promise<Image> {
+  const [viewWidth, viewHeight] = /viewBox="\S+ \S+ (\S+) (\S+)"/.exec(svg)!.slice(1).map(Number)
+  const height = (width * viewHeight) / viewWidth
+  // Without width and height an SVG is rasterized at a small default size, and scaling
+  // that up is what made the avatar blurry. Rasterizing at the size it is drawn is crisp.
+  return loadImage(Buffer.from(svg.replace('<svg ', `<svg width="${width}" height="${height}" `)))
+}
+
+// Draws the avatar as large as fits in `faceBox`, with the painted part (not the SVG's
+// padding) centred in it, so the margin to the left of the head matches the one above and below.
+async function drawFace(context: SKRSContext2D, svg: string): Promise<void> {
+  const probeWidth = 600
+  const probe = await rasterize(svg, probeWidth)
+  const probeCanvas = createCanvas(probe.width, probe.height)
+  const probeContext = probeCanvas.getContext('2d')
+  probeContext.drawImage(probe, 0, 0)
+  const { data } = probeContext.getImageData(0, 0, probe.width, probe.height)
+  let [left, top, right, bottom] = [probe.width, probe.height, -1, -1]
+  for (let y = 0; y < probe.height; y++) {
+    for (let x = 0; x < probe.width; x++) {
+      if (data[(y * probe.width + x) * 4 + 3] > 8) {
+        left = Math.min(left, x)
+        right = Math.max(right, x)
+        top = Math.min(top, y)
+        bottom = Math.max(bottom, y)
+      }
+    }
+  }
+  const paintedWidth = right - left + 1
+  const paintedHeight = bottom - top + 1
+  const scale = Math.min(faceBox.width / paintedWidth, faceBox.height / paintedHeight)
+  const face = await rasterize(svg, Math.round(probeWidth * scale))
+  const factor = face.width / probe.width
+  context.drawImage(
+    face,
+    faceBox.x + (faceBox.width - paintedWidth * factor) / 2 - left * factor,
+    faceBox.y + (faceBox.height - paintedHeight * factor) / 2 - top * factor,
+  )
+}
+
 async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
   const special = input.style === 'blurt'
-  const font = fitOgText(input.text, {
-    height: special && input.text !== 'BLURT' ? 390 : textBox.height,
-  })
+  const font = fitOgText(input.text)
   const avatar = input.avatar ?? avatarFallback
   const faceSvg = renderToString(
     h(AvatarSvg, {
@@ -198,57 +277,40 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
       openMouth: true,
     }),
   )
-  const face = await loadImage(Buffer.from(faceSvg))
   const canvas = createCanvas(OG_WIDTH, OG_HEIGHT)
   const context = canvas.getContext('2d')
+  const colors = special ? { from: '#f00020', to: '#a90017' } : cardColorOf(input.color)
   const gradient = context.createLinearGradient(0, 0, OG_WIDTH, OG_HEIGHT)
-  gradient.addColorStop(0, special ? '#f00020' : '#11152c')
-  gradient.addColorStop(1, special ? '#a90017' : '#242b4a')
+  gradient.addColorStop(0, colors.from)
+  gradient.addColorStop(1, colors.to)
   context.fillStyle = gradient
   context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
-  if (special) {
-    context.fillStyle = '#d4001c'
-    context.fillRect(0, 0, OG_WIDTH, 136)
-    context.font = '900 118px "Lato Black"'
-    context.textAlign = 'center'
-    context.fillStyle = '#ffffff'
-    context.fillText('BLURT', OG_WIDTH / 2, 111, 800)
-  } else {
-    context.font = '900 25px "Lato Black"'
-    context.textAlign = 'left'
-    context.fillStyle = '#ffbd59'
-    context.fillText(`@${input.username}`, textBox.x, 70, textBox.width)
-    context.font = '900 18px "Lato Black"'
-    context.textAlign = 'right'
-    context.fillStyle = '#ffbd59'
-    context.fillText('blurt.trade', 1155, 70)
-  }
-  context.drawImage(face, -15, 95, 536, 520)
+  const accent = special ? '#ffffff' : '#ffbd59'
+  context.font = '900 25px "Lato Black"'
+  context.textAlign = 'left'
+  context.fillStyle = accent
+  context.fillText(`@${input.username}`, textBox.x, 70, textBox.width)
+  context.font = '900 18px "Lato Black"'
+  context.textAlign = 'right'
+  context.fillText('blurt.trade', 1155, 70)
+  await drawFace(context, faceSvg)
   context.font = `900 ${font.fontSize}px "Lato Black", "Noto Color Emoji"`
   context.textAlign = 'left'
   context.fillStyle = '#f9f5ef'
-  const firstBaseline = special
-    ? 146
-    : textBox.y + (textBox.height - font.height) / 2 + font.fontSize * 0.85
-  if (!(special && input.text === 'BLURT')) {
-    font.lines.forEach((line, index) => {
-      context.fillText(
-        line,
-        textBox.x,
-        firstBaseline + index * font.fontSize * lineHeightFactor,
-        textBox.width,
-      )
-    })
-  }
+  const firstBaseline = textBox.y + (textBox.height - font.height) / 2 + font.fontSize * 0.85
+  font.lines.forEach((line, index) => {
+    context.fillText(
+      line,
+      textBox.x,
+      firstBaseline + index * font.fontSize * lineHeightFactor,
+      textBox.width,
+    )
+  })
   if (debug) {
     context.strokeStyle = '#00eaff'
     context.lineWidth = 2
-    context.strokeRect(
-      textBox.x,
-      special ? 136 : textBox.y,
-      textBox.width,
-      special ? 390 : textBox.height,
-    )
+    context.strokeRect(textBox.x, textBox.y, textBox.width, textBox.height)
+    context.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height)
     context.font = '900 18px "Lato Black"'
     context.fillStyle = '#00eaff'
     context.fillText(`${font.fontSize}px`, 1155, 32)
@@ -344,6 +406,26 @@ export const debugExamples: { id: string; label: string; input: OgInput }[] = [
     },
   },
   {
+    id: 'forest',
+    label: 'Forest background',
+    input: { text: 'Green is good.', username: 'poet', avatar: avatarFallback, color: 'forest' },
+  },
+  {
+    id: 'plum',
+    label: 'Plum background',
+    input: { text: 'Plum is fun.', username: 'poet', avatar: avatarFallback, color: 'plum' },
+  },
+  {
+    id: 'profile',
+    label: 'Profile (bio)',
+    input: {
+      text: 'I write short things and sometimes long ones. Say hi!',
+      username: 'poet',
+      avatar: avatarFallback,
+      color: 'teal',
+    },
+  },
+  {
     id: 'blurt',
     label: 'BLURT post',
     input: { text: 'BLURT', username: 'poet', avatar: avatarFallback, style: 'blurt' },
@@ -367,6 +449,27 @@ export async function debugOgPng(id: string, debug = false): Promise<Buffer | un
 
 export function ogImagePath(id: number, hash: string): string {
   return `/og/${id}-${hash}.png`
+}
+
+export function ogProfileImagePath(username: string, hash: string): string {
+  return `/og/u/${username}/${hash}.png`
+}
+
+// The text of a profile's card: the bio as plain text, cut to a blurt's length, so the
+// card has the same limits as a blurt's. Empty when there is no bio.
+export function profileCardText(bio: string): string {
+  const normalized = bio
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  const chars = [...normalized]
+  return chars.length <= blurtMaxLength
+    ? chars.join('')
+    : `${chars
+        .slice(0, blurtMaxLength - 1)
+        .join('')
+        .trimEnd()}…`
 }
 
 export function debugOgPage(): string {

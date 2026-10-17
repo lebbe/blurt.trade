@@ -18,6 +18,7 @@ import {
   addReport,
   deleteBlurts,
   getBlurt,
+  getCardColor,
   hasReported,
   isAdmin,
   listRelatedBlurts,
@@ -59,14 +60,15 @@ async function getBlurtPageData(
   after: Cursor | null = null,
 ): Promise<BlurtPageData> {
   const viewer = getViewer(request)
-  const [parent, reported, { items: replies, next }, related] = await Promise.all([
+  const [parent, reported, { items: replies, next }, related, cardColor] = await Promise.all([
     blurt.parentId === null ? null : getBlurt(blurt.parentId).then((parent) => parent ?? null),
     viewer ? hasReported(viewer.id, blurt.id) : false,
     listReplies(blurt.id, after),
     listRelatedBlurts(blurt.id),
+    blurt.username ? getCardColor(blurt.username) : null,
   ])
   await markViewerFlags(viewer?.id ?? null, [blurt, parent, ...replies, ...related])
-  return { viewer, blurt, parent, reported, replies, next, related }
+  return { viewer, blurt, parent, reported, replies, next, related, cardColor }
 }
 
 // A deleted placeholder answers under any username: it has no author any more, and old

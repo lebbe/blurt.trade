@@ -23,6 +23,7 @@ import {
   unfollow,
   updateUserProfile,
 } from './state.ts'
+import { cardColors } from '../card-colors.ts'
 import { bioMaxLength, isWebUrl, linkMaxLength, text } from '../limits.ts'
 import { renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
 import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
@@ -51,6 +52,11 @@ export const profileSchema = z.object({
   github: socialValue,
   linkedin: socialValue,
   bio: text(bioMaxLength, `Bio must be at most ${bioMaxLength} characters`).default(''),
+  // Empty for the default.
+  cardColor: z
+    .enum(['', ...cardColors.map(({ id }) => id)], 'Unknown card colour')
+    .default('')
+    .transform((value) => value || null),
 })
 
 // Echo back only the form's own fields when re-rendering after a validation error.
