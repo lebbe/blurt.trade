@@ -272,7 +272,7 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
   const avatar = input.avatar ?? avatarFallback
   const faceSvg = renderToString(
     h(AvatarSvg, {
-      avatar: { ...avatar, ...(special ? { eyeType: 'angry' as const } : {}) },
+      avatar,
       size: 'large',
       openMouth: true,
     }),
