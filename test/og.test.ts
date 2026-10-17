@@ -18,7 +18,7 @@ test('crawler requests receive exact metadata and an immutable PNG, then deleted
     /property="og:type" content="article"/,
     /property="og:site_name" content="blurt\.trade"/,
     new RegExp(`property="og:url" content="https://blurt\\.trade/poet/${id}"`),
-    /property="og:title" content="poet blurted:"/,
+    /property="og:title" content="poet blurted"/,
     /property="og:description" content="say &lt;script> &amp; &quot;hello&quot;"/,
     /property="og:image" content="https:\/\/blurt\.trade\/og\/\d+-[a-f0-9]{64}\.png"/,
     /property="og:image:type" content="image\/png"/,
@@ -27,7 +27,7 @@ test('crawler requests receive exact metadata and an immutable PNG, then deleted
     /property="og:image:alt" content="poet: say &lt;script> &amp; &quot;hello&quot;"/,
     /property="article:published_time" content="\d{4}-\d\d-\d\dT[^"]+Z"/,
     /name="twitter:card" content="summary_large_image"/,
-    /name="twitter:title" content="poet blurted:"/,
+    /name="twitter:title" content="poet blurted"/,
     /name="twitter:description" content="say &lt;script> &amp; &quot;hello&quot;"/,
     /name="twitter:image" content="https:\/\/blurt\.trade\/og\/\d+-[a-f0-9]{64}\.png"/,
     /name="theme-color" content="#11152c"/,
@@ -170,4 +170,14 @@ test('blurt and profile pages, and the edit page, link to the card image', async
   assert.match(edit.body, /id="card"/)
   assert.match(edit.body, /href="\/og\/u\/poet\/[a-f0-9]{64}\.png"/)
   assert.match(edit.body, /name="cardColor" form="profile-form"/)
+})
+
+test('blurt and profile pages name their author', async () => {
+  const cookie = await createSession('poet')
+  await request('POST', '/api/blurts', 'text=authored', { cookie })
+  const id = await blurtIdByText('authored')
+  const author = /<meta name="author" content="poet"\/>/
+  assert.match((await request('GET', `/poet/${id}`)).body, author)
+  assert.match((await request('GET', '/poet/')).body, author)
+  assert.doesNotMatch((await request('GET', '/about')).body, /name="author"/)
 })

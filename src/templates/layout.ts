@@ -31,6 +31,7 @@ export type PageMeta = {
   description?: string
   canonical?: string // the page's path without cursors, e.g. /Lars/
   noindex?: boolean
+  author?: string // a username, for pages that are one person's
   // Open Graph / Twitter card tags, for pages people share: profiles, blurts, feeds.
   share?: {
     type: 'website' | 'profile' | 'article'
@@ -68,6 +69,7 @@ function Head({ meta }: { meta: PageMeta }) {
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>${title}</title>
       <meta name="description" content=${meta.description ?? siteDescription} />
+      ${meta.author && html`<meta name="author" content=${meta.author} />`}
       ${meta.noindex && html`<meta name="robots" content="noindex" />`}
       ${canonical && html`<link rel="canonical" href=${canonical} />`}
       <link rel="icon" href=${faviconPath} type="image/svg+xml" />

@@ -2128,6 +2128,7 @@ function profilePageMeta({ profile }: ProfilePageData): PageMeta {
     title: profile.username,
     description,
     canonical: `/${profile.username}/`,
+    author: profile.username,
     share: {
       type: 'profile',
       title: preview(`${profile.username} on blurt.trade`, shareTitleMax),
@@ -2154,11 +2155,12 @@ function blurtPageMeta({ blurt, cardColor = null }: BlurtPageData): PageMeta {
     title,
     description,
     canonical,
+    author: deleted ? undefined : username,
     share: deleted
       ? { type: 'article', title, description }
       : {
           type: 'article',
-          title: `${username} blurted:`,
+          title,
           description,
           image,
           imageAlt: `${username}: ${description}`,

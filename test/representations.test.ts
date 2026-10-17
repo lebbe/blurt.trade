@@ -50,7 +50,7 @@ test('profile and blurt pages include share metadata and canonical links', async
   const blurt = await request('GET', `/Lars/${id}`)
   assert.match(blurt.body, /<meta property="og:type" content="article"\/>/)
   assert.match(blurt.body, /<meta name="twitter:card" content="summary_large_image"\/>/)
-  assert.match(blurt.body, /<meta property="og:title" content="Lars blurted:"\/>/)
+  assert.match(blurt.body, /<meta property="og:title" content="Lars blurted"\/>/)
   assert.match(
     blurt.body,
     new RegExp(`<link rel="canonical" href="https://blurt\\.trade/Lars/${id}"\\/>`),
