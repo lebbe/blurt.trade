@@ -59,7 +59,7 @@ ogRouter.get('/og/:filename', async (request, response) => {
   }
   const hash = ogHash(input)
   if (hash !== match[2]) {
-    notFound(response)
+    response.redirect(301, `/og/${id}-${hash}.png`)
     return
   }
   const debug = request.query.debug === '1' && (await debugAllowed(request))

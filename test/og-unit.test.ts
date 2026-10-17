@@ -7,6 +7,7 @@ import { blurtMaxLength } from '../src/limits.ts'
 import {
   OG_AVATAR_VERSION,
   OG_HEIGHT,
+  OG_MAX_FONT_SIZE,
   OG_MIN_FONT_SIZE,
   OG_WIDTH,
   cachedOgPng,
@@ -39,14 +40,22 @@ test('the text fit grows for short text and fits maximum-length text at the floo
   const emoji = fitOgText('😀'.repeat(blurtMaxLength))
   assert.ok(short.fontSize > long.fontSize)
   assert.ok(long.fontSize >= OG_MIN_FONT_SIZE)
-  assert.ok(long.height <= 450)
+  assert.ok(long.height <= 540)
   assert.ok(emoji.fontSize >= OG_MIN_FONT_SIZE)
-  assert.ok(emoji.height <= 450)
+  assert.ok(emoji.height <= 540)
   assert.ok(
     long.lines.every((line) => measureOgText(line, long.fontSize) <= long.width),
     'no wrapped line is wider than the text box',
   )
   assert.ok(wrapOgText('line one\n\nline two', short.fontSize).join(' ').includes('line two'))
+})
+
+test('text keeps useful line breaks and collapses sparse single-character lines', () => {
+  assert.equal(OG_MAX_FONT_SIZE, 240)
+  assert.equal(fitOgText('Hey').fontSize, OG_MAX_FONT_SIZE)
+  assert.deepEqual(fitOgText('ja\nnei').lines, ['ja', 'nei'])
+  const sparse = fitOgText(Array(32).fill('x').join('\n'))
+  assert.ok(sparse.lines.length < 32)
 })
 
 test('the image hash changes with every image input and is otherwise stable', () => {

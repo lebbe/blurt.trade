@@ -13,7 +13,7 @@ export const OG_AVATAR_VERSION = 1
 export const OG_WIDTH = 1200
 export const OG_HEIGHT = 630
 export const OG_MIN_FONT_SIZE = 30
-export const OG_MAX_FONT_SIZE = 140
+export const OG_MAX_FONT_SIZE = 240
 
 export type OgInput = {
   text: string
@@ -29,7 +29,7 @@ GlobalFonts.registerFromPath(join(fontDir, 'Lato-Black.ttf'), 'Lato Black')
 GlobalFonts.registerFromPath(join(fontDir, 'NotoColorEmoji.ttf'), 'Noto Color Emoji')
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 const measureContext = createCanvas(1, 1).getContext('2d')
-const textBox = { x: 370, y: 102, width: 770, height: 450 }
+const textBox = { x: 500, y: 85, width: 650, height: 540 }
 const lineHeightFactor = 1.05
 const avatarFallback: Avatar = {
   headWidth: 'regular',
@@ -121,6 +121,23 @@ export function wrapOgText(text: string, fontSize: number, width = textBox.width
   return wrapParagraph(text.replace(/\s+/g, ' ').trim(), fontSize, width)
 }
 
+function wrapPreservedOgText(text: string, fontSize: number, width: number): string[] {
+  const lines: string[] = []
+  let blank = false
+  for (const paragraph of text.replace(/\r\n?/g, '\n').split('\n')) {
+    if (!paragraph.trim()) {
+      if (!blank) {
+        lines.push('')
+      }
+      blank = true
+      continue
+    }
+    lines.push(...wrapParagraph(paragraph, fontSize, width))
+    blank = false
+  }
+  return lines
+}
+
 export function measureOgText(text: string, fontSize: number): number {
   return measureText(text, fontSize)
 }
@@ -129,29 +146,34 @@ export function fitOgText(
   text: string,
   { width = textBox.width, height = textBox.height } = {},
 ): TextLayout {
-  const fits = (fontSize: number) => {
-    const lines = wrapOgText(text, fontSize, width)
-    return {
-      fontSize,
-      lines,
-      width,
-      height: lines.length * fontSize * lineHeightFactor,
+  const fit = (wrap: (text: string, fontSize: number, width: number) => string[]) => {
+    const fits = (fontSize: number) => {
+      const lines = wrap(text, fontSize, width)
+      return {
+        fontSize,
+        lines,
+        width,
+        height: lines.length * fontSize * lineHeightFactor,
+      }
     }
-  }
-  let low = OG_MIN_FONT_SIZE
-  let high = OG_MAX_FONT_SIZE
-  let best = fits(low)
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2)
-    const candidate = fits(middle)
-    if (candidate.height <= height) {
-      best = candidate
-      low = middle + 1
-    } else {
-      high = middle - 1
+    let low = OG_MIN_FONT_SIZE
+    let high = OG_MAX_FONT_SIZE
+    let best = fits(low)
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      const candidate = fits(middle)
+      if (candidate.height <= height) {
+        best = candidate
+        low = middle + 1
+      } else {
+        high = middle - 1
+      }
     }
+    return best
   }
-  return best
+  const preserved = fit(wrapPreservedOgText)
+  const collapsed = fit((value, fontSize, textWidth) => wrapOgText(value, fontSize, textWidth))
+  return collapsed.fontSize > preserved.fontSize * 1.25 ? collapsed : preserved
 }
 
 function escapeHtml(value: string): string {
@@ -196,12 +218,18 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
     context.textAlign = 'left'
     context.fillStyle = '#ffbd59'
     context.fillText(`@${input.username}`, textBox.x, 70, textBox.width)
+    context.font = '900 18px "Lato Black"'
+    context.textAlign = 'right'
+    context.fillStyle = '#ffbd59'
+    context.fillText('blurt.trade', 1155, 70)
   }
-  context.drawImage(face, 38, 166, 300, 300)
+  context.drawImage(face, -15, 95, 536, 520)
   context.font = `900 ${font.fontSize}px "Lato Black", "Noto Color Emoji"`
   context.textAlign = 'left'
   context.fillStyle = '#f9f5ef'
-  const firstBaseline = special ? 146 : textBox.y + font.fontSize * 0.85
+  const firstBaseline = special
+    ? 146
+    : textBox.y + (textBox.height - font.height) / 2 + font.fontSize * 0.85
   if (!(special && input.text === 'BLURT')) {
     font.lines.forEach((line, index) => {
       context.fillText(
@@ -212,13 +240,6 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
       )
     })
   }
-  context.font = '900 20px "Lato Black"'
-  context.textAlign = 'left'
-  context.fillText(`@${input.username}`, 42, 592, 600)
-  context.font = '900 18px "Lato Black"'
-  context.textAlign = 'right'
-  context.fillStyle = '#ffbd59'
-  context.fillText('blurt.trade', 1155, 592)
   if (debug) {
     context.strokeStyle = '#00eaff'
     context.lineWidth = 2
