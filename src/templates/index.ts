@@ -230,7 +230,7 @@ function Composer({
   return html`
     <section class="panel composer" id=${id}>
       <h2>${heading}</h2>
-      <form method="post" action="/api/blurts">
+      <form method="post" action="/api/blurts" enctype="multipart/form-data">
         ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
         ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
         ${
@@ -245,6 +245,11 @@ function Composer({
           placeholder=${placeholder}
         >
 ${text}</textarea>
+        <label class="picture-field tiny">
+          Picture (optional)
+          <input type="file" name="picture" accept="image/jpeg,image/png,image/webp" />
+        </label>
+        <p class="tiny">The picture is redrawn as a rough drawing. The original is not stored.</p>
         <div class="row">
           <span class="tiny">${blurtMaxLength} characters max · public</span>
           <button type="submit" class="blurt-button">
@@ -888,6 +893,17 @@ function BlurtCard({
           <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
         </div>
         <p>${blurt.text}</p>
+        ${
+          blurt.picture &&
+          html`<img
+            class="blurt-picture"
+            src="/pictures/${blurt.id}.svg"
+            width=${blurt.picture.width}
+            height=${blurt.picture.height}
+            alt="Picture"
+            loading="lazy"
+          />`
+        }
         ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`}
         <div class="blurt-actions">
           ${
@@ -1956,6 +1972,10 @@ function PrivacyPage({ contact }: InfoPageData) {
           Your blurts and replies, with when you posted them, and for each one an embedding: numbers
           describing what it's about, for related blurts and "You might like". It's computed on our
           own server; your text isn't sent anywhere.
+        </li>
+        <li>
+          If you attach one, a blurt's picture: only a rough drawing of it, made on our own server.
+          The photo you upload is never stored.
         </li>
         <li>Who you follow.</li>
         <li>

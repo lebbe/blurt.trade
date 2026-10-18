@@ -153,7 +153,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
 | `/login`                     | —             | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
 | `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`  | 303 → feed/parent/quote     | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file) | 303 → feed/parent/quote     | 201 the new `Blurt`, Location `/:username/:id` |
 | `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
 | `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
@@ -176,6 +176,20 @@ Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
 
 Login and sign-up also set the session cookies, for JSON callers too.
+
+### Pictures
+
+`POST /api/blurts` also takes `multipart/form-data` (the form does), with an optional
+`picture` file: JPEG, PNG, WebP or GIF, at most 15 MB (413 `Picture is too large`). The
+server redraws it as a rough drawing (`src/picture.ts`) and stores only that, never the
+upload. A file that is no image, or a drawing over 64 KB, is a 400 on the field `picture`.
+The text is still required. A blurt with a picture has `picture: { width, height }` (else
+`null`) in JSON, an `<img>` in HTML and `![Picture](/pictures/{id}.svg)` in Markdown; quotes
+and share cards don't show it. Deleting the blurt deletes the picture.
+
+| Path                 | Auth | Response                                                          | Errors                                  |
+| -------------------- | ---- | ----------------------------------------------------------------- | --------------------------------------- |
+| `/pictures/:id.svg`  | —    | `image/svg+xml`, `Cache-Control: public, max-age=86400`           | 404 no picture, or the blurt is deleted |
 
 ## Likes
 
@@ -592,6 +606,7 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 | `?invite=` on `/createUser`                | 40 characters                                   |
 | `?username=` on `/waitlist`                | 40 characters                                   |
 | Request body (form or JSON)                | 64 KB, else 413                                 |
+| Blurt `picture` upload                     | 15 MB, else 413 (nginx: 16 MB)                  |
 
 - The body limit fits the largest real body, a full bio of 4-byte characters
   percent-encoded (about 48 KB), with room to spare.

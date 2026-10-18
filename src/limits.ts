@@ -24,6 +24,11 @@ export const cursorMaxLength = 100
 // bio of 4-byte characters percent-encoded: about 48 KB. Bigger bodies get a 413.
 export const bodyLimit = '64kb'
 
+// An uploaded picture, before it is redrawn (src/picture.ts); nginx allows a bit more.
+export const pictureMaxUploadBytes = 15 * 1024 * 1024
+// The stored drawing; the blurt_pictures table repeats it as a CHECK constraint.
+export const pictureMaxStoredBytes = 65536
+
 // Characters as people count them, and as Postgres' char_length() does: code points, not
 // UTF-16 units (an emoji is one, not two) or bytes.
 export function charLength(text: string): number {

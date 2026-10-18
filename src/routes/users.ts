@@ -67,6 +67,7 @@ export const reservedUsernames = new Set([
   'login',
   'near',
   'og', // /og/:file, the share card images
+  'pictures', // /pictures/:file, the drawings of blurt pictures
   'privacy',
   'robots.txt',
   'robots',

@@ -35,6 +35,8 @@ export type Blurt = {
   reblurtedBy: string | null
   // The blurt a quote-reblurt quotes, one level deep (a quote in it shows only its text).
   quoted: QuotedBlurt | null
+  // Its picture, a drawing at /pictures/{id}.svg; null if none, or when it was deleted.
+  picture: { width: number; height: number } | null
 }
 
 // A deleted quoted blurt has `deleted` true and `username`, `text` and `avatar` null.
@@ -117,6 +119,7 @@ const shownFrom = `blurts r
   LEFT JOIN blurt_stats st ON st.blurt_id = b.id
   LEFT JOIN blurts q ON q.id = b.reblurt_of_id AND b.deleted_at IS NULL
   LEFT JOIN users qu ON qu.id = q.user_id AND q.deleted_at IS NULL AND qu.deleted_at IS NULL
+  LEFT JOIN blurt_pictures pic ON pic.blurt_id = b.id AND b.deleted_at IS NULL
   LEFT JOIN blurts pb ON pb.id = b.parent_id
   LEFT JOIN users pu ON pu.id = pb.user_id AND pb.deleted_at IS NULL AND pu.deleted_at IS NULL`
 
@@ -132,7 +135,7 @@ function shownWhere(placeholders: boolean): string {
 // `cursorAt` and `cursorId` are the list row's (r), where a plain reblurt sits in the list,
 // not the original's. toBlurt takes them and the quoted* columns off.
 const shownColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
-  pu.username AS "parentUsername",
+  pu.username AS "parentUsername", pic.width AS "pictureWidth", pic.height AS "pictureHeight",
   (SELECT count(*) FROM blurts c WHERE c.parent_id = b.id)::int AS "replyCount",
   (SELECT a.avatar FROM user_profiles a WHERE a.user_id = u.id) AS avatar,
   b.deleted_at IS NOT NULL AS deleted,
@@ -151,7 +154,9 @@ function selectShown(where: string, { placeholders = false } = {}): string {
   return `SELECT ${shownColumns} FROM ${shownFrom} WHERE ${shownWhere(placeholders)} AND (${where})`
 }
 
-type ShownRow = Omit<Blurt, 'quoted'> & {
+type ShownRow = Omit<Blurt, 'quoted' | 'picture'> & {
+  pictureWidth: number | null
+  pictureHeight: number | null
   quotedId: number | null
   quotedUsername: string | null
   quotedText: string | null
@@ -164,6 +169,8 @@ type ShownRow = Omit<Blurt, 'quoted'> & {
 
 function toBlurt(row: ShownRow): Blurt {
   const {
+    pictureWidth,
+    pictureHeight,
     quotedId,
     quotedUsername,
     quotedText,
@@ -185,7 +192,11 @@ function toBlurt(row: ShownRow): Blurt {
           avatar: quotedAvatar,
           deleted: quotedDeleted,
         }
-  return { ...blurt, quoted }
+  const picture =
+    pictureWidth === null || pictureHeight === null
+      ? null
+      : { width: pictureWidth, height: pictureHeight }
+  return { ...blurt, quoted, picture }
 }
 
 async function queryShown(
@@ -496,13 +507,34 @@ export async function addBlurt(
   {
     parentId = null,
     reblurtOfId = null,
-  }: { parentId?: number | null; reblurtOfId?: number | null } = {},
+    picture,
+  }: {
+    parentId?: number | null
+    reblurtOfId?: number | null
+    picture?: { width: number; height: number; shapes: Buffer }
+  } = {},
 ): Promise<number | undefined> {
+  // One statement, so the blurt and its picture are saved together or not at all.
   const { rows } = await db().query<{ id: number }>(
-    `INSERT INTO blurts (user_id, text, parent_id, reblurt_of_id, reblurt_of_user_id)
-     SELECT u.id, $2, $3, $4::bigint, (SELECT user_id FROM blurts WHERE id = $4::bigint)
-     FROM (${liveUser}) u RETURNING id`,
-    [userId, text, parentId, reblurtOfId],
+    `WITH blurt AS (
+       INSERT INTO blurts (user_id, text, parent_id, reblurt_of_id, reblurt_of_user_id)
+       SELECT u.id, $2, $3, $4::bigint, (SELECT user_id FROM blurts WHERE id = $4::bigint)
+       FROM (${liveUser}) u RETURNING id
+     ),
+     picture AS (
+       INSERT INTO blurt_pictures (blurt_id, width, height, shapes)
+       SELECT id, $5::smallint, $6::smallint, $7::bytea FROM blurt WHERE $7::bytea IS NOT NULL
+     )
+     SELECT id FROM blurt`,
+    [
+      userId,
+      text,
+      parentId,
+      reblurtOfId,
+      picture?.width ?? null,
+      picture?.height ?? null,
+      picture?.shapes ?? null,
+    ],
   )
   return rows[0]?.id
 }
@@ -612,6 +644,7 @@ export async function deleteBlurts(
   await client.query('DELETE FROM reports WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query('DELETE FROM likes WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query('DELETE FROM blurt_stats WHERE blurt_id = ANY($1::bigint[])', [content])
+  await client.query('DELETE FROM blurt_pictures WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query(
     `UPDATE blurts SET deleted_at = now(), text = NULL, embedding = NULL
      WHERE id = ANY($1::bigint[])`,
@@ -1241,4 +1274,14 @@ export function setReblurt(
         : await readStat(client, blurtId, 'reblurt_count')
     return { blurtId, reblurtCount, viewerReblurted: reblurts }
   })
+}
+
+// The stored drawing of a blurt's picture (see src/picture.ts), if it has one and is not deleted.
+export async function getPictureShapes(blurtId: number): Promise<Buffer | undefined> {
+  const { rows } = await dbRead().query<{ shapes: Buffer }>(
+    `SELECT pic.shapes FROM blurt_pictures pic JOIN blurts b ON b.id = pic.blurt_id
+     WHERE pic.blurt_id = $1 AND b.deleted_at IS NULL`,
+    [blurtId],
+  )
+  return rows[0]?.shapes
 }

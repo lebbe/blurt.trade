@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createCanvas } from '@napi-rs/canvas'
 import { migrate } from '../db/migrate.ts'
 import { closeDb, db } from '../src/db.ts'
 import { embedPendingBlurts, setEmbedder } from '../src/embeddings.ts'
@@ -29,7 +30,7 @@ export const testMigrationDatabaseUrl =
 export function request(
   method: string,
   path: string,
-  body = '',
+  body: string | Buffer = '',
   headers: Record<string, string> = {},
 ): Promise<{
   statusCode: number
@@ -310,4 +311,42 @@ export async function blurtRow(id: number): Promise<Record<string, unknown> | un
 
 export async function search(query: string, headers: Record<string, string> = json) {
   return request('GET', `/search${query}`, '', headers)
+}
+
+// A multipart/form-data body, as a browser sends a form with a file field.
+export function multipart(
+  fields: Record<string, string>,
+  file?: { name: string; filename: string; type: string; content: Buffer },
+): { body: Buffer; headers: Record<string, string> } {
+  const boundary = '----blurt-test-boundary'
+  const parts: Buffer[] = Object.entries(fields).map(([name, value]) =>
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    ),
+  )
+  if (file) {
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\nContent-Type: ${file.type}\r\n\r\n`,
+      ),
+      file.content,
+      Buffer.from('\r\n'),
+    )
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`))
+  return {
+    body: Buffer.concat(parts),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  }
+}
+
+// A PNG of a red rectangle on blue.
+export function samplePng(width = 800, height = 400): Buffer {
+  const canvas = createCanvas(width, height)
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#2f6fdb'
+  context.fillRect(0, 0, width, height)
+  context.fillStyle = '#d4001c'
+  context.fillRect(width / 4, height / 4, width / 2, height / 2)
+  return canvas.toBuffer('image/png')
 }

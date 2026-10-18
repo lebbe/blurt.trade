@@ -84,6 +84,8 @@ function blurtMarkdown(blurt: Blurt, replies: Blurt[] = [], inThread = false): M
 
     ${blurt.deleted ? raw('_This blurt was deleted._') : blurt.text}
 
+    ${blurt.picture && raw(`![Picture](/pictures/${blurt.id}.svg)`)}
+
     ${blurt.quoted && quotedMarkdown(blurt.quoted)}
 
     ${replies.map((reply) =>
@@ -527,6 +529,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked.
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
+    - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
     - Who you follow.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
     - Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
