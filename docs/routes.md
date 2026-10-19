@@ -47,8 +47,8 @@ carry `Vary: Accept`.
   anyone, `followedBlurts` holds the latest 5 from them (reblurts included), shown on
   top of the first page (empty otherwise). `hasFollowingFeed` says whether you get the
   following feed, and with it Following / Everyone tabs. `/everyone` is the everyone
-  feed for everybody; it leaves plain reblurts out, since their originals are in it
-  already (see Reblurts).
+  feed for everybody without followed-account highlights; it leaves plain reblurts out,
+  since their originals are in it already (see Reblurts).
 - `discovery` holds "discovery" sections mixed into the first page of either feed for
   logged-in viewers (empty otherwise, and on later pages): `{ kind, after, blurts }`,
   shown after the first `after` of `blurts`. One section after every 20 blurts (one at
