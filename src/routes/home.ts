@@ -25,8 +25,8 @@ import { feedMarkdown } from '../templates/pages.md.ts'
 export const homeRouter = Router()
 
 // `/` is the following feed for viewers who follow more than `followingFeedThreshold`
-// accounts. Everyone else gets the everyone feed there, with the latest blurts from the
-// accounts they do follow on top of the first page. `/everyone` is always everyone.
+// accounts. Otherwise it is the everyone feed, with followed-account highlights on its first
+// page. `/everyone` is always the everyone feed, without those highlights.
 // Logged-in viewers get discovery sections mixed into the first page of either feed.
 export async function getFeedData(
   request: Request,
@@ -39,7 +39,7 @@ export async function getFeedData(
   const feed = path === '/' && hasFollowingFeed ? 'following' : 'everyone'
   const [{ items: blurts, next }, followedBlurts] = await Promise.all([
     listFeed(before, viewer && feed === 'following' ? viewer.id : null),
-    viewer && !hasFollowingFeed && followingCount > 0 && before === null
+    path === '/' && viewer && !hasFollowingFeed && followingCount > 0 && before === null
       ? listFollowedHighlights(viewer.id)
       : [],
   ])
