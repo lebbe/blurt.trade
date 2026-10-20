@@ -43,8 +43,7 @@ export function securityHeaders(_request: Request, response: Response, next: Nex
   response.set({
     'Content-Security-Policy': contentSecurityPolicy,
     'X-Content-Type-Options': 'nosniff',
-    // Same-site navigation keeps its Referer; links out to profiles' homepages send none.
-    'Referrer-Policy': 'same-origin',
+    'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': permissionsPolicy,
     // For browsers older than frame-ancestors.
     'X-Frame-Options': 'DENY',

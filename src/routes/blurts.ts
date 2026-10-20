@@ -12,6 +12,7 @@ import {
   reportReasonMaxLength,
   text,
 } from '../limits.ts'
+import { sanitizeBlurtLinks } from '../templates/blurt-text.ts'
 import { drawPicture, PictureBusyError, PictureTimeoutError } from '../picture-pool.ts'
 import {
   fieldErrors,
@@ -57,7 +58,8 @@ const blurtSchema = z.object({
     .refine(
       (value) => (value.match(/\n/g) ?? []).length <= blurtMaxNewlines,
       `Blurt can have at most ${blurtMaxNewlines} newlines`,
-    ),
+    )
+    .transform(sanitizeBlurtLinks),
 })
 
 // The optional picture of a blurt: held in memory, never written to disk (see src/picture.ts).

@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { h } from 'preact'
+import renderToString from 'preact-render-to-string'
 import { code, escape, join, link, md, raw } from '../src/templates/markdown.ts'
+import { renderBlurtText, sanitizeBlurtLinks } from '../src/templates/blurt-text.ts'
 
 test('escapes interpolated text but not Markdown values', () => {
   const name = '*bold* [x](javascript:alert(1)) <b>'
@@ -57,4 +60,40 @@ test('builds links, code spans and dates safely', () => {
   assert.equal(code('`a').text, '`` `a ``')
   assert.equal(md`${new Date('2026-10-10T12:00:00.000Z')}`.text, '2026-10-10T12:00:00.000Z')
   assert.equal(md`${raw('*trusted*')}`.text, '*trusted*')
+})
+
+test('renders bare URLs and Markdown links in one safe pass', () => {
+  const rendered = renderToString(
+    h(
+      'p',
+      null,
+      renderBlurtText(
+        'Visit https://example.com/?utm_medium=post&keep=1. [Listen](https://open.spotify.com/artist/123)',
+      ),
+    ),
+  )
+  assert.equal(
+    rendered,
+    '<p>Visit <a href="https://example.com/?keep=1" rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer">https://example.com/?keep=1</a>. <a href="https://open.spotify.com/artist/123" rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer">Listen</a> (open.spotify.com)</p>',
+  )
+})
+
+test('does not link unsafe protocols and escapes user text', () => {
+  const rendered = renderToString(
+    h('p', null, renderBlurtText('[<img>](javascript:alert(1)) <img src=x onerror=alert(1)>')),
+  )
+  assert.equal(
+    rendered,
+    '<p>[&lt;img>](javascript:alert(1)) &lt;img src=x onerror=alert(1)></p>',
+  )
+  assert.doesNotMatch(rendered, /<a|<img/)
+})
+
+test('strips tracking parameters from both URL syntaxes', () => {
+  assert.equal(
+    sanitizeBlurtLinks(
+      'https://example.com/?UTM_source=feed&fbclid=click&keep=1 [text](https://example.com/?gclid=click&mc_eid=email&igshid=share)',
+    ),
+    'https://example.com/?keep=1 [text](https://example.com/)',
+  )
 })

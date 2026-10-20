@@ -33,7 +33,7 @@ test('refuses to start in production without a strong JWT_SECRET', () => {
 function assertSecurityHeaders(headers: http.IncomingHttpHeaders, what: string): void {
   assert.equal(headers['content-security-policy'], contentSecurityPolicy, what)
   assert.equal(headers['x-content-type-options'], 'nosniff', what)
-  assert.equal(headers['referrer-policy'], 'same-origin', what)
+  assert.equal(headers['referrer-policy'], 'no-referrer', what)
   assert.equal(headers['permissions-policy'], permissionsPolicy, what)
   assert.equal(headers['x-frame-options'], 'DENY', what)
   assert.equal(headers['x-powered-by'], undefined, what)

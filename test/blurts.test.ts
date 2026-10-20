@@ -23,6 +23,29 @@ test('creates a blurt and redirects back to the feed', async () => {
   assert.deepEqual(rows, [{ user_id: 1, text: 'Hello world' }])
 })
 
+test('normalizes links when saving and renders safe clickable links', async () => {
+  const cookie = await createSession()
+  const text =
+    'Bare https://example.com/path?utm_source=test&keep=1. [Listen](https://open.spotify.com/artist/41U54g2QPvmAkCCr2WMBe0?fbclid=ignored)'
+  await request('POST', '/api/blurts', `text=${encodeURIComponent(text)}`, { cookie })
+
+  const { rows } = await db().query('SELECT text FROM blurts')
+  assert.equal(
+    rows[0].text,
+    'Bare https://example.com/path?keep=1. [Listen](https://open.spotify.com/artist/41U54g2QPvmAkCCr2WMBe0)',
+  )
+
+  const page = await request('GET', '/')
+  assert.match(
+    page.body,
+    /<a href="https:\/\/example\.com\/path\?keep=1" rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer">https:\/\/example\.com\/path\?keep=1<\/a>\./,
+  )
+  assert.match(
+    page.body,
+    /<a href="https:\/\/open\.spotify\.com\/artist\/41U54g2QPvmAkCCr2WMBe0" rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer">Listen<\/a> \(open\.spotify\.com\)/,
+  )
+})
+
 test('renders submitted input and validation errors for an invalid blurt', async () => {
   const cookie = await createSession()
   const response = await request('POST', '/api/blurts', 'text=', { cookie })

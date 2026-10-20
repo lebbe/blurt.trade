@@ -8,7 +8,7 @@ import {
   headWidths,
   toothTypes,
 } from '../avatar.ts'
-import { blurtMaxLength, isWebUrl } from '../limits.ts'
+import { blurtMaxLength, normalizedWebUrl } from '../limits.ts'
 import { themes } from '../themes.ts'
 import { pageContext } from '../page-context.ts'
 import {
@@ -244,7 +244,8 @@ export function blurtPageMarkdown({
 }
 
 function profileValue(value: string): Markdown {
-  return md`${value === '' ? raw('_Not set_') : isWebUrl(value) ? link(value, value) : value}`
+  const url = normalizedWebUrl(value)
+  return md`${value === '' ? raw('_Not set_') : url ? link(url, url) : value}`
 }
 
 const profileFields: [Exclude<keyof UserProfile, 'avatar'>, string][] = [

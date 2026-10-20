@@ -12,6 +12,7 @@ import {
   type Avatar,
 } from '../avatar.ts'
 import { AvatarSvg } from './avatar.ts'
+import { renderBlurtText } from './blurt-text.ts'
 import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
 import { themes } from '../themes.ts'
@@ -24,6 +25,7 @@ import {
   blurtMaxLength,
   isWebUrl,
   linkMaxLength,
+  normalizedWebUrl,
   passwordMaxLength,
   passwordMinLength,
   reportReasonMaxLength,
@@ -769,7 +771,7 @@ function QuotedCard({ quoted }: { quoted: QuotedBlurt }) {
         <strong><a href="/${quoted.username}/">${quoted.username}</a></strong>
         <a href=${blurtUrl(quoted)}><${Timestamp} date=${quoted.createdAt} /></a>
       </div>
-      <p>${quoted.text}</p>
+      <p>${renderBlurtText(quoted.text ?? '')}</p>
     </blockquote>
   `
 }
@@ -892,7 +894,7 @@ function BlurtCard({
           <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
           <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
         </div>
-        <p>${blurt.text}</p>
+        <p>${renderBlurtText(blurt.text ?? '')}</p>
         ${
           blurt.picture &&
           html`<img
@@ -1150,7 +1152,10 @@ function renderSocial(value: string): unknown {
   }
 
   if (isWebUrl(value)) {
-    return html`<a href=${value}>${value}</a>`
+    const url = normalizedWebUrl(value) ?? value
+    return html`<a href=${url} rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer"
+      >${url}</a
+    >`
   }
 
   return html`<span>${value}</span>`
