@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas'
+import sharp from 'sharp'
 
 // Blurt pictures: an uploaded photo becomes a rough, cartoonish drawing, and only the
 // drawing is kept. The upload is never stored. The steps: scale down to 640 px on the
@@ -277,20 +277,34 @@ export function vectorize(image: Image): Shapes {
   }
 }
 
+// Refuses images with more pixels than this, checked from the header before decoding.
+const maxInputPixels = 300_000_000
+const inputFormats = new Set(['jpeg', 'png', 'webp', 'gif'])
+
 // Decodes an uploaded image (JPEG, PNG, WebP, GIF) and vectorizes it. Undefined when the
-// bytes are not an image.
+// bytes are not such an image, or it has too many pixels. libvips shrinks JPEG and WebP
+// while decoding, so memory stays small however large the image is.
 export async function pictureFromUpload(file: Buffer): Promise<Shapes | undefined> {
-  const image = await loadImage(file).catch(() => undefined)
-  if (!image || !image.width || !image.height) return undefined
-  const scale = size / Math.max(image.width, image.height)
-  const width = Math.max(1, Math.round(image.width * scale))
-  const height = Math.max(1, Math.round(image.height * scale))
-  const canvas = createCanvas(width, height)
-  const context = canvas.getContext('2d')
-  context.imageSmoothingEnabled = true
-  context.imageSmoothingQuality = 'high'
-  context.drawImage(image, 0, 0, width, height)
-  return vectorize(context.getImageData(0, 0, width, height))
+  try {
+    const options = { limitInputPixels: maxInputPixels, failOn: 'error' } as const
+    const { format } = await sharp(file, options).metadata()
+    if (!format || !inputFormats.has(format)) return undefined
+    const { data, info } = await sharp(file, options)
+      .rotate() // applies the EXIF orientation
+      .resize(size, size, { fit: 'inside' })
+      .flatten({ background: '#ffffff' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    if (!info.width || !info.height) return undefined
+    return vectorize({
+      width: info.width,
+      height: info.height,
+      data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length),
+    })
+  } catch {
+    return undefined
+  }
 }
 
 // The stored format, version 1. Varints are LEB128; deltas are zigzag varints.
