@@ -11,6 +11,7 @@ const smoothRadius = 4 // majority filter radius
 const minAreaShare = 0.001 // areas under 0.1 % of the picture merge into a neighbour
 const simplify = 2.8 // how far an outline may stray from the pixels, in pixels
 const lightnessWeight = 3 // lightness counts 3× hue when picking a colour
+const saturation = 1.3 // colour is strengthened 1.3× before picking, so pictures stay vivid
 
 // The only colours a picture can have. No natural skin tones, on purpose.
 export const pictureColors = [
@@ -84,7 +85,8 @@ function quantize({ width, height, data }: Image): Uint8Array {
       const [L, A, B] = lab(r * 4 + 2, g * 4 + 2, b * 4 + 2)
       let best = Infinity
       paletteLab.forEach(([pL, pA, pB], k) => {
-        const distance = lightnessWeight * (L - pL) ** 2 + (A - pA) ** 2 + (B - pB) ** 2
+        const distance =
+          lightnessWeight * (L - pL) ** 2 + (A * saturation - pA) ** 2 + (B * saturation - pB) ** 2
         if (distance < best) {
           best = distance
           cache[key] = k
