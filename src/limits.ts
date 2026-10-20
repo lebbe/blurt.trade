@@ -76,11 +76,17 @@ export function normalizedWebUrl(value: string): string | undefined {
   }
   const url = new URL(result.data)
   const searchParams = new URLSearchParams()
+  let stripped = false
   url.searchParams.forEach((value, key) => {
-    if (!/^(?:utm_.*|fbclid|gclid|mc_eid|igshid)$/i.test(key)) {
+    if (/^(?:utm_.*|fbclid|gclid|mc_eid|igshid)$/i.test(key)) {
+      stripped = true
+    } else {
       searchParams.append(key, value)
     }
   })
+  if (!stripped) {
+    return value
+  }
   url.search = searchParams.toString()
   return url.href
 }

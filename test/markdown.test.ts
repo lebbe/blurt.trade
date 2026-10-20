@@ -82,10 +82,7 @@ test('does not link unsafe protocols and escapes user text', () => {
   const rendered = renderToString(
     h('p', null, renderBlurtText('[<img>](javascript:alert(1)) <img src=x onerror=alert(1)>')),
   )
-  assert.equal(
-    rendered,
-    '<p>[&lt;img>](javascript:alert(1)) &lt;img src=x onerror=alert(1)></p>',
-  )
+  assert.equal(rendered, '<p>[&lt;img>](javascript:alert(1)) &lt;img src=x onerror=alert(1)></p>')
   assert.doesNotMatch(rendered, /<a|<img/)
 })
 
