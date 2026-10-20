@@ -46,7 +46,7 @@ test('validates and updates profile fields for the owner', async () => {
   const valid = await request(
     'POST',
     '/Lars/edit',
-    'homepage=https%3A%2F%2Fexample.com&x=%40lars&instagram=&tiktok=&youtube=&github=https%3A%2F%2Fgithub.com%2Flars&linkedin=&bio=hello+there',
+    'homepage=https%3A%2F%2Fexample.com&x=%40lars&instagram=&tiktok=&youtube=&github=https%3A%2F%2Fgithub.com%2Flars%3Futm_source%3Dprofile%26fbclid%3Dclick&linkedin=&bio=hello+there',
     {
       cookie: larsCookie,
     },
@@ -59,6 +59,11 @@ test('validates and updates profile fields for the owner', async () => {
   assert.equal(profile?.x, '@lars')
   assert.equal(profile?.github, 'https://github.com/lars')
   assert.equal(profile?.bio, 'hello there')
+  const page = await request('GET', '/Lars/')
+  assert.match(
+    page.body,
+    /<a href="https:\/\/github\.com\/lars" rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer">/,
+  )
 })
 
 test('forbids profile edits from non-owners', async () => {
