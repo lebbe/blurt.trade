@@ -630,7 +630,7 @@ responses.
 | `Content-Security-Policy`               | `default-src 'none'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
-| `Referrer-Policy`                       | `same-origin`                                            |
+| `Referrer-Policy`                       | `no-referrer`                                            |
 | `Permissions-Policy`                    | camera, microphone, geolocation, payment, ... all `()`   |
 | `X-Frame-Options`                       | `DENY` (for browsers without `frame-ancestors`)          |
 | `Cross-Origin-Opener-Policy` / `-Resource-Policy` | `same-origin`                                  |
