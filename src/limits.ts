@@ -5,6 +5,7 @@ import { z } from 'zod'
 // text limits as CHECK constraints. See "Input limits" in docs/routes.md.
 
 export const blurtMaxLength = 280
+export const blurtMaxNewlines = 5
 export const bioMaxLength = 4000
 export const reportReasonMaxLength = 500
 // Homepage and social fields.
