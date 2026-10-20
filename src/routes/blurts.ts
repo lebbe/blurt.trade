@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
-import { blurtMaxLength, reportReasonMaxLength, text } from '../limits.ts'
+import { blurtMaxLength, blurtMaxNewlines, reportReasonMaxLength, text } from '../limits.ts'
 import {
   fieldErrors,
   represent,
@@ -42,10 +42,12 @@ import { blurtPageMarkdown } from '../templates/pages.md.ts'
 export const blurtsRouter = Router()
 
 const blurtSchema = z.object({
-  text: text(blurtMaxLength, `Blurt must be at most ${blurtMaxLength} characters`).min(
-    1,
-    'Blurt is required',
-  ),
+  text: text(blurtMaxLength, `Blurt must be at most ${blurtMaxLength} characters`)
+    .min(1, 'Blurt is required')
+    .refine(
+      (value) => (value.match(/\n/g) ?? []).length <= blurtMaxNewlines,
+      `Blurt can have at most ${blurtMaxNewlines} newlines`,
+    ),
 })
 
 // From a URL segment, a form field (string) or a JSON body (number).
