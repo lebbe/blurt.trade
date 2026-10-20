@@ -6,6 +6,7 @@ import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
 import {
   blurtMaxLength,
+  blurtMaxNewlines,
   pictureMaxStoredBytes,
   pictureMaxUploadBytes,
   reportReasonMaxLength,
@@ -51,10 +52,12 @@ import { blurtPageMarkdown } from '../templates/pages.md.ts'
 export const blurtsRouter = Router()
 
 const blurtSchema = z.object({
-  text: text(blurtMaxLength, `Blurt must be at most ${blurtMaxLength} characters`).min(
-    1,
-    'Blurt is required',
-  ),
+  text: text(blurtMaxLength, `Blurt must be at most ${blurtMaxLength} characters`)
+    .min(1, 'Blurt is required')
+    .refine(
+      (value) => (value.match(/\n/g) ?? []).length <= blurtMaxNewlines,
+      `Blurt can have at most ${blurtMaxNewlines} newlines`,
+    ),
 })
 
 // The optional picture of a blurt: held in memory, never written to disk (see src/picture.ts).

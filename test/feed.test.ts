@@ -150,6 +150,20 @@ test('with 10 or fewer follows, the latest 5 from followed accounts top the ever
     assert.equal(blurt.parentId, null)
   }
 
+  const everyone = JSON.parse((await request('GET', '/everyone', '', { ...json, cookie })).body)
+  assert.equal(everyone.feed, 'everyone')
+  assert.deepEqual(everyone.followedBlurts, [])
+  assert.equal(everyone.blurts.length, 14)
+  assert.equal(everyone.blurts[0].text, 'newest of all, not followed')
+
+  const everyoneHtml = await request('GET', '/everyone', '', { cookie })
+  assert.doesNotMatch(everyoneHtml.body, /From people you follow/)
+  const everyoneMarkdown = await request('GET', '/everyone', '', {
+    accept: 'text/markdown',
+    cookie,
+  })
+  assert.doesNotMatch(everyoneMarkdown.body, /From people you follow/)
+
   const html = await request('GET', '/', '', { cookie })
   assert.match(html.body, /<h2>From people you follow<\/h2>[^]*newest from a followee/)
   assert.doesNotMatch(html.body, /class="tabs"/)
