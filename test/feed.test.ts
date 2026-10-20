@@ -55,6 +55,7 @@ test('serves the feed as JSON when requested', async () => {
         viewerReblurted: false,
         reblurtedBy: null,
         quoted: null,
+        picture: null,
         replies: [],
       },
     ],

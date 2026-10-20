@@ -1274,3 +1274,8 @@ button.danger,
     grid-template-columns: 1fr;
   }
 }
+
+.blurt-picture {
+  max-width: 100%;
+  height: auto;
+}

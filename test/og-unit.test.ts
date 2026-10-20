@@ -145,6 +145,7 @@ test('blurt metadata preserves and escapes full text and hides deleted content',
     viewerReblurted: false,
     reblurtedBy: null,
     quoted: null,
+    picture: null,
   }
   const render = (value: Blurt) =>
     renderBlurtPage({

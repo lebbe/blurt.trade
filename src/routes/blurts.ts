@@ -1,11 +1,21 @@
 import { Router, type Request, type RequestHandler } from 'express'
+import multer from 'multer'
 import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
-import { blurtMaxLength, blurtMaxNewlines, reportReasonMaxLength, text } from '../limits.ts'
+import {
+  blurtMaxLength,
+  blurtMaxNewlines,
+  pictureMaxStoredBytes,
+  pictureMaxUploadBytes,
+  reportReasonMaxLength,
+  text,
+} from '../limits.ts'
+import { drawPicture, PictureBusyError, PictureTimeoutError } from '../picture-pool.ts'
 import {
   fieldErrors,
+  type FieldError,
   represent,
   sendError,
   sendFormErrors,
@@ -49,6 +59,26 @@ const blurtSchema = z.object({
       `Blurt can have at most ${blurtMaxNewlines} newlines`,
     ),
 })
+
+// The optional picture of a blurt: held in memory, never written to disk (see src/picture.ts).
+const pictureUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: pictureMaxUploadBytes, files: 1 },
+}).single('picture')
+
+const uploadPicture: RequestHandler = (request, response, next) => {
+  pictureUpload(request, response, (error: unknown) => {
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        sendError(request, response, 413, 'Picture is too large')
+      } else {
+        sendError(request, response, 400, error.message, 'picture')
+      }
+    } else {
+      next(error)
+    }
+  })
+}
 
 // From a URL segment, a form field (string) or a JSON body (number).
 export function parseBlurtId(value: unknown): number | undefined {
@@ -117,6 +147,7 @@ blurtsRouter.post(
   '/api/blurts',
   requireAuth,
   rateLimit('blurt', accountKey),
+  uploadPicture,
   async (request, response) => {
     const parent = await referencedBlurt(request.body?.parentId)
     const quoted = await referencedBlurt(request.body?.reblurtOfId)
@@ -130,9 +161,42 @@ blurtsRouter.post(
     }
 
     const result = blurtSchema.safeParse(request.body ?? {})
+    const errors: FieldError[] = result.success ? [] : fieldErrors(result.error)
 
-    if (!result.success) {
-      await sendFormErrors(request, response, fieldErrors(result.error), async (message) => {
+    let picture: { width: number; height: number; shapes: Buffer } | undefined
+    if (result.success && request.file) {
+      let drawn
+      try {
+        drawn = await drawPicture(request.file.buffer)
+      } catch (error) {
+        if (error instanceof PictureBusyError) {
+          response.set('Retry-After', '5')
+          sendError(
+            request,
+            response,
+            503,
+            'Too many pictures are being processed. Try again soon.',
+          )
+          return
+        }
+        if (!(error instanceof PictureTimeoutError)) {
+          throw error
+        }
+      }
+      if (!drawn) {
+        errors.push({
+          field: 'picture',
+          message: 'Could not read the picture. Use JPEG, PNG or WebP.',
+        })
+      } else if (drawn.shapes.length > pictureMaxStoredBytes) {
+        errors.push({ field: 'picture', message: 'The picture is too detailed' })
+      } else {
+        picture = drawn
+      }
+    }
+
+    if (!result.success || errors.length > 0) {
+      await sendFormErrors(request, response, errors, async (message) => {
         const composer = {
           text: typeof request.body?.text === 'string' ? request.body.text : '',
           validationError: message,
@@ -149,6 +213,7 @@ blurtsRouter.post(
     const id = await addBlurt(response.locals.authenticatedUser.id, result.data.text, {
       parentId: parent?.id,
       reblurtOfId: quoted?.id,
+      picture,
     })
     const blurt = id === undefined ? undefined : await getBlurt(id)
     if (!blurt) {

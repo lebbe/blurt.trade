@@ -114,6 +114,7 @@ test('the privacy page is in step with the database columns', async () => {
      GROUP BY table_name ORDER BY table_name`,
   )
   assert.deepEqual(Object.fromEntries(rows.map((row) => [row.table_name, row.columns])), {
+    blurt_pictures: 'blurt_id height shapes width',
     blurt_stats: 'blurt_id like_count reblurt_count',
     blurts:
       'created_at deleted_at embedding id parent_id reblurt_of_id reblurt_of_user_id text user_id',

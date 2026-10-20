@@ -26,10 +26,12 @@ import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
 import { healthRouter } from './routes/health.ts'
+import { closePicturePool } from './picture-pool.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
+import { picturesRouter } from './routes/pictures.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
 import { themeRouter } from './routes/theme.ts'
@@ -83,6 +85,7 @@ app.use((request, _response, next) => {
 })
 app.use(homeRouter)
 app.use(infoRouter)
+app.use(picturesRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(avatarRouter)
@@ -169,7 +172,7 @@ async function start(): Promise<void> {
       process.exit(1)
     }, shutdownTimeoutMs).unref()
     server.close(() => {
-      closeDb().then(
+      Promise.all([closePicturePool(), closeDb()]).then(
         () => {
           log('info', 'shut down cleanly')
           process.exit(0)
