@@ -43,7 +43,7 @@ export function securityHeaders(_request: Request, response: Response, next: Nex
   response.set({
     'Content-Security-Policy': contentSecurityPolicy,
     'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'no-referrer',
+    'Referrer-Policy': 'same-origin',
     'Permissions-Policy': permissionsPolicy,
     // For browsers older than frame-ancestors.
     'X-Frame-Options': 'DENY',
