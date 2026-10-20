@@ -24,7 +24,7 @@ import {
   updateUserProfile,
 } from './state.ts'
 import { cardColors } from '../card-colors.ts'
-import { bioMaxLength, isWebUrl, linkMaxLength, text } from '../limits.ts'
+import { bioMaxLength, isWebUrl, linkMaxLength, normalizedWebUrl, text } from '../limits.ts'
 import { renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
 import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
 
@@ -35,6 +35,7 @@ const socialValue = text(linkMaxLength, `Social fields must be at most ${linkMax
     (value) => value === '' || isWebUrl(value) || /^@?[A-Za-z0-9._-]{1,100}$/.test(value),
     'Social fields must be a username/handle or a full http(s) URL',
   )
+  .transform((value) => normalizedWebUrl(value) ?? value)
   .default('')
 
 // Missing fields count as empty, so a partial POST gets a readable error, not a type error.
@@ -44,6 +45,7 @@ export const profileSchema = z.object({
       (value) => value === '' || isWebUrl(value),
       'Homepage must be a full URL starting with https:// or http://',
     )
+    .transform((value) => normalizedWebUrl(value) ?? value)
     .default(''),
   x: socialValue,
   instagram: socialValue,

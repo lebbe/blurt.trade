@@ -50,12 +50,37 @@ export function text(max: number, message: string) {
     .refine((value) => charLength(value) <= max, message)
 }
 
-// http(s) only, so a link on a profile can never be javascript: or data:. The scheme and
-// // must come first: URL.parse() would also take ' http:x', fixing it up silently.
+const webUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    if (!/^https?:\/\//i.test(value)) {
+      return false
+    }
+    try {
+      return ['http:', 'https:'].includes(new URL(value).protocol)
+    } catch {
+      return false
+    }
+  })
+
+// http(s) only, so a user-submitted link can never be javascript: or data:.
 export function isWebUrl(value: string): boolean {
-  if (!/^https?:\/\//i.test(value)) {
-    return false
+  return webUrlSchema.safeParse(value).success
+}
+
+export function normalizedWebUrl(value: string): string | undefined {
+  const result = webUrlSchema.safeParse(value)
+  if (!result.success) {
+    return undefined
   }
-  const url = URL.parse(value)
-  return url?.protocol === 'http:' || url?.protocol === 'https:'
+  const url = new URL(result.data)
+  const searchParams = new URLSearchParams()
+  url.searchParams.forEach((value, key) => {
+    if (!/^(?:utm_.*|fbclid|gclid|mc_eid|igshid)$/i.test(key)) {
+      searchParams.append(key, value)
+    }
+  })
+  url.search = searchParams.toString()
+  return url.href
 }
