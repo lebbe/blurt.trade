@@ -69,16 +69,23 @@ export function isWebUrl(value: string): boolean {
   return webUrlSchema.safeParse(value).success
 }
 
+const trackingParamPattern =
+  /^(?:utm_.*|gad_.*|fbclid|gclid|gbraid|wbraid|dclid|_gl|msclkid|ttclid|twclid|li_fat_id|yclid|mc_eid|mc_cid|_hsenc|_hsmi|mkt_tok|igshid|igsh)$/i
+
+// `si` is a share-tracking id on these hosts, but an ordinary parameter elsewhere.
+const shareIdHostPattern = /(?:^|\.)(?:open\.spotify\.com|youtube\.com|youtu\.be)$/i
+
 export function normalizedWebUrl(value: string): string | undefined {
   const result = webUrlSchema.safeParse(value)
   if (!result.success) {
     return undefined
   }
   const url = new URL(result.data)
+  const stripShareId = shareIdHostPattern.test(url.hostname)
   const searchParams = new URLSearchParams()
   let stripped = false
   url.searchParams.forEach((value, key) => {
-    if (/^(?:utm_.*|fbclid|gclid|mc_eid|igshid)$/i.test(key)) {
+    if (trackingParamPattern.test(key) || (stripShareId && key.toLowerCase() === 'si')) {
       stripped = true
     } else {
       searchParams.append(key, value)

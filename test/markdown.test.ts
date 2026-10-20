@@ -94,3 +94,41 @@ test('strips tracking parameters from both URL syntaxes', () => {
     'https://example.com/?keep=1 [text](https://example.com/)',
   )
 })
+
+test('strips click ids, campaign ids and gad_* parameters', () => {
+  const params = [
+    'gad_source=1',
+    'gad_campaignid=2',
+    'gbraid=a',
+    'wbraid=b',
+    'dclid=c',
+    '_gl=d',
+    'msclkid=e',
+    'ttclid=f',
+    'twclid=g',
+    'li_fat_id=h',
+    'yclid=i',
+    'mc_cid=j',
+    '_hsenc=k',
+    '_hsmi=l',
+    'mkt_tok=m',
+    'igsh=n',
+  ]
+  assert.equal(
+    sanitizeBlurtLinks(`https://example.com/?${params.join('&')}&keep=1`),
+    'https://example.com/?keep=1',
+  )
+})
+
+test('strips si only on Spotify and YouTube hosts', () => {
+  assert.equal(
+    sanitizeBlurtLinks(
+      'https://open.spotify.com/track/1?si=x&keep=1 https://www.youtube.com/watch?v=abc&si=x https://youtu.be/abc?si=x https://music.youtube.com/watch?v=abc&si=x',
+    ),
+    'https://open.spotify.com/track/1?keep=1 https://www.youtube.com/watch?v=abc https://youtu.be/abc https://music.youtube.com/watch?v=abc',
+  )
+  assert.equal(
+    sanitizeBlurtLinks('https://example.com/?si=x https://notyoutube.com/?si=x'),
+    'https://example.com/?si=x https://notyoutube.com/?si=x',
+  )
+})
