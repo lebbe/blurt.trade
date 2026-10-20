@@ -115,3 +115,21 @@ test('an upload over the limit is a 413', async () => {
   assert.equal(JSON.parse(response.body).error, 'Picture is too large')
   assert.equal(await countBlurts(), 0)
 })
+
+test('pictures are drawn in the worker pool, and a busy pool answers 503', async () => {
+  const cookie = await createSession()
+  const { drawPicture } = await import('../src/picture-pool.ts')
+  const png = samplePng(300, 300)
+  const drawn = await drawPicture(Buffer.from(png))
+  assert.deepEqual([drawn?.width, drawn?.height], [640, 640])
+  assert.equal(await drawPicture(Buffer.from('not an image')), undefined)
+
+  const many = Array.from({ length: 30 }, () => drawPicture(Buffer.from(png)))
+  const results = await Promise.allSettled(many)
+  assert.ok(results.some((r) => r.status === 'rejected'))
+  assert.ok(results.some((r) => r.status === 'fulfilled'))
+
+  const { body, headers } = withPicture('After the rush', png)
+  const response = await request('POST', '/api/blurts', body, { ...headers, cookie })
+  assert.equal(response.statusCode, 303)
+})

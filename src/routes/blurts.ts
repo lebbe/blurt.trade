@@ -12,7 +12,7 @@ import {
   reportReasonMaxLength,
   text,
 } from '../limits.ts'
-import { encodeShapes, pictureFromUpload } from '../picture.ts'
+import { drawPicture, PictureBusyError, PictureTimeoutError } from '../picture-pool.ts'
 import {
   fieldErrors,
   type FieldError,
@@ -165,17 +165,33 @@ blurtsRouter.post(
 
     let picture: { width: number; height: number; shapes: Buffer } | undefined
     if (result.success && request.file) {
-      const shapes = await pictureFromUpload(request.file.buffer)
-      const encoded = shapes && encodeShapes(shapes)
-      if (!shapes || !encoded) {
+      let drawn
+      try {
+        drawn = await drawPicture(request.file.buffer)
+      } catch (error) {
+        if (error instanceof PictureBusyError) {
+          response.set('Retry-After', '5')
+          sendError(
+            request,
+            response,
+            503,
+            'Too many pictures are being processed. Try again soon.',
+          )
+          return
+        }
+        if (!(error instanceof PictureTimeoutError)) {
+          throw error
+        }
+      }
+      if (!drawn) {
         errors.push({
           field: 'picture',
           message: 'Could not read the picture. Use JPEG, PNG or WebP.',
         })
-      } else if (encoded.length > pictureMaxStoredBytes) {
+      } else if (drawn.shapes.length > pictureMaxStoredBytes) {
         errors.push({ field: 'picture', message: 'The picture is too detailed' })
       } else {
-        picture = { width: shapes.width, height: shapes.height, shapes: encoded }
+        picture = drawn
       }
     }
 

@@ -7,6 +7,7 @@ import { createCanvas } from '@napi-rs/canvas'
 import { migrate } from '../db/migrate.ts'
 import { closeDb, db } from '../src/db.ts'
 import { embedPendingBlurts, setEmbedder } from '../src/embeddings.ts'
+import { closePicturePool } from '../src/picture-pool.ts'
 import { app } from '../src/server.ts'
 import {
   resetRateLimits,
@@ -140,6 +141,7 @@ export async function signupCount(): Promise<number> {
 }
 
 test.after(async () => {
+  await closePicturePool()
   await embedPendingBlurts()
   await closeDb()
 })

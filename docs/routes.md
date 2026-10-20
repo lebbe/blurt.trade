@@ -183,6 +183,10 @@ Login and sign-up also set the session cookies, for JSON callers too.
 `picture` file: JPEG, PNG, WebP or GIF, at most 15 MB (413 `Picture is too large`). The
 server redraws it as a rough drawing (`src/picture.ts`) and stores only that, never the
 upload. A file that is no image, or a drawing over 64 KB, is a 400 on the field `picture`.
+Pictures are drawn in two worker threads, with at most 8 uploads waiting; when all are busy
+the answer is a 503 (`Retry-After: 5`) and nothing is saved. A picture that takes over 4 s
+is refused like an unreadable one (400 on `picture`). The blurt is saved only once its
+picture is.
 The text is still required. A blurt with a picture has `picture: { width, height }` (else
 `null`) in JSON, an `<img>` in HTML and `![Picture](/pictures/{id}.svg)` in Markdown; quotes
 and share cards don't show it. Deleting the blurt deletes the picture.

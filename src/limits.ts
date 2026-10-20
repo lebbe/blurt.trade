@@ -27,6 +27,12 @@ export const bodyLimit = '64kb'
 
 // An uploaded picture, before it is redrawn (src/picture.ts); nginx allows a bit more.
 export const pictureMaxUploadBytes = 15 * 1024 * 1024
+// Pictures are drawn in worker threads (src/picture-pool.ts): few, as the server has few
+// cores and sharp uses the libuv threadpool too. Uploads wait in a queue, in memory; when it
+// is full a blurt gets a 503. A picture that takes longer than the timeout is refused.
+export const pictureWorkers = 2
+export const pictureQueueLimit = 8
+export const pictureTaskTimeoutMs = 4000
 // The stored drawing; the blurt_pictures table repeats it as a CHECK constraint.
 export const pictureMaxStoredBytes = 65536
 

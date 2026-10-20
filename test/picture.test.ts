@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { crc32 } from 'node:zlib'
 import sharp from 'sharp'
 import assert from 'node:assert/strict'
 import { samplePng } from './helpers.ts'
@@ -34,13 +35,32 @@ test('pictureFromUpload gives undefined for something that is no image', async (
 test('pictureFromUpload refuses SVG and images with too many pixels', async () => {
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')
   assert.equal(await pictureFromUpload(svg), undefined)
-  // A one-colour PNG of 20 000 × 20 000 (400 MP) is a few hundred KB.
-  const huge = await sharp({
-    create: { width: 20000, height: 20000, channels: 3, background: '#ffffff' },
-    limitInputPixels: false,
-  })
-    .png({ compressionLevel: 9 })
-    .toBuffer()
-  assert.ok(huge.length < 15 * 1024 * 1024)
+  // Only a header claiming 20 000 × 20 000 (400 MP): the pixel cap is checked before decoding.
+  const huge = headerOnlyPng(20000, 20000)
+  const { width, height } = await sharp(huge, { limitInputPixels: false }).metadata()
+  assert.deepEqual([width, height], [20000, 20000])
   assert.equal(await pictureFromUpload(huge), undefined)
 })
+
+// A PNG with a valid IHDR and IEND and an empty IDAT, so no image data. (libspng reports
+// a PNG without any IDAT as corrupt, even for its size.)
+function headerOnlyPng(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data])
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([length, body, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr.set([8, 2, 0, 0, 0], 8) // 8 bits, RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', Buffer.alloc(0)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
