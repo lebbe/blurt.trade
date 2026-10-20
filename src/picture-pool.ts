@@ -1,3 +1,6 @@
+// sharp must be loaded by the main thread before any worker that uses it starts, so its
+// shared libraries stay loaded while workers run (see sharp's docs on worker threads).
+import 'sharp'
 import { Worker } from 'node:worker_threads'
 import { pictureQueueLimit, pictureTaskTimeoutMs, pictureWorkers } from './limits.ts'
 
