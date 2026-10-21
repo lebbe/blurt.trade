@@ -598,7 +598,7 @@ export function loginMarkdown({ viewer }: FormPageData): Markdown {
   return formMarkdown(
     'Log in',
     '/login',
-    md`${code('username')} and ${code('password')}`,
+    md`${code('username')}, ${code('password')} and, optionally, ${code('remember')} (${code('1')} to stay logged in; otherwise the login ends when the browser closes, or after a day unused)`,
     viewer,
     md`${forgotPassword} ${link('Privacy', '/privacy')}.`,
   )
@@ -636,7 +636,7 @@ export function createUserMarkdown({ viewer, signup, inviteCode }: SignupPageDat
   return formMarkdown(
     'Create a profile',
     '/createUser',
-    md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${invite}`,
+    md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${invite} and ${code('remember')} (${code('1')} to stay logged in; otherwise the login ends when the browser closes, or after a day unused)`,
     viewer,
     noPasswordReset,
   )

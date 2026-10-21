@@ -149,9 +149,9 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 
 | Path                         | Auth          | Body                                 | Form success                | JSON success                                   |
 | ---------------------------- | ------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
-| `/createUser`                | —             | `username`, `password`, `inviteCode` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/createUser`                | —             | `username`, `password`, `inviteCode`, `remember` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
 | `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
-| `/login`                     | —             | `username`, `password`               | 303 → `/`                   | 200 `{ id, username }`                         |
+| `/login`                     | —             | `username`, `password`, `remember`   | 303 → `/`                   | 200 `{ id, username }`                         |
 | `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
 | `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file) | 303 → feed/parent/quote     | 201 the new `Blurt`, Location `/:username/:id` |
 | `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
@@ -511,11 +511,17 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 | Cookie          | Lifetime | Checked by                                                 |
 | --------------- | -------- | ---------------------------------------------------------- |
 | `access_token`  | 5 min    | its signature only, no database; carries the username and theme |
-| `refresh_token` | 400 days | one row in `sessions`, then rotated to the next generation |
+| `refresh_token` | 400 days, or until the browser closes | one row in `sessions`, then rotated to the next generation |
 
 - When the access token is missing or expired, any request (page load, form POST,
   `fetch()`) with a valid refresh token gets a new pair, transparently. Each refresh
   restarts the 400 days, so a session lasts as long as it's used.
+- "Keep me logged in" (`remember=1`, or `true` in JSON; off by default, on sign-up and
+  login alike) chooses between that and a session-only login: the refresh token is set
+  without `Max-Age`, so the browser drops it on close, and the server ends the session
+  after 24 hours unused (`temporarySessionIdleSeconds`). The choice is stored on the
+  session (`sessions.persistent`) and kept through refreshes. Sessions from before the
+  option existed are persistent.
 - A refresh token used again more than 20 seconds after it was rotated means a stolen
   copy: the session is revoked for everyone holding it. Within those 20 seconds it is a
   second tab racing the first, and gets a new access token only.

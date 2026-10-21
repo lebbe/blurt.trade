@@ -131,12 +131,20 @@ const inviteCode = z
 
 // The form sends a second password plus a "skip" checkbox; API clients may leave both out.
 // The repeat must match unless it's skipped.
+// "Keep me logged in": a checkbox sends `remember=1`, JSON callers may send true. Anything
+// else, including "false" and "0", is a session-only login.
+const remember = z
+  .unknown()
+  .optional()
+  .transform((value) => value === true || value === '1' || value === 'true' || value === 'on')
+
 const createUserSchema = z
   .object({
     username: newUsername,
     password,
     passwordConfirm: z.string().optional(),
     skipConfirm: z.unknown().optional(),
+    remember,
     inviteCode,
   })
   .superRefine((data, context) => {
@@ -160,6 +168,7 @@ const loginSchema = z.object({
     .min(1, 'Username is required')
     .max(usernameMaxLength, 'Username is too long'),
   password,
+  remember,
 })
 
 function submittedUsername(body: unknown): string {
@@ -219,7 +228,7 @@ usersRouter.post('/createUser', rateLimit('createUserIp'), async (request, respo
   }
 
   // Hashed before claiming a slot, so the slot's row lock is held as briefly as possible.
-  const { username, password, inviteCode } = result.data
+  const { username, password, inviteCode, remember: keep } = result.data
   const user = await addUser(username, await hash(password), inviteCode)
   if (user === 'taken') {
     const errors = [{ field: 'username', message: 'Username is already taken' }]
@@ -237,7 +246,7 @@ usersRouter.post('/createUser', rateLimit('createUserIp'), async (request, respo
     return
   }
 
-  await startSession(request, response, user)
+  await startSession(request, response, user, keep)
   sendFormSuccess(request, response, {
     redirect: '/',
     data: { id: user.id, username: user.username },
@@ -258,7 +267,7 @@ usersRouter.post('/login', rateLimit('loginIp'), async (request, response) => {
     return
   }
 
-  const { username, password } = result.data
+  const { username, password, remember: keep } = result.data
   const attempt = take('loginUsername', username.toLowerCase())
   if (!attempt.allowed) {
     sendTooManyRequests(request, response, attempt.retryAfterSeconds)
@@ -271,7 +280,7 @@ usersRouter.post('/login', rateLimit('loginIp'), async (request, response) => {
   }
   attempt.refund()
 
-  await startSession(request, response, user)
+  await startSession(request, response, user, keep)
   sendFormSuccess(request, response, {
     redirect: '/',
     data: { id: user.id, username: user.username },
