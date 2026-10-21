@@ -58,8 +58,9 @@ const sessionIdleSeconds = 400 * 24 * 60 * 60
 const temporarySessionIdleSeconds = 24 * 60 * 60
 // SQL for the idle limit of a `sessions` row aliased `s`, given the parameter numbers of
 // the two limits in seconds.
+// The casts matter: in a CASE the parameters would otherwise be typed text.
 const idleLimit = (persistent: number, temporary: number) =>
-  `(CASE WHEN s.persistent THEN $${persistent} ELSE $${temporary} END) * interval '1 second'`
+  `(CASE WHEN s.persistent THEN $${persistent}::int ELSE $${temporary}::int END) * interval '1 second'`
 // How long after a rotation the previous refresh token still counts as a racing tab.
 const raceWindowSeconds = 20
 
