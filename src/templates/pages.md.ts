@@ -500,6 +500,10 @@ export function termsMarkdown({ contact }: InfoPageData): Markdown {
 
     The owner can remove any blurt or profile, and close any account, at any time and without notice, for example when it breaks these terms.
 
+    ## Age
+
+    You must be at least 13 years old to use blurt.trade.
+
     ## Your password
 
     ${noPasswordReset}
@@ -521,6 +525,12 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     ${home}
 
     blurt.trade collects as little as it can. No email address, no real name, no phone number. No analytics, no ads, no tracking, and nothing loaded from other sites.
+
+    ## Who is responsible
+
+    Lars-Erik Bruce is responsible for the site and its data (the controller under the GDPR). To reach him: ${privateContact(contact)}.
+
+    blurt.trade runs on a server owned and operated by a private individual in Norway, who hosts it on Lars-Erik's behalf and has access to it only to keep it running.
 
     ## What is stored
 
@@ -552,11 +562,19 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Cookies
 
-    Three, all needed for the site to work, none for tracking, so there's no cookie banner. All are HttpOnly and only sent to blurt.trade.
+    Three, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none. All three are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade. The site uses no JavaScript, so nothing is stored in your browser in any other way.
 
-    - ${code('access_token')}: shows you're logged in, and which colour theme and time zone you picked. Lasts 5 minutes.
-    - ${code('refresh_token')}: keeps you logged in. Renewed as you use the site; expires after 400 days without a visit, or when you log out.
-    - ${code('recent_write')}: set for a few seconds after you post or change something, so you see your own change straight away.
+    | Cookie | What it's for | Lasts |
+    | --- | --- | --- |
+    | ${code('__Host-access_token')} | Shows you're logged in, with your colour theme, time zone and language | 5 minutes |
+    | ${code('__Host-refresh_token')} | Keeps you logged in and renews the one above | Until you close the browser, or, if you ticked *Keep me logged in*, 400 days without a visit. Gone when you log out. |
+    | ${code('recent_write')} | After you post or change something, makes sure you see your own change straight away | 10 seconds |
+
+    ## Why we may use your data
+
+    - Your account, posts, follows, likes and the rest, to provide the service you signed up for (contract, GDPR Art. 6(1)(b)).
+    - The optional coarse location, because you chose to set it (consent, Art. 6(1)(a)). Clear it to withdraw.
+    - Rate limiting and the web server's access log, to protect the site from abuse (legitimate interests, Art. 6(1)(f)).
 
     ## Backups
 
@@ -566,11 +584,11 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
 
-    What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still hold the account until they expire, 30 days at most.
+    What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
 
     ## Your rights
 
-    You can ask what is stored about you, and have it corrected or deleted: ${privateContact(contact)}.
+    You can ask what is stored about you, and have it corrected, deleted or handed to you in a form you can reuse (data portability), and you can object to how it is used: ${privateContact(contact)}. You can also complain to the Norwegian Data Protection Authority, ${link('Datatilsynet', 'https://www.datatilsynet.no')}.
   `
 }
 
