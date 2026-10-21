@@ -17,7 +17,14 @@ import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
 import { themes } from '../themes.ts'
 import { formatTimestamp, localeLabel, locales, timeZones } from '../timezones.ts'
-import { Page, preview, renderDocument, siteDescription, type PageMeta } from './layout.ts'
+import {
+  Page,
+  preview,
+  renderDocument,
+  siteDescription,
+  unreadLabel,
+  type PageMeta,
+} from './layout.ts'
 import { blurtOgInput, ogHash, ogImagePath, ogProfileImagePath, profileCardText } from '../og.ts'
 import { cardColors, type CardColorId } from '../card-colors.ts'
 import {
@@ -144,11 +151,6 @@ export const notificationVerbs: Record<NotificationKind, string> = {
   reply: 'replied to your blurt',
   reblurt: 'reblurted your blurt',
   quote: 'quoted your blurt',
-}
-
-// "32", or "99+" past the cap, for the link in Your corner.
-export function unreadLabel(unread: number): string {
-  return unread > 99 ? '99+' : String(unread)
 }
 
 export function notificationsPath(username: string, { read = false, before = '' } = {}): string {

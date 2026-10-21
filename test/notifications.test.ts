@@ -393,3 +393,30 @@ test('visiting a blurt marks the notifications about it as read, and the count f
   assert.equal(await unread(), 0)
   assert.doesNotMatch((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(/)
 })
+
+test('Alerts appears in the top navigation only while there are unread notifications', async () => {
+  const lars = await createSession('Lars')
+  const ada = await createSession('Ada')
+  const nav = async (cookie: string, path = '/everyone') => {
+    const { body } = await request('GET', path, '', { cookie })
+    return body.match(/<nav class="top-nav".*?<\/nav>/s)?.[0] ?? ''
+  }
+  assert.doesNotMatch(await nav(lars), /Alerts/)
+
+  await blurt(lars, 'mine')
+  await blurt(ada, 'hi', `&parentId=${await blurtIdByText('mine')}`)
+  const bar = await nav(lars)
+  assert.match(bar, /href="\/Lars\/notifications\/"[^>]*>.*?<span>Alerts \(1\)<\/span>/s)
+  // Between Profile and Settings.
+  assert.ok(bar.indexOf('>Profile<') < bar.indexOf('>Alerts (1)<'))
+  assert.ok(bar.indexOf('>Alerts (1)<') < bar.indexOf('>Settings<'))
+  assert.doesNotMatch(await nav(ada), /Alerts/)
+  assert.doesNotMatch(await nav(''), /Alerts/)
+  // Your corner keeps its own link.
+  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(1\)/)
+  assert.match(await nav(lars, '/Lars/notifications/'), /aria-current="page"[^>]*>.*?Alerts/s)
+
+  // Reading them takes the link away again.
+  await request('POST', '/api/notifications/read', '', { cookie: lars })
+  assert.doesNotMatch(await nav(lars), /Alerts/)
+})

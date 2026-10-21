@@ -130,7 +130,7 @@ type NavItem = { href: string; label: string; icon: IconName; current: boolean }
 // Every destination, on every page, always visible: no menus to open. Logged-in viewers
 // get their profile and settings; everyone else the way in.
 function navItems(): NavItem[] {
-  const { viewer, isAdmin, path } = pageContext()
+  const { viewer, isAdmin, path, unreadNotifications } = pageContext()
   const item = (href: string, label: string, icon: IconName, current = path === href) => ({
     href,
     label,
@@ -152,9 +152,26 @@ function navItems(): NavItem[] {
     item('/search', 'Search', 'search'),
     item('/near', 'Near', 'pin'),
     item(profile, 'Profile', 'person', path === profile || path === `/${viewer.username}/edit`),
+    // Only while there is something to see, so the bar stays short on phones. The same
+    // link is in Your corner, always.
+    ...(unreadNotifications > 0
+      ? [
+          item(
+            `/${viewer.username}/notifications/`,
+            `Alerts (${unreadLabel(unreadNotifications)})`,
+            'bell',
+            path.startsWith(`/${viewer.username}/notifications`),
+          ),
+        ]
+      : []),
     item('/settings', 'Settings', 'sliders', path.startsWith('/settings')),
     ...(isAdmin ? [item('/admin', 'Admin', 'shield', path.startsWith('/admin'))] : []),
   ]
+}
+
+// "32", or "99+" past the cap (unreadCap in src/routes/state.ts): the notification count.
+export function unreadLabel(unread: number): string {
+  return unread > 99 ? '99+' : String(unread)
 }
 
 function TopNav() {
