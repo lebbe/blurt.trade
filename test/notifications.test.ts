@@ -342,3 +342,54 @@ test('settings and mark-as-read are rate limited', async () => {
     )
   })
 })
+
+test('visiting a blurt marks the notifications about it as read, and the count follows', async () => {
+  const lars = await createSession('Lars')
+  const ada = await createSession('Ada')
+  await blurt(lars, 'mine')
+  const mine = await blurtIdByText('mine')
+  await blurt(ada, 'reply one', `&parentId=${mine}`)
+  await blurt(ada, 'reply two', `&parentId=${mine}`)
+  await blurt(ada, 'other', '')
+  await blurt(ada, 'quote of mine', `&reblurtOfId=${mine}`)
+  await request('POST', '/api/reblurt', `blurtId=${mine}`, { cookie: ada })
+  await blurt(lars, 'second')
+  const second = await blurtIdByText('second')
+  await blurt(ada, 'reply to second', `&parentId=${second}`)
+  const unread = async () =>
+    (await db().query('SELECT count(*)::int AS n FROM notifications WHERE read_at IS NULL')).rows[0]
+      .n
+  assert.equal(await unread(), 5)
+
+  // Visiting someone else's page, or one nothing is about, changes nothing.
+  assert.equal(
+    (await request('GET', `/Ada/${await blurtIdByText('other')}`, '', { cookie: lars })).statusCode,
+    200,
+  )
+  assert.equal(await unread(), 5)
+  // Anonymous visits never write.
+  await request('GET', `/Lars/${mine}`)
+  assert.equal(await unread(), 5)
+
+  // Visiting the reply itself reads only its notification, and the page already shows 4.
+  const replyOne = await blurtIdByText('reply one')
+  const reply = await request('GET', `/Ada/${replyOne}`, '', { cookie: lars })
+  assert.equal(reply.statusCode, 200)
+  assert.match(reply.setCookie?.join(';') ?? '', /recent_write=1/)
+  assert.equal(await unread(), 4)
+  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(4\)/)
+
+  // Visiting the blurt they wrote reads the rest of its replies, its quote and its reblurt.
+  await request('GET', `/Lars/${mine}`, '', { cookie: lars })
+  assert.equal(await unread(), 1)
+  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(1\)/)
+  assert.deepEqual(
+    (await notifications()).filter((row) => !row.read).map((row) => row.text),
+    ['reply to second'],
+  )
+
+  // The last one, then nothing left: the link has no number.
+  await request('GET', `/Lars/${second}`, '', { cookie: lars })
+  assert.equal(await unread(), 0)
+  assert.doesNotMatch((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(/)
+})

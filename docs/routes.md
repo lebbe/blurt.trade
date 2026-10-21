@@ -415,6 +415,14 @@ and the count is a number that refreshes with the page.
   `notifications_unread_idx`, stopping at 100 and shown as `99+`. It lives in the page
   context (`unreadNotifications`), not the access token, which wouldn't follow a number
   that changes this often.
+- **Visiting a blurt reads its notifications.** `GET /:username/:id` marks the viewer's
+  unread notifications about that blurt as read: ones linking to it (the reply, quote or
+  followed blurt itself, or their own reblurted blurt) and ones linking to a reply or quote
+  of it (visiting the blurt you wrote that got replied to). It only runs when the page
+  context already says the viewer has unread notifications, so most visits do nothing
+  extra, and a visit matching nothing writes nothing. Each notification is marked once, so
+  writes follow notifications, not page views. The count in the page's frame is the new
+  one. The buttons stay for the rest.
 - **The page** `/:username/notifications/` is the owner's only (403 for anyone else,
   401 logged out). It lists unread ones, newest first, with `?read=1` the ones already
   read, paged with `before` like the feeds. Each links to the blurt and the actor. "Mark

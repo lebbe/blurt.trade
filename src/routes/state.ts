@@ -1242,6 +1242,11 @@ export async function markNotificationsRead(
   if (id !== null && rowCount === 0) {
     return undefined
   }
+  return countUnreadFromPrimary(userId)
+}
+
+// Like countUnreadNotifications, but from the primary: right after a write of ours.
+async function countUnreadFromPrimary(userId: number): Promise<number> {
   const { rows } = await db().query<{ count: number }>(
     `SELECT count(*)::int AS count FROM (
        SELECT 1 FROM notifications WHERE user_id = $1 AND read_at IS NULL LIMIT ${unreadCap}
@@ -1249,6 +1254,30 @@ export async function markNotificationsRead(
     [userId],
   )
   return rows[0]?.count ?? 0
+}
+
+// Visiting a blurt reads the viewer's unread notifications about it: the blurt a
+// notification links to (a reply, a quote, a followed blurt, or their own reblurted blurt),
+// and the blurt that reply or quote answers. Returns the new unread count if any were
+// marked, else undefined. Callers skip it when the viewer has no unread notifications (the
+// count is on every page already), so most visits cost nothing; a visit that matches
+// nothing writes nothing. Each notification is marked once, so writes follow notifications,
+// not page views.
+export async function markNotificationsReadForBlurt(
+  userId: number,
+  blurtId: number,
+): Promise<number | undefined> {
+  const { rowCount } = await db().query(
+    `UPDATE notifications n SET read_at = now()
+     WHERE n.user_id = $1 AND n.read_at IS NULL AND (
+       n.blurt_id = $2 OR EXISTS (
+         SELECT 1 FROM blurts b
+         WHERE b.id = n.blurt_id AND (b.parent_id = $2 OR b.reblurt_of_id = $2)
+       )
+     )`,
+    [userId, blurtId],
+  )
+  return rowCount ? countUnreadFromPrimary(userId) : undefined
 }
 
 // Read notifications are kept this long, then pruned. Unread ones stay until read.

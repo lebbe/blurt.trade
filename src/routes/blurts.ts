@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
+import { pageContext } from '../page-context.ts'
+import { markRecentWrite } from '../middleware/replica.ts'
 import {
   blurtMaxLength,
   blurtMaxNewlines,
@@ -34,6 +36,7 @@ import {
   isAdmin,
   listRelatedBlurts,
   listReplies,
+  markNotificationsReadForBlurt,
   markViewerFlags,
   parseCursor,
   setLike,
@@ -124,6 +127,18 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
   if (after === undefined) {
     sendError(request, response, 400, 'Invalid cursor', 'after')
     return
+  }
+  // Visiting the blurt reads the viewer's notifications about it. Only when they have
+  // unread ones (already known from the page context), so most visits do nothing extra.
+  // The count in the page's frame is then the new one, never the stale one.
+  const viewer = getViewer(request)
+  const context = pageContext()
+  if (viewer && context.unreadNotifications > 0) {
+    const unread = await markNotificationsReadForBlurt(viewer.id, blurt.id)
+    if (unread !== undefined) {
+      context.unreadNotifications = unread
+      markRecentWrite(response) // the next page's count is read from the primary too
+    }
   }
   represent(request, response, await getBlurtPageData(request, blurt, after), {
     html: renderBlurtPage,
