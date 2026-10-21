@@ -128,14 +128,16 @@ test('the unread count shows in Your corner, capped at 99+', async () => {
   const lars = await createSession('Lars')
   const ada = await createSession('Ada')
   const corner = async () =>
-    (await request('GET', '/', '', { cookie: lars })).body.match(/Notifications[^<]*/)?.[0]
+    (await request('GET', '/', '', { cookie: lars })).body.match(
+      /Notifications( <span class="badge" aria-hidden="true">[^<]*)?/,
+    )?.[0]
   await blurt(lars, 'popular')
   const id = await blurtIdByText('popular')
   assert.match((await corner()) ?? '', /^Notifications$/)
 
   await blurt(ada, 'one', `&parentId=${id}`)
   await blurt(ada, 'two', `&parentId=${id}`)
-  assert.match((await corner()) ?? '', /^Notifications \(2\)$/)
+  assert.match((await corner()) ?? '', /^Notifications <span class="badge" aria-hidden="true">2$/)
   assert.match(
     (await request('GET', '/', '', { cookie: lars })).body,
     /href="\/Lars\/notifications\/"/,
@@ -152,10 +154,15 @@ test('the unread count shows in Your corner, capped at 99+', async () => {
      WHERE l.username = 'Lars' AND b.parent_id = $1 AND b.text LIKE 'r%'`,
     [id],
   )
-  assert.match((await corner()) ?? '', /^Notifications \(99\+\)$/)
+  assert.match(
+    (await corner()) ?? '',
+    /^Notifications <span class="badge" aria-hidden="true">99\+$/,
+  )
   // Only your own count: Ada has none.
   assert.equal(
-    (await request('GET', '/', '', { cookie: ada })).body.includes('Notifications ('),
+    (await request('GET', '/', '', { cookie: ada })).body.includes(
+      'Notifications <span class="badge"',
+    ),
     false,
   )
 })
@@ -377,12 +384,18 @@ test('visiting a blurt marks the notifications about it as read, and the count f
   assert.equal(reply.statusCode, 200)
   assert.match(reply.setCookie?.join(';') ?? '', /recent_write=1/)
   assert.equal(await unread(), 4)
-  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(4\)/)
+  assert.match(
+    (await request('GET', '/', '', { cookie: lars })).body,
+    /Notifications <span class="badge" aria-hidden="true">4</,
+  )
 
   // Visiting the blurt they wrote reads the rest of its replies, its quote and its reblurt.
   await request('GET', `/Lars/${mine}`, '', { cookie: lars })
   assert.equal(await unread(), 1)
-  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(1\)/)
+  assert.match(
+    (await request('GET', '/', '', { cookie: lars })).body,
+    /Notifications <span class="badge" aria-hidden="true">1</,
+  )
   assert.deepEqual(
     (await notifications()).filter((row) => !row.read).map((row) => row.text),
     ['reply to second'],
@@ -391,7 +404,10 @@ test('visiting a blurt marks the notifications about it as read, and the count f
   // The last one, then nothing left: the link has no number.
   await request('GET', `/Lars/${second}`, '', { cookie: lars })
   assert.equal(await unread(), 0)
-  assert.doesNotMatch((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(/)
+  assert.doesNotMatch(
+    (await request('GET', '/', '', { cookie: lars })).body,
+    /Notifications <span class="badge"/,
+  )
 })
 
 test('Alerts appears in the top navigation only while there are unread notifications', async () => {
@@ -406,14 +422,20 @@ test('Alerts appears in the top navigation only while there are unread notificat
   await blurt(lars, 'mine')
   await blurt(ada, 'hi', `&parentId=${await blurtIdByText('mine')}`)
   const bar = await nav(lars)
-  assert.match(bar, /href="\/Lars\/notifications\/"[^>]*>.*?<span>Alerts \(1\)<\/span>/s)
+  assert.match(
+    bar,
+    /href="\/Lars\/notifications\/"[^>]*>.*?<span>Alerts<\/span><span class="badge" aria-hidden="true">1<\/span><span class="visually-hidden">1 unread<\/span>/s,
+  )
   // Between Profile and Settings.
-  assert.ok(bar.indexOf('>Profile<') < bar.indexOf('>Alerts (1)<'))
-  assert.ok(bar.indexOf('>Alerts (1)<') < bar.indexOf('>Settings<'))
+  assert.ok(bar.indexOf('>Profile<') < bar.indexOf('>Alerts<'))
+  assert.ok(bar.indexOf('>Alerts<') < bar.indexOf('>Settings<'))
   assert.doesNotMatch(await nav(ada), /Alerts/)
   assert.doesNotMatch(await nav(''), /Alerts/)
   // Your corner keeps its own link.
-  assert.match((await request('GET', '/', '', { cookie: lars })).body, /Notifications \(1\)/)
+  assert.match(
+    (await request('GET', '/', '', { cookie: lars })).body,
+    /Notifications <span class="badge" aria-hidden="true">1<\/span>/,
+  )
   assert.match(await nav(lars, '/Lars/notifications/'), /aria-current="page"[^>]*>.*?Alerts/s)
 
   // Reading them takes the link away again.

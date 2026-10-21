@@ -22,7 +22,7 @@ import {
   preview,
   renderDocument,
   siteDescription,
-  unreadLabel,
+  UnreadBadge,
   type PageMeta,
 } from './layout.ts'
 import { blurtOgInput, ogHash, ogImagePath, ogProfileImagePath, profileCardText } from '../og.ts'
@@ -346,7 +346,13 @@ function SubmitButton({
 }
 
 // For the asides: a panel with a heading and a list of links.
-function LinkPanel({ title, links }: { title: string; links: [href: string, label: string][] }) {
+function LinkPanel({
+  title,
+  links,
+}: {
+  title: string
+  links: [href: string, label: ComponentChildren][]
+}) {
   return html`
     <section class="panel">
       <h3>${title}</h3>
@@ -1677,7 +1683,7 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
         [
           notificationsPath(viewer.username),
           pageContext().unreadNotifications > 0
-            ? `Notifications (${unreadLabel(pageContext().unreadNotifications)})`
+            ? html`Notifications <${UnreadBadge} unread=${pageContext().unreadNotifications} />`
             : 'Notifications',
         ],
         [`/${viewer.username}/edit`, 'Edit profile, avatar and theme'],
@@ -2342,7 +2348,10 @@ function NotificationsPage({ viewer, read, unread, notifications, next }: Notifi
         <${LinkPanel}
           title="Notifications"
           links=${[
-            [notificationsPath(viewer.username), `Unread (${unreadLabel(unread)})`],
+            [
+              notificationsPath(viewer.username),
+              unread > 0 ? html`Unread <${UnreadBadge} unread=${unread} />` : 'Unread',
+            ],
             [notificationsPath(viewer.username, { read: true }), 'Already read'],
             [`/${viewer.username}/edit#notifications`, 'Choose what you get'],
           ]}
