@@ -21,7 +21,7 @@ import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { runWithPageContext } from './page-context.ts'
-import { isAdmin } from './routes/state.ts'
+import { countUnreadNotifications, isAdmin, pruneNotifications } from './routes/state.ts'
 import { adminRouter } from './routes/admin.ts'
 import { avatarRouter } from './routes/avatar.ts'
 import { blurtsRouter } from './routes/blurts.ts'
@@ -31,6 +31,7 @@ import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
+import { notificationsRouter } from './routes/notifications.ts'
 import { picturesRouter } from './routes/pictures.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
@@ -66,12 +67,16 @@ app.use(ogRouter)
 // for every page's frame.
 app.use((request, _response, next) => {
   const viewer = getViewer(request)
-  ;(viewer ? isAdmin(viewer.id) : Promise.resolve(false))
-    .then((admin) => {
+  const lookups: Promise<[boolean, number]> = viewer
+    ? Promise.all([isAdmin(viewer.id), countUnreadNotifications(viewer.id)])
+    : Promise.resolve([false, 0])
+  lookups
+    .then(([admin, unreadNotifications]) => {
       runWithPageContext(
         {
           viewer,
           isAdmin: admin,
+          unreadNotifications,
           path: request.path,
           theme: getTheme(request),
           timeZone: getTimeZone(request),
@@ -93,6 +98,7 @@ app.use(adminRouter)
 app.use(searchRouter)
 app.use(themeRouter)
 app.use(timeZoneRouter)
+app.use(notificationsRouter) // before profilesRouter, like locationRouter
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near
 app.use(profilesRouter)
 // Unknown paths, and /:username/:id URLs that matched no blurt.
@@ -124,7 +130,7 @@ app.use(serverErrorHandler)
 const port = Number(process.env.PORT) || 3000
 
 // Housekeeping while the server runs. Both are cheap when there is nothing to do.
-const sessionCleanupMs = 60 * 60 * 1000 // revoked and idle sessions, hourly
+const sessionCleanupMs = 60 * 60 * 1000 // revoked and idle sessions, old read notifications, hourly
 const embeddingCatchUpMs = 5 * 60 * 1000 // blurts left without an embedding, e.g. model failed
 
 // Graceful shutdown: on SIGTERM (systemd stop/restart) or SIGINT, stop accepting
@@ -144,6 +150,9 @@ async function start(): Promise<void> {
 
   const timers = [
     setInterval(() => {
+      pruneNotifications().catch((error: unknown) => {
+        log('error', 'pruning notifications failed', { error: errorFields(error) })
+      })
       deleteDeadSessions().catch((error: unknown) => {
         log('error', 'deleting dead sessions failed', { error: errorFields(error) })
       })

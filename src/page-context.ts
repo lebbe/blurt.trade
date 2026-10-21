@@ -10,6 +10,8 @@ import { defaultTimeZone } from './timezones.ts'
 export type PageContext = {
   viewer: AuthenticatedUser | null
   isAdmin: boolean // only looked up for logged-in viewers; shows the Admin link
+  // Their unread notifications, at most unreadCap (src/routes/state.ts); 0 when logged out.
+  unreadNotifications: number
   path: string
   theme: ThemeId
   timeZone: string // IANA name; timestamps are shown in it
@@ -22,6 +24,7 @@ const storage = new AsyncLocalStorage<PageContext>()
 const outside: PageContext = {
   viewer: null,
   isAdmin: false,
+  unreadNotifications: 0,
   path: '',
   theme: defaultTheme,
   timeZone: defaultTimeZone,

@@ -14,6 +14,7 @@ import {
   follow,
   getFollowStats,
   getLocation,
+  getNotificationSettings,
   getInvitedBy,
   getUserProfileByUsername,
   listInviteCodes,
@@ -119,7 +120,12 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
   represent(
     request,
     response,
-    { viewer, profile, location: await getLocation(profile.userId) },
+    {
+      viewer,
+      profile,
+      location: await getLocation(profile.userId),
+      notifications: await getNotificationSettings(profile.userId),
+    },
     { html: renderProfileEditPage, markdown: profileEditMarkdown },
   )
 })
@@ -145,11 +151,13 @@ profilesRouter.post(
     const result = profileSchema.safeParse(request.body ?? {})
     if (!result.success) {
       const location = await getLocation(profile.userId)
+      const notifications = await getNotificationSettings(profile.userId)
       await sendFormErrors(request, response, fieldErrors(result.error), (validationError) =>
         renderProfileEditPage({
           viewer,
           profile: { ...profile, ...submittedFields(request.body) },
           location,
+          notifications,
           validationError,
         }),
       )

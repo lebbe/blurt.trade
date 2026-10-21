@@ -23,6 +23,8 @@ import {
   formatLocation,
   gridDescription,
   moreRepliesUrl,
+  notificationsPath,
+  notificationVerbs,
   nearPageUrl,
   noPasswordReset,
   olderBlurtsUrl,
@@ -39,6 +41,7 @@ import {
   type FormPageData,
   type InfoPageData,
   type NearData,
+  type NotificationsData,
   type ProfileEditData,
   type ProfilePageData,
   type SearchData,
@@ -332,7 +335,11 @@ export function profilePageMarkdown({
   `
 }
 
-export function profileEditMarkdown({ profile, location }: ProfileEditData): Markdown {
+export function profileEditMarkdown({
+  profile,
+  location,
+  notifications,
+}: ProfileEditData): Markdown {
   const fields = profileFields.map(
     ([key, label]) => md`- ${code(key)} (${label}): ${profileValue(String(profile[key]))}`,
   )
@@ -362,6 +369,16 @@ export function profileEditMarkdown({ profile, location }: ProfileEditData): Mar
     Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} to set it (only
     ${gridDescription} is stored), or with ${code('clear')} to remove it. Nobody else can see
     it. Then see ${link('blurts near you', '/near')}.
+
+    ## Notifications
+
+    Now: replies ${notifications.replies ? 'on' : 'off'}, reblurts and quotes ${notifications.reblurts ? 'on' : 'off'},
+    blurts from people you follow ${notifications.followedBlurts ? 'on' : 'off'}. See
+    ${link('your notifications', notificationsPath(profile.username))}.
+
+    Send ${code('POST /api/notifications/settings')} with ${code('replies')}, ${code('reblurts')}
+    and ${code('followedBlurts')} (${code('1')}, ${code('on')} or ${code('true')} for on, JSON
+    ${code('true')}). Kinds left out are switched off. A quote counts as a reblurt here.
 
     ## Theme
 
@@ -404,6 +421,41 @@ export function nearMarkdown({ location, radius, radii, blurts, next }: NearData
           `
         : md`You haven't set a location. Send ${code('POST /api/location')} with ${code('lat')} and ${code('lon')} first.`
     }
+  `
+}
+
+export function notificationsMarkdown({
+  viewer,
+  read,
+  unread,
+  notifications,
+  next,
+}: NotificationsData): Markdown {
+  return md`
+    # Notifications
+
+    ${home}
+
+    ${read ? 'Notifications you have read' : `${unread >= 100 ? '99+' : unread} unread`}, newest first.
+    ${link(read ? 'Unread' : 'Already read', notificationsPath(viewer.username, { read: !read }))} ·
+    ${link('Choose what you get', `/${viewer.username}/edit#notifications`)}
+
+    ${
+      !read &&
+      unread > 0 &&
+      md`Send ${code('POST /api/notifications/read')} to mark all as read, or with ${code('id')} to mark one.`
+    }
+
+    ${
+      notifications.length > 0
+        ? notifications.map(
+            (notification) =>
+              md`- ${link(notification.actor, `/${notification.actor}/`)} ${notificationVerbs[notification.kind]}, ${link(notification.createdAt, `/${notification.blurtUsername}/${notification.blurtId}`)}${notification.read ? '' : ' (unread, id ' + notification.id + ')'}: ${notification.text}`,
+          )
+        : 'Nothing here.'
+    }
+
+    ${next && link('Older notifications', notificationsPath(viewer.username, { read, before: next }))}
   `
 }
 
@@ -542,6 +594,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
     - Who you follow.
+    - Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt from someone you follow, with who did it, which blurt and when, and whether you've read it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile. Only you see them.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
     - Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
     - Your invite codes, and who signed up with them. Who invited you shows on your profile.
@@ -582,7 +635,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Deleting your account
 
-    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
 
     What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
 

@@ -5,6 +5,7 @@ import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError, sendFormErrors, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import {
   getLocation,
+  getNotificationSettings,
   getUserProfileByUsername,
   listNearbyBlurts,
   markViewerFlags,
@@ -99,8 +100,9 @@ locationRouter.post(
         return
       }
       const location = await getLocation(viewer.id)
+      const notifications = await getNotificationSettings(viewer.id)
       await sendFormErrors(request, response, [input.error], (locationError) =>
-        renderProfileEditPage({ viewer, profile, location, locationError }),
+        renderProfileEditPage({ viewer, profile, location, notifications, locationError }),
       )
       return
     }
