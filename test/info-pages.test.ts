@@ -120,13 +120,14 @@ test('the privacy page is in step with the database columns', async () => {
       'created_at deleted_at embedding id parent_id reblurt_of_id reblurt_of_user_id text user_id',
     follows: 'created_at followed_user_id user_id',
     likes: 'blurt_id created_at user_id',
+    notifications: 'actor_user_id blurt_id created_at id kind read_at user_id',
     invite_codes: 'code created_at expires_at used_at used_by_user_id user_id',
     reports: 'blurt_id created_at dismissed_at reason user_id',
     retired_usernames: 'username',
-    sessions: 'created_at current_generation id last_used_at revoked_at user_id',
+    sessions: 'created_at current_generation id last_used_at persistent revoked_at user_id',
     signup_counter: 'current_count hard_limit id soft_limit',
     user_profiles:
-      'avatar bio card_color github homepage instagram linkedin locale location theme tiktok timezone updated_at user_id x youtube',
+      'avatar bio card_color github homepage instagram linkedin locale location notify_followed_blurts notify_reblurts notify_replies theme tiktok timezone updated_at user_id x youtube',
     users: 'created_at deleted_at id is_admin password_hash username',
     waitlist: 'created_at id status username',
   })

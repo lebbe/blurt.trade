@@ -1290,3 +1290,9 @@ td {
   vertical-align: top;
   padding: 0.4em 0.6em 0.4em 0;
 }
+
+/* Notifications: unread ones stand out from the read ones. */
+.notification.unread {
+  border-inline-start: 3px solid var(--accent, currentColor);
+  padding-inline-start: 0.5rem;
+}

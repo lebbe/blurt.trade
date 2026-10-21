@@ -37,6 +37,9 @@ import type {
   FeedItem,
   FollowStats,
   InviteCode,
+  Notification,
+  NotificationKind,
+  NotificationSettings,
   QuotedBlurt,
   ReportedBlurt,
   SignupState,
@@ -115,7 +118,43 @@ export type ProfilePageData = {
 
 // `location` is the owner's coarse location (null if not set). The edit page is the only
 // profile page that has it.
-export type ProfileEditData = { viewer: Viewer; profile: UserProfile; location: GeoPoint | null }
+export type ProfileEditData = {
+  viewer: Viewer
+  profile: UserProfile
+  location: GeoPoint | null
+  // Which notifications they want; private, like the location.
+  notifications: NotificationSettings
+}
+
+// /:username/notifications/, the owner's only: the unread ones, or with `read` the read
+// ones, newest first. `unread` is the unread count (at most unreadCap). `next` is the
+// cursor for the page after this one.
+export type NotificationsData = {
+  viewer: AuthenticatedUser
+  read: boolean
+  unread: number
+  notifications: Notification[]
+  next: string | null
+}
+
+// What each kind says, as the actor's action: "Ada replied to your blurt". Reblurts and
+// quotes are separate rows with their own wording, and share one setting.
+export const notificationVerbs: Record<NotificationKind, string> = {
+  followed_blurt: 'blurted',
+  reply: 'replied to your blurt',
+  reblurt: 'reblurted your blurt',
+  quote: 'quoted your blurt',
+}
+
+// "32", or "99+" past the cap, for the link in Your corner.
+export function unreadLabel(unread: number): string {
+  return unread > 99 ? '99+' : String(unread)
+}
+
+export function notificationsPath(username: string, { read = false, before = '' } = {}): string {
+  const query = [read && 'read=1', before && `before=${before}`].filter(Boolean).join('&')
+  return `/${username}/notifications/${query ? `?${query}` : ''}`
+}
 
 // "Blurts near you". `location` is the viewer's own (null if not set: then no blurts).
 // `radius` is in km, one of `radii`. `next` is the cursor for older blurts.
@@ -1419,6 +1458,43 @@ function TimeZoneForm() {
   `
 }
 
+// One checkbox per kind of notification, saved with a plain POST. An unticked box sends
+// nothing, so what is left out is off.
+function NotificationsForm({ settings }: { settings: NotificationSettings }) {
+  return html`
+    <section class="panel" aria-label="Notifications" id="notifications">
+      <h2>Notifications</h2>
+      <p class="tiny">
+        Choose what ends up on your notifications page and in the count in Your corner. Only new
+        things after you switch a kind on are added. Nobody is notified about their own actions.
+      </p>
+      <form method="post" action="/api/notifications/settings">
+        <label class="check"
+          ><input type="checkbox" name="replies" value="1" checked=${settings.replies} /> Replies to
+          my blurts</label
+        >
+        <label class="check"
+          ><input type="checkbox" name="reblurts" value="1" checked=${settings.reblurts} /> Reblurts
+          and quotes of my blurts (a quote is a reblurt with a comment, so it counts here, and is
+          listed as "quoted")</label
+        >
+        <label class="check"
+          ><input
+            type="checkbox"
+            name="followedBlurts"
+            value="1"
+            checked=${settings.followedBlurts}
+          />
+          New blurts from people I follow (can get noisy)</label
+        >
+        <div class="actions">
+          <${SubmitButton} icon="save" label="Save notification settings" />
+        </div>
+      </form>
+    </section>
+  `
+}
+
 // The colour of the share cards. Its inputs and button belong to the profile form above
 // (the `form` attribute), so one POST saves everything and no JavaScript is needed.
 function CardForm({ profile }: { profile: UserProfile }) {
@@ -1470,6 +1546,7 @@ function CardForm({ profile }: { profile: UserProfile }) {
 function ProfileEditForm({
   profile,
   location,
+  notifications,
   validationError,
   locationError,
   avatarError,
@@ -1483,6 +1560,7 @@ function ProfileEditForm({
         ['#avatar', 'Avatar'],
         ['#location', 'Location'],
         ['#theme', 'Theme'],
+        ['#notifications', 'Notifications'],
       ]}
     />
     <${LinkPanel}
@@ -1546,6 +1624,7 @@ ${profile.bio}</textarea>
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
       <${TimeZoneForm} />
+      <${NotificationsForm} settings=${notifications} />
     <//>
   `
 }
@@ -1593,6 +1672,12 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
       title="Your corner"
       links=${[
         [`/${viewer.username}/`, 'Your profile'],
+        [
+          notificationsPath(viewer.username),
+          pageContext().unreadNotifications > 0
+            ? `Notifications (${unreadLabel(pageContext().unreadNotifications)})`
+            : 'Notifications',
+        ],
         [`/${viewer.username}/edit`, 'Edit profile, avatar and theme'],
         ['/near', 'Blurts near you'],
         ['/search', 'Search people and blurts'],
@@ -2001,6 +2086,12 @@ function PrivacyPage({ contact }: InfoPageData) {
         </li>
         <li>Who you follow.</li>
         <li>
+          Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt
+          from someone you follow, with who did it, which blurt and when, and whether you've read
+          it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile.
+          Only you see them.
+        </li>
+        <li>
           Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
           who liked it.
         </li>
@@ -2114,8 +2205,9 @@ function PrivacyPage({ contact }: InfoPageData) {
         <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It
         deletes at once, in one go, everything above that belongs to the account: your profile,
         avatar and location, the text of your blurts and their embeddings, your reblurts, who you
-        follow and who follows you, your likes (and the likes on your blurts), your invite codes,
-        your reports, your sessions and your waitlist entry. You're logged out everywhere.
+        follow and who follows you, your likes (and the likes on your blurts), your notifications,
+        your invite codes, your reports, your sessions and your waitlist entry. You're logged out
+        everywhere.
       </p>
       <p>
         What stays: an empty record of the account, with no username, password or profile, and an
@@ -2209,6 +2301,75 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
               </section>
             `
       }
+    <//>
+  `
+}
+
+// A line per notification, linking to the blurt and the actor's profile.
+function NotificationItem({ notification }: { notification: Notification }) {
+  const { kind, actor, avatar, blurtId, blurtUsername, text, createdAt, read, id } = notification
+  return html`
+    <article class=${read ? 'blurt notification' : 'blurt notification unread'}>
+      <${AvatarSvg} avatar=${avatar} />
+      <div class="blurt-body">
+        <div class="blurt-meta">
+          <strong><a href="/${actor}/">${actor}</a></strong>
+          <span>${notificationVerbs[kind]}</span>
+          <a href="/${blurtUsername}/${blurtId}"><${Timestamp} date=${createdAt} /></a>
+        </div>
+        ${text !== null && html`<p><a href="/${blurtUsername}/${blurtId}">${preview(text, 140)}</a></p>`}
+        ${
+          !read &&
+          html`<form method="post" action="/api/notifications/read" class="blurt-actions">
+            <input type="hidden" name="id" value=${id} />
+            <${SubmitButton} icon="check" label="Mark as read" kind="secondary" />
+          </form>`
+        }
+      </div>
+    </article>
+  `
+}
+
+function NotificationsPage({ viewer, read, unread, notifications, next }: NotificationsData) {
+  const here = (before?: string) => notificationsPath(viewer.username, { read, before })
+  return html`
+    <${Page}
+      title="Notifications"
+      tagline=${read ? 'The ones you have read.' : 'What happened to you and the people you follow.'}
+      aside=${html`
+        <${LinkPanel}
+          title="Notifications"
+          links=${[
+            [notificationsPath(viewer.username), `Unread (${unreadLabel(unread)})`],
+            [notificationsPath(viewer.username, { read: true }), 'Already read'],
+            [`/${viewer.username}/edit#notifications`, 'Choose what you get'],
+          ]}
+        />
+        <${SupportLinks} />
+      `}
+    >
+      <section aria-label="Notifications" class="panel">
+        <h2>${read ? 'Read' : 'Unread'}</h2>
+        ${
+          !read &&
+          unread > 0 &&
+          html`<form method="post" action="/api/notifications/read">
+            <div class="actions">
+              <${SubmitButton} icon="check" label="Mark all as read" kind="secondary" />
+            </div>
+          </form>`
+        }
+        ${
+          notifications.length > 0
+            ? notifications.map(
+                (notification) => html`<${NotificationItem} notification=${notification} />`,
+              )
+            : html`<p class="empty">
+                ${read ? 'Nothing read yet.' : 'Nothing new. You are all caught up.'}
+              </p>`
+        }
+        ${next && html`<${NextPageLink} href=${here(next)} label="Older notifications" />`}
+      </section>
     <//>
   `
 }
@@ -2394,6 +2555,10 @@ export function renderNearPage(data: NearData): string {
     canonical: nearCanonical(data.radius),
     noindex: true,
   })
+}
+
+export function renderNotificationsPage(data: NotificationsData): string {
+  return renderDocument(h(NotificationsPage, data), { title: 'Notifications', noindex: true })
 }
 
 export function renderProfileEditPage(props: ProfileEditProps): string {

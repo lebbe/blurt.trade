@@ -30,6 +30,8 @@ const defaults = {
   avatar: '60/10m',
   theme: '60/10m',
   timezone: '60/10m',
+  // The notification settings, and marking notifications as read.
+  notifications: '60/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
   mintInvites: '20/1h',

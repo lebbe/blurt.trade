@@ -28,6 +28,7 @@ carry `Vary: Accept`.
 | `/:username/`      | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
 | `/:username/:id`   | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
 | `/:username/edit`  | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
+| `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next }`                       | 400, 401, 403 not owner |
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
 | `/login`           | —     | `{ viewer }`                                                                  |                         |
@@ -165,6 +166,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/unlike`                | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
 | `/api/reblurt`               | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
 | `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
+| `/api/notifications/settings` | yes          | `replies`, `reblurts`, `followedBlurts` (left out → off) | 303 → `/:username/edit#notifications` | 200 the settings |
+| `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
@@ -349,7 +352,7 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
   emptied, and nothing shows them as the user's; one that others replied to reads as a
   placeholder, and their replies stay. The likes they gave and their plain reblurts are
   taken off each blurt's counts and deleted. Then the profile (avatar, location),
-  sessions, follows both ways, the user's own invite codes (so "Invited by" disappears
+  sessions, follows both ways, notifications to and from the user, the user's own invite codes (so "Invited by" disappears
   from their invitees' profiles) and the reports they made are deleted, by the app, not
   by a cascade. The code they signed up with stays used (`used_at`) with
   `used_by_user_id` set `NULL`. Their waitlist entry is deleted.
@@ -375,6 +378,49 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
   anywhere in a row, and that the old cookies are rejected.
 - Known edge: a sign-up with the same name committing in the very instant the deletion
   commits could slip past the retired check; deletion is rare and that window tiny.
+
+## Notifications
+
+A notification is a row in `notifications` (`user_id` the recipient, `kind`,
+`actor_user_id`, `blurt_id`, `created_at`, `read_at`). No JavaScript: the page is a list
+and the count is a number that refreshes with the page.
+
+- **Kinds.** `reply` (someone replied to your blurt), `reblurt` (someone plain-reblurted
+  it), `quote` (someone quoted it) and `followed_blurt` (someone you follow posted a
+  top-level blurt). A quote is a reblurt with a comment, so it is switched on and off
+  with reblurts, but it is its own row type with its own wording ("quoted your blurt").
+  A quote of a blurt by someone who follows the quoter gets the `quote` row only, not a
+  `followed_blurt` one as well. Replies are not `followed_blurt`s.
+- **Never your own actions**: no row where recipient and actor are the same (a `CHECK`).
+  Reblurting your own blurt is refused anyway; replying to or quoting yourself makes
+  nothing.
+- **Settings**, on the profile edit page (`/:username/edit#notifications`): one checkbox
+  per kind, saved with `POST /api/notifications/settings`. Stored as
+  `user_profiles.notify_replies` (default on), `notify_reblurts` (on) and
+  `notify_followed_blurts` (off: it gets noisy). A field left out of the POST is off, as
+  in the profile form. They're private: the edit page's JSON has them as `notifications`,
+  the public profile doesn't.
+- **Created at write time**, only if the recipient has the kind on: in the same
+  statement as the blurt (`addBlurt`: replies, quotes, followers) or the same transaction
+  as the reblurt (`setReblurt`), so reading never computes anything. Switching a kind on
+  adds nothing for what already happened. Posting fans out to followers with one
+  `INSERT ... SELECT`; for accounts with very many followers that is the place to
+  move to a background job.
+- **Cleanup.** Un-reblurting removes its notification. Deleting a blurt (`deleteBlurts`)
+  removes the notifications that point at it, and deleting an account the ones to and
+  from it, so nothing dangles. Read notifications older than 90 days are pruned hourly
+  (`pruneNotifications`); unread ones stay.
+- **The count** in "Your corner" (`Notifications (32)`) is unread notifications, counted
+  on every page for logged-in viewers from the partial index
+  `notifications_unread_idx`, stopping at 100 and shown as `99+`. It lives in the page
+  context (`unreadNotifications`), not the access token, which wouldn't follow a number
+  that changes this often.
+- **The page** `/:username/notifications/` is the owner's only (403 for anyone else,
+  401 logged out). It lists unread ones, newest first, with `?read=1` the ones already
+  read, paged with `before` like the feeds. Each links to the blurt and the actor. "Mark
+  all as read" and a per-notification "Mark as read" are plain forms posting to
+  `POST /api/notifications/read` (with `id` for one; another user's id is a 404). JSON
+  callers get `{ unread }` back.
 
 ## Location
 
@@ -555,6 +601,7 @@ error table below.
 | `LOCATION`             | `/api/location`                | account              | 30/10m  |
 | `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |
 | `THEME`                | `/api/theme`                   | account              | 60/10m  |
+| `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read` | account (one budget) | 60/10m |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
 | `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |

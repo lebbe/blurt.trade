@@ -500,7 +500,9 @@ const liveUser = 'SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL'
 // still-valid token after a database reset). `reblurtOfId` makes it a quote of that blurt,
 // which must be content (not a plain reblurt: resolve those with getBlurt first). A reply
 // or quote to a blurt deleted at the same moment can still land; reads show it under the
-// placeholder, or with "Content is deleted".
+// placeholder, or with "Content is deleted". In the same statement it notifies, if they
+// have that kind switched on: the author replied to or quoted, and for a top-level blurt
+// the followers (never the author themselves).
 export async function addBlurt(
   userId: number,
   text: string,
@@ -519,11 +521,33 @@ export async function addBlurt(
     `WITH blurt AS (
        INSERT INTO blurts (user_id, text, parent_id, reblurt_of_id, reblurt_of_user_id)
        SELECT u.id, $2, $3, $4::bigint, (SELECT user_id FROM blurts WHERE id = $4::bigint)
-       FROM (${liveUser}) u RETURNING id
+       FROM (${liveUser}) u RETURNING id, user_id
      ),
      picture AS (
        INSERT INTO blurt_pictures (blurt_id, width, height, shapes)
        SELECT id, $5::smallint, $6::smallint, $7::bytea FROM blurt WHERE $7::bytea IS NOT NULL
+     ),
+     notify AS (
+       INSERT INTO notifications (user_id, kind, actor_user_id, blurt_id)
+       SELECT n.user_id, n.kind, blurt.user_id, blurt.id
+       FROM blurt, LATERAL (
+         SELECT p.user_id, 'reply'::text AS kind FROM blurts p
+         JOIN user_profiles up ON up.user_id = p.user_id
+         WHERE p.id = $3::bigint AND p.deleted_at IS NULL AND up.notify_replies
+         UNION ALL
+         SELECT o.user_id, 'quote' FROM blurts o
+         JOIN user_profiles up ON up.user_id = o.user_id
+         WHERE o.id = $4::bigint AND o.deleted_at IS NULL AND up.notify_reblurts
+         UNION ALL
+         SELECT f.user_id, 'followed_blurt' FROM follows f
+         JOIN user_profiles up ON up.user_id = f.user_id
+         WHERE $3::bigint IS NULL AND f.followed_user_id = blurt.user_id
+           AND up.notify_followed_blurts
+           -- Quoted already gets the quote notification.
+           AND NOT EXISTS (SELECT 1 FROM blurts o WHERE o.id = $4::bigint AND o.user_id = f.user_id)
+       ) n
+       WHERE n.user_id <> blurt.user_id
+       ON CONFLICT DO NOTHING
      )
      SELECT id FROM blurt`,
     [
@@ -619,7 +643,7 @@ export async function deleteStaleReblurts({
 // removed: each is marked deleted_at, and its text and embedding go. It keeps user_id (the
 // sharding key), parent_id and reblurt_of_id, and reads never show who wrote it (see
 // shownFrom). Replies stay readable under "This blurt was deleted"; quotes of it show
-// "Content is deleted". Its likes, reports and counters go, and so do the plain reblurts of
+// "Content is deleted". Its likes, reports, notifications and counters go, and so do the plain reblurts of
 // it (deleteStaleReblurts). Plain reblurts in `ids` are skipped: un-reblurting is
 // setReblurt. Account deletion (025) passes all of a user's blurts, with its own
 // transaction's `client`; without one, this runs in a transaction of its own.
@@ -643,6 +667,7 @@ export async function deleteBlurts(
   const content = rows.map((row) => row.id)
   await client.query('DELETE FROM reports WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query('DELETE FROM likes WHERE blurt_id = ANY($1::bigint[])', [content])
+  await client.query('DELETE FROM notifications WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query('DELETE FROM blurt_stats WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query('DELETE FROM blurt_pictures WHERE blurt_id = ANY($1::bigint[])', [content])
   await client.query(
@@ -660,8 +685,8 @@ export async function deleteBlurts(
 // valid and nothing cascades from it. Everything else that refers to the user goes: their
 // content through deleteBlurts (a blurt with replies from others stays as a placeholder
 // that names nobody), their plain reblurts and likes (off each blurt's counters), the
-// profile (avatar, location), sessions, follows both ways, their own invite codes and the
-// reports they made. The code they signed up with stays used (used_at) with
+// profile (avatar, location), sessions, follows both ways, notifications to and from them,
+// their own invite codes and the reports they made. The code they signed up with stays used (used_at) with
 // used_by_user_id set NULL. Their waitlist entry goes. The username is retired for good
 // (retired_usernames), so nobody can take it and pass for them. signup_counter is left
 // alone: it counts sign-ups, so a deletion doesn't free a slot. Returns the ids of the
@@ -723,6 +748,9 @@ export async function deleteAccount(userId: number): Promise<string[] | undefine
     )
     await client.query('DELETE FROM follows WHERE user_id = $1 OR followed_user_id = $1', [userId])
     await client.query('DELETE FROM reports WHERE user_id = $1', [userId])
+    await client.query('DELETE FROM notifications WHERE user_id = $1 OR actor_user_id = $1', [
+      userId,
+    ])
     await client.query('DELETE FROM invite_codes WHERE user_id = $1', [userId])
     await client.query(
       'UPDATE invite_codes SET used_by_user_id = NULL WHERE used_by_user_id = $1',
@@ -1098,6 +1126,148 @@ export async function setTimeSettings(
   return rowCount === 1
 }
 
+// Which notifications a user wants (see the notifications table). Reblurts and quotes share
+// a switch. Private: never part of UserProfile, which is public.
+export type NotificationSettings = {
+  followedBlurts: boolean
+  replies: boolean
+  reblurts: boolean
+}
+
+export async function getNotificationSettings(userId: number): Promise<NotificationSettings> {
+  const { rows } = await db().query<NotificationSettings>(
+    `SELECT notify_followed_blurts AS "followedBlurts", notify_replies AS replies,
+       notify_reblurts AS reblurts
+     FROM user_profiles WHERE user_id = $1`,
+    [userId],
+  )
+  return rows[0] ?? { followedBlurts: false, replies: true, reblurts: true }
+}
+
+// Replaces all three switches. Notifications already created stay; switching a kind off only
+// stops new ones. False when the user no longer exists.
+export async function setNotificationSettings(
+  userId: number,
+  { followedBlurts, replies, reblurts }: NotificationSettings,
+): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `UPDATE user_profiles
+     SET notify_followed_blurts = $2, notify_replies = $3, notify_reblurts = $4, updated_at = now()
+     WHERE user_id = $1`,
+    [userId, followedBlurts, replies, reblurts],
+  )
+  return rowCount === 1
+}
+
+export type NotificationKind = 'followed_blurt' | 'reply' | 'reblurt' | 'quote'
+
+// `blurtId` and `blurtUsername` are what the notification links to: the new blurt, reply or
+// quote by `actor`, or for a reblurt the user's own blurt that was reblurted. `text` is that
+// blurt's text. Deleted blurts and accounts leave no notification (deleteBlurts, deleteAccount).
+export type Notification = {
+  id: number
+  kind: NotificationKind
+  actor: string
+  avatar: Avatar | null
+  blurtId: number
+  blurtUsername: string
+  text: string | null
+  createdAt: Date
+  read: boolean
+}
+
+// The unread count shows at most this many ("99+" above 99), so counting stops there.
+export const unreadCap = 100
+
+// Queried on every page for logged-in users: the partial index
+// notifications_unread_idx makes it a short index scan.
+export async function countUnreadNotifications(userId: number): Promise<number> {
+  const { rows } = await dbRead().query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM (
+       SELECT 1 FROM notifications WHERE user_id = $1 AND read_at IS NULL LIMIT ${unreadCap}
+     ) unread`,
+    [userId],
+  )
+  return rows[0]?.count ?? 0
+}
+
+type NotificationRow = Notification & { cursorAt: string }
+
+// A user's notifications, newest first, the unread ones or (`read`) the read ones.
+export async function listNotifications(
+  userId: number,
+  read: boolean,
+  before: Cursor | null,
+): Promise<Page<Notification>> {
+  const values: unknown[] = [userId, read, pageSize + 1]
+  let keyset = ''
+  if (before) {
+    values.push(before.createdAt, before.id)
+    keyset = 'AND (n.created_at, n.id) < ($4::timestamptz, $5)'
+  }
+  const { rows } = await dbRead().query<NotificationRow>(
+    `SELECT n.id, n.kind, au.username AS actor,
+       (SELECT a.avatar FROM user_profiles a WHERE a.user_id = au.id) AS avatar,
+       b.id AS "blurtId", bu.username AS "blurtUsername", b.text,
+       n.created_at AS "createdAt", n.read_at IS NOT NULL AS read,
+       to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt"
+     FROM notifications n
+     JOIN users au ON au.id = n.actor_user_id AND au.deleted_at IS NULL
+     JOIN blurts b ON b.id = n.blurt_id AND b.deleted_at IS NULL
+     JOIN users bu ON bu.id = b.user_id AND bu.deleted_at IS NULL
+     WHERE n.user_id = $1 AND (n.read_at IS NOT NULL) = $2 ${keyset}
+     ORDER BY n.created_at DESC, n.id DESC LIMIT $3`,
+    values,
+  )
+  const last = rows.length > pageSize ? rows[pageSize - 1] : undefined
+  const next = last ? encodeCursor({ createdAt: last.cursorAt, id: last.id }) : null
+  return {
+    items: rows.slice(0, pageSize).map(({ cursorAt: _cursorAt, ...notification }) => notification),
+    next,
+  }
+}
+
+// Marks one notification of the user's (`id`), or all of them, as read. Marking a read one
+// again changes nothing. Returns how many are unread now, or undefined if `id` is not one
+// of the user's.
+export async function markNotificationsRead(
+  userId: number,
+  id: number | null,
+): Promise<number | undefined> {
+  const { rowCount } = await db().query(
+    `UPDATE notifications SET read_at = coalesce(read_at, now())
+     WHERE user_id = $1 AND ($2::bigint IS NULL OR id = $2)`,
+    [userId, id],
+  )
+  if (id !== null && rowCount === 0) {
+    return undefined
+  }
+  const { rows } = await db().query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM (
+       SELECT 1 FROM notifications WHERE user_id = $1 AND read_at IS NULL LIMIT ${unreadCap}
+     ) unread`,
+    [userId],
+  )
+  return rows[0]?.count ?? 0
+}
+
+// Read notifications are kept this long, then pruned. Unread ones stay until read.
+const readNotificationDays = 90
+
+// Deletes read notifications older than that, at most `limit` per call; run until it
+// returns less. Housekeeping, like deleteDeadSessions.
+export async function pruneNotifications(limit = 10_000): Promise<number> {
+  const { rowCount } = await db().query(
+    `DELETE FROM notifications WHERE id IN (
+       SELECT id FROM notifications
+       WHERE read_at IS NOT NULL AND read_at < now() - make_interval(days => $1)
+       LIMIT $2
+     )`,
+    [readNotificationDays, limit],
+  )
+  return rowCount ?? 0
+}
+
 export async function countFollowing(userId: number): Promise<number> {
   const { rows } = await db().query<{ count: number }>(
     'SELECT count(*)::int AS count FROM follows WHERE user_id = $1',
@@ -1268,6 +1438,20 @@ export function setReblurt(
              AND ${plainReblurt('r')}`,
           [userId, blurtId],
         )
+    if (changed.rowCount === 1) {
+      await (reblurts
+        ? client.query(
+            `INSERT INTO notifications (user_id, kind, actor_user_id, blurt_id)
+             SELECT $1, 'reblurt', $2, $3 FROM user_profiles WHERE user_id = $1 AND notify_reblurts
+             ON CONFLICT DO NOTHING`,
+            [locked.authorId, userId, blurtId],
+          )
+        : client.query(
+            `DELETE FROM notifications
+             WHERE user_id = $1 AND kind = 'reblurt' AND actor_user_id = $2 AND blurt_id = $3`,
+            [locked.authorId, userId, blurtId],
+          ))
+    }
     const reblurtCount =
       changed.rowCount === 1
         ? await bumpStat(client, blurtId, 'reblurt_count', reblurts ? 1 : -1)

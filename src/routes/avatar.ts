@@ -3,7 +3,12 @@ import { avatarSchema, randomAvatar } from '../avatar.ts'
 import { clearSessionCookies, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { fieldErrors, sendError, sendFormErrors, sendFormSuccess, wantsJson } from '../negotiate.ts'
-import { getLocation, getUserProfileByUsername, setAvatar } from './state.ts'
+import {
+  getLocation,
+  getNotificationSettings,
+  getUserProfileByUsername,
+  setAvatar,
+} from './state.ts'
 import { renderProfileEditPage } from '../templates/index.ts'
 
 export const avatarRouter = Router()
@@ -37,8 +42,9 @@ avatarRouter.post(
           return
         }
         const location = await getLocation(viewer.id)
+        const notifications = await getNotificationSettings(viewer.id)
         await sendFormErrors(request, response, fieldErrors(result.error), (avatarError) =>
-          renderProfileEditPage({ viewer, profile, location, avatarError }),
+          renderProfileEditPage({ viewer, profile, location, notifications, avatarError }),
         )
         return
       }
