@@ -61,6 +61,7 @@ const paths = {
     'M8.3 10.8l7.4-3.6',
     'M8.3 13.2l7.4 3.6',
   ],
+  bell: ['M6 17V11a6 6 0 0 1 12 0v6l2 2H4z', 'M10 21h4'],
   check: ['m5 12.5 4.5 4.5L19 7.5'],
   save: ['M5 4h11l3 3v13H5z', 'M8 4v5h7V4', 'M8 20v-6h8v6'],
   hourglass: [
