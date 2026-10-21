@@ -484,6 +484,9 @@ function CreateUserForm({
       <label class="check"
         ><input type="checkbox" name="skipConfirm" value="1" /> Skip repeating the password</label
       >
+      <label class="check"
+        ><input type="checkbox" name="remember" value="1" /> Keep me logged in</label
+      >
       <p class="hint password-hint">${noPasswordReset}</p>
       <label
         >Invite code${inviteRequired ? '' : ' (optional)'}
@@ -540,6 +543,9 @@ function LoginPage({ username = '', validationError }: LoginProps) {
             >Password
             <input name="password" type="password" maxlength=${passwordMaxLength} required
           /></label>
+          <label class="check"
+            ><input type="checkbox" name="remember" value="1" /> Keep me logged in</label
+          >
           <div class="actions"><${SubmitButton} icon="login" label="Log in" /></div>
           <p class="hint">${forgotPassword} <a href="/privacy">Privacy</a>.</p>
         </form>

@@ -24,7 +24,10 @@ import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 // session.
 //
 // Sessions never expire while they're used: every refresh restarts a 400-day clock, the
-// longest a browser keeps a cookie. Revoking a session (log out, log out everywhere, a
+// longest a browser keeps a cookie. That is for logins that ticked "Keep me logged in".
+// Without it the refresh cookie has no Max-Age, so the browser drops it when it closes,
+// and since browsers that restore sessions can keep such cookies for a long time, the
+// server also ends the session after a day without use. Revoking a session (log out, log out everywhere, a
 // replayed token) takes effect at its next refresh, so within the access token's lifetime.
 //
 // The access token also carries the user's colour theme (user_profiles.theme), read with
@@ -51,6 +54,12 @@ const refreshKey = deriveKey('refresh token')
 
 const accessTokenSeconds = 5 * 60
 const sessionIdleSeconds = 400 * 24 * 60 * 60
+// The idle limit of a session that didn't ask to be kept.
+const temporarySessionIdleSeconds = 24 * 60 * 60
+// SQL for the idle limit of a `sessions` row aliased `s`, given the parameter numbers of
+// the two limits in seconds.
+const idleLimit = (persistent: number, temporary: number) =>
+  `(CASE WHEN s.persistent THEN $${persistent} ELSE $${temporary} END) * interval '1 second'`
 // How long after a rotation the previous refresh token still counts as a racing tab.
 const raceWindowSeconds = 20
 
@@ -160,21 +169,22 @@ async function verifyRefreshToken(token: unknown): Promise<RefreshClaims | undef
     : undefined
 }
 
-function cookieOptions(maxAgeSeconds: number): CookieOptions {
+// No `maxAgeSeconds`: a browser-session cookie.
+function cookieOptions(maxAgeSeconds?: number): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
     secure: production,
     path: '/',
-    maxAge: maxAgeSeconds * 1000,
+    ...(maxAgeSeconds !== undefined && { maxAge: maxAgeSeconds * 1000 }),
   }
 }
 
-// A new access token, and a refresh token too unless `generation` is left out.
+// A new access token, and a refresh token too unless `refresh` is left out.
 async function setSessionCookies(
   response: Response,
   { user, sessionId, theme, timeZone, locale }: Session,
-  generation?: number,
+  refresh?: { generation: number; persistent: boolean },
 ): Promise<void> {
   const accessToken = await signJwt(
     accessKey,
@@ -183,14 +193,19 @@ async function setSessionCookies(
     accessTokenSeconds,
   )
   response.cookie(accessTokenCookie, accessToken, cookieOptions(accessTokenSeconds))
-  if (generation !== undefined) {
+  if (refresh) {
+    const idleSeconds = refresh.persistent ? sessionIdleSeconds : temporarySessionIdleSeconds
     const refreshToken = await signJwt(
       refreshKey,
-      { sid: sessionId, gen: generation },
+      { sid: sessionId, gen: refresh.generation },
       user.id,
-      sessionIdleSeconds,
+      idleSeconds,
     )
-    response.cookie(refreshTokenCookie, refreshToken, cookieOptions(sessionIdleSeconds))
+    response.cookie(
+      refreshTokenCookie,
+      refreshToken,
+      cookieOptions(refresh.persistent ? idleSeconds : undefined),
+    )
   }
   // A shared cache must never keep a response that hands out someone's tokens.
   response.set('Cache-Control', 'no-store')
@@ -203,10 +218,16 @@ export function clearSessionCookies(response: Response): void {
 }
 
 // Trades a refresh token for its session and the generation of the next refresh token
-// (undefined for a racing tab, which gets none). Undefined altogether means log out.
-async function refreshSession(
-  claims: RefreshClaims,
-): Promise<{ session: Session; generation: number | undefined } | undefined> {
+// (undefined for a racing tab, which gets none) and whether the session is persistent.
+// Undefined altogether means log out.
+async function refreshSession(claims: RefreshClaims): Promise<
+  | {
+      session: Session
+      generation: number | undefined
+      persistent: boolean
+    }
+  | undefined
+> {
   const { userId, sessionId, generation } = claims
   // Only one of several requests racing with the same token gets past the WHERE: the row
   // lock makes the others re-check it after the first one's update.
@@ -216,6 +237,7 @@ async function refreshSession(
        (SELECT locale FROM user_profiles WHERE user_id = u.id) AS locale`
   const rotated = await db().query<{
     generation: number
+    persistent: boolean
     username: string
     theme: string | null
     timezone: string | null
@@ -226,12 +248,12 @@ async function refreshSession(
      FROM users u
      WHERE s.id = $1 AND s.user_id = $2 AND u.id = s.user_id
        AND s.current_generation = $3 AND s.revoked_at IS NULL
-       AND s.last_used_at > now() - $4 * interval '1 second'
-     RETURNING s.current_generation AS generation, u.username, ${profileColumns}`,
-    [sessionId, userId, generation, sessionIdleSeconds],
+       AND s.last_used_at > now() - ${idleLimit(4, 5)}
+     RETURNING s.current_generation AS generation, s.persistent, u.username, ${profileColumns}`,
+    [sessionId, userId, generation, sessionIdleSeconds, temporarySessionIdleSeconds],
   )
   if (rotated.rows[0]) {
-    const { generation: next, username, timezone, locale } = rotated.rows[0]
+    const { generation: next, persistent, username, timezone, locale } = rotated.rows[0]
     return {
       session: {
         user: { id: userId, username },
@@ -241,11 +263,13 @@ async function refreshSession(
         locale: isLocale(locale) ? locale : null,
       },
       generation: next,
+      persistent,
     }
   }
 
   const { rows } = await db().query<{
     current: number
+    persistent: boolean
     username: string
     theme: string | null
     timezone: string | null
@@ -253,12 +277,12 @@ async function refreshSession(
     active: boolean
     racing: boolean
   }>(
-    `SELECT s.current_generation AS current, u.username, ${profileColumns},
-       s.revoked_at IS NULL AND s.last_used_at > now() - $3 * interval '1 second' AS active,
-       s.last_used_at > now() - $4 * interval '1 second' AS racing
+    `SELECT s.current_generation AS current, s.persistent, u.username, ${profileColumns},
+       s.revoked_at IS NULL AND s.last_used_at > now() - ${idleLimit(3, 4)} AS active,
+       s.last_used_at > now() - $5 * interval '1 second' AS racing
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = $1 AND s.user_id = $2`,
-    [sessionId, userId, sessionIdleSeconds, raceWindowSeconds],
+    [sessionId, userId, sessionIdleSeconds, temporarySessionIdleSeconds, raceWindowSeconds],
   )
   const row = rows[0]
   if (!row?.active) {
@@ -274,6 +298,7 @@ async function refreshSession(
         locale: isLocale(row.locale) ? row.locale : null,
       },
       generation: undefined,
+      persistent: row.persistent,
     }
   }
   // An older generation after the race window: someone else has a copy of this session.
@@ -296,7 +321,13 @@ async function resolveSession(request: Request, response: Response): Promise<Ses
     clearSessionCookies(response)
     return undefined
   }
-  await setSessionCookies(response, refreshed.session, refreshed.generation)
+  await setSessionCookies(
+    response,
+    refreshed.session,
+    refreshed.generation === undefined
+      ? undefined
+      : { generation: refreshed.generation, persistent: refreshed.persistent },
+  )
   return refreshed.session
 }
 
@@ -374,11 +405,13 @@ export const requireAdmin: RequestHandler = (
   })
 }
 
-// Login and sign-up. The session this browser had before, if any, ends.
+// Login and sign-up. The session this browser had before, if any, ends. `persistent` is
+// the "Keep me logged in" choice.
 export async function startSession(
   request: Request,
   response: Response,
   { id, username }: AuthenticatedUser,
+  persistent: boolean,
 ): Promise<void> {
   await revokeCurrentSession(request)
   const { rows } = await db().query<{
@@ -387,11 +420,11 @@ export async function startSession(
     timezone: string | null
     locale: string | null
   }>(
-    `INSERT INTO sessions (user_id) VALUES ($1)
+    `INSERT INTO sessions (user_id, persistent) VALUES ($1, $2)
      RETURNING id, (SELECT theme FROM user_profiles WHERE user_id = $1) AS theme,
        (SELECT timezone FROM user_profiles WHERE user_id = $1) AS timezone,
        (SELECT locale FROM user_profiles WHERE user_id = $1) AS locale`,
-    [id],
+    [id, persistent],
   )
   const theme = isTheme(rows[0].theme) ? rows[0].theme : defaultTheme
   const timeZone = timeZoneOrDefault(rows[0].timezone)
@@ -399,7 +432,7 @@ export async function startSession(
   await setSessionCookies(
     response,
     { user: { id, username }, sessionId: rows[0].id, theme, timeZone, locale },
-    0,
+    { generation: 0, persistent },
   )
 }
 
@@ -476,10 +509,10 @@ export function endDeletedAccountSessions(sessionIds: string[], response: Respon
 
 export async function countActiveSessions(userId: number): Promise<number> {
   const { rows } = await db().query<{ count: number }>(
-    `SELECT count(*)::int AS count FROM sessions
-     WHERE user_id = $1 AND revoked_at IS NULL
-       AND last_used_at > now() - $2 * interval '1 second'`,
-    [userId, sessionIdleSeconds],
+    `SELECT count(*)::int AS count FROM sessions s
+     WHERE s.user_id = $1 AND s.revoked_at IS NULL
+       AND s.last_used_at > now() - ${idleLimit(2, 3)}`,
+    [userId, sessionIdleSeconds, temporarySessionIdleSeconds],
   )
   return rows[0].count
 }
@@ -487,8 +520,8 @@ export async function countActiveSessions(userId: number): Promise<number> {
 // Revoked and idle rows can never be used again. Run at startup and hourly (src/server.ts).
 export async function deleteDeadSessions(): Promise<void> {
   await db().query(
-    `DELETE FROM sessions
-     WHERE revoked_at IS NOT NULL OR last_used_at < now() - $1 * interval '1 second'`,
-    [sessionIdleSeconds],
+    `DELETE FROM sessions s
+     WHERE s.revoked_at IS NOT NULL OR s.last_used_at < now() - ${idleLimit(1, 2)}`,
+    [sessionIdleSeconds, temporarySessionIdleSeconds],
   )
 }
