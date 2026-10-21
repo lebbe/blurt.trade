@@ -1296,3 +1296,23 @@ td {
   border-inline-start: 3px solid var(--accent, currentColor);
   padding-inline-start: 0.5rem;
 }
+
+/* The unread count: a pill in the theme's warning colour (every theme sets --warn). */
+.badge {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0 0.45em;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #0f1a1a;
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  letter-spacing: 0;
+  vertical-align: baseline;
+}
+
+.top-nav .badge {
+  font-size: 0.78rem;
+}

@@ -131,11 +131,18 @@ type NavItem = { href: string; label: string; icon: IconName; current: boolean }
 // get their profile and settings; everyone else the way in.
 function navItems(): NavItem[] {
   const { viewer, isAdmin, path, unreadNotifications } = pageContext()
-  const item = (href: string, label: string, icon: IconName, current = path === href) => ({
+  const item = (
+    href: string,
+    label: string,
+    icon: IconName,
+    current = path === href,
+    badge?: number,
+  ) => ({
     href,
     label,
     icon,
     current,
+    badge,
   })
   if (!viewer) {
     return [
@@ -158,9 +165,10 @@ function navItems(): NavItem[] {
       ? [
           item(
             `/${viewer.username}/notifications/`,
-            `Alerts (${unreadLabel(unreadNotifications)})`,
+            'Alerts',
             'bell',
             path.startsWith(`/${viewer.username}/notifications`),
+            unreadNotifications,
           ),
         ]
       : []),
@@ -174,14 +182,22 @@ export function unreadLabel(unread: number): string {
   return unread > 99 ? '99+' : String(unread)
 }
 
+// The count as a small pill in the theme's --warn colour. Screen readers get "3 unread"
+// instead of the bare number.
+export function UnreadBadge({ unread }: { unread: number }) {
+  return html`<span class="badge" aria-hidden="true">${unreadLabel(unread)}</span
+    ><span class="visually-hidden">${unreadLabel(unread)} unread</span>`
+}
+
 function TopNav() {
   const { viewer } = pageContext()
   return html`
     <nav class="top-nav" aria-label="Main">
       ${navItems().map(
-        ({ href, label, icon, current }) =>
+        ({ href, label, icon, current, badge }) =>
           html`<a href=${href} aria-current=${current ? 'page' : undefined}
-            ><${Icon} name=${icon} /><span>${label}</span></a
+            ><${Icon} name=${icon} /><span>${label}</span
+            >${badge !== undefined && html`<${UnreadBadge} unread=${badge} />`}</a
           >`,
       )}
       ${

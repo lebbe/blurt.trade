@@ -410,7 +410,7 @@ and the count is a number that refreshes with the page.
   removes the notifications that point at it, and deleting an account the ones to and
   from it, so nothing dangles. Read notifications older than 90 days are pruned hourly
   (`pruneNotifications`); unread ones stay.
-- **Alerts** in the top navigation (between Profile and Settings, with the count) shows only
+- **Alerts** in the top navigation (between Profile and Settings, with the count as a pill in the theme's `--warn` colour) shows only
   while the count is above 0, so phones get a short bar; Your corner always has the
   Notifications link.
 - **The count** in "Your corner" (`Notifications (32)`) is unread notifications, counted
