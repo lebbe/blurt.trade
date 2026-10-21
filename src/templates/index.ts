@@ -2105,7 +2105,10 @@ function PrivacyPage({ contact }: InfoPageData) {
         </li>
       </ul>
       <h2>Backups</h2>
-      <p>No backups of the database are currently being made.</p>
+      <p>
+        There are no backups. If the server's disk fails, the data is gone, and deleting your
+        account removes it everywhere.
+      </p>
       <h2>Deleting your account</h2>
       <p>
         <a href="/settings">Settings</a> has "Delete my account", which asks for your password. It

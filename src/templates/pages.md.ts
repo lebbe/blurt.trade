@@ -578,7 +578,7 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Backups
 
-    No backups of the database are currently being made.
+    There are no backups. If the server's disk fails, the data is gone, and deleting your account removes it everywhere.
 
     ## Deleting your account
 
