@@ -22,6 +22,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Cap the app's logs (/privacy says they are kept only until rotated out).
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
     ports:
       - '127.0.0.1:3001:3000'
     volumes:

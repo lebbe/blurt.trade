@@ -1354,7 +1354,7 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
   `
 }
 
-// The colour theme, for this browser (a cookie, see src/themes.ts). Each choice shows a
+// The colour theme, saved on the account and carried in the access token (see src/themes.ts). Each choice shows a
 // strip of its colours (classes in public/style.css), so no JS is needed to preview.
 function ThemeForm() {
   const current = pageContext().theme
@@ -1940,6 +1940,8 @@ function TermsPage({ contact }: InfoPageData) {
         The owner can remove any blurt or profile, and close any account, at any time and without
         notice, for example when it breaks these terms.
       </p>
+      <h2>Age</h2>
+      <p>You must be at least 13 years old to use blurt.trade.</p>
       <h2>Your password</h2>
       <p>${noPasswordReset}</p>
       <h2>No warranty</h2>
@@ -1963,6 +1965,15 @@ function PrivacyPage({ contact }: InfoPageData) {
       <p>
         blurt.trade collects as little as it can. No email address, no real name, no phone number.
         No analytics, no ads, no tracking, and nothing loaded from other sites.
+      </p>
+      <h2>Who is responsible</h2>
+      <p>
+        Lars-Erik Bruce is responsible for the site and its data (the controller under the GDPR). To
+        reach him: <${PrivateContact} contact=${contact} />.
+      </p>
+      <p>
+        blurt.trade runs on a server owned and operated by a private individual in Norway, who hosts
+        it on Lars-Erik's behalf and has access to it only to keep it running.
       </p>
       <h2>What is stored</h2>
       <p>For each account:</p>
@@ -2027,31 +2038,70 @@ function PrivacyPage({ contact }: InfoPageData) {
         <li>
           No IP addresses in the database or in the app's logs. Rate limiting counts requests per IP
           address in memory only, until the limit has refilled (an hour at most), and never writes
-          them down. The web server's access log keeps addresses shortened (the last part dropped)
-          for at most 14 days, to spot abuse.
+          them down.
+        </li>
+        <li>
+          The web server's access log, though, does keep the full IP address, time, method and path
+          of each request for 14 days, to spot abuse. It doesn't name your account, but together
+          with the app's logs it could be linked to it.
         </li>
         <li>
           The app's logs hold what was asked for and how it went (method, path, status, time), never
-          what you posted, your password or your cookies.
+          what you posted, your password or your cookies. They are kept only until they are rotated
+          out: they are capped by size, so roughly days to weeks.
         </li>
       </ul>
       <h2>Cookies</h2>
       <p>
-        Three, all needed for the site to work, none for tracking, so there's no cookie banner. All
-        are HttpOnly and only sent to blurt.trade.
+        Three, all strictly necessary for things you ask the site to do, none for tracking or
+        analytics, so there's no cookie banner. Visitors who aren't logged in get none. All three
+        are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade. The site uses no
+        JavaScript, so nothing is stored in your browser in any other way.
       </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Cookie</th>
+            <th>What it's for</th>
+            <th>Lasts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>__Host-access_token</code></td>
+            <td>Shows you're logged in, with your colour theme, time zone and language</td>
+            <td>5 minutes</td>
+          </tr>
+          <tr>
+            <td><code>__Host-refresh_token</code></td>
+            <td>Keeps you logged in and renews the one above</td>
+            <td>
+              Until you close the browser, or, if you ticked <em>Keep me logged in</em>, 400 days
+              without a visit. Gone when you log out.
+            </td>
+          </tr>
+          <tr>
+            <td><code>recent_write</code></td>
+            <td>
+              After you post or change something, makes sure you see your own change straight away
+            </td>
+            <td>10 seconds</td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>Why we may use your data</h2>
       <ul>
         <li>
-          <code>access_token</code>: shows you're logged in, and which colour theme you picked.
-          Lasts 5 minutes.
+          Your account, posts, follows, likes and the rest, to provide the service you signed up for
+          (contract, GDPR Art. 6(1)(b)).
         </li>
         <li>
-          <code>refresh_token</code>: keeps you logged in. Renewed as you use the site; expires
-          after 400 days without a visit, or when you log out.
+          The optional coarse location, because you chose to set it (consent, Art. 6(1)(a)). Clear
+          it to withdraw.
         </li>
         <li>
-          <code>recent_write</code>: set for a few seconds after you post or change something, so
-          you see your own change straight away.
+          Rate limiting and the web server's access log, to protect the site from abuse (legitimate
+          interests, Art. 6(1)(f)).
         </li>
       </ul>
       <h2>Backups</h2>
@@ -2070,13 +2120,14 @@ function PrivacyPage({ contact }: InfoPageData) {
         blurt someone replied to shows as an empty placeholder, with no text and no author, so the
         thread still reads. The invite code you signed up with stays marked as used, with nothing
         linking it to you. Your username goes on the list of retired names, with nothing else, so
-        nobody can sign up as you later. The count of sign-ups so far doesn't go down. Backups still
-        hold the account until they expire, 30 days at most.
+        nobody can sign up as you later. The count of sign-ups so far doesn't go down.
       </p>
       <h2>Your rights</h2>
       <p>
-        You can ask what is stored about you, and have it corrected or deleted:
-        <${PrivateContact} contact=${contact} />.
+        You can ask what is stored about you, and have it corrected, deleted or handed to you in a
+        form you can reuse (data portability), and you can object to how it is used:
+        <${PrivateContact} contact=${contact} />. You can also complain to the Norwegian Data
+        Protection Authority, <a href="https://www.datatilsynet.no">Datatilsynet</a>.
       </p>
     <//>
   `
