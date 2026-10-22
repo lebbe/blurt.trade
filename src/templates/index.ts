@@ -1242,16 +1242,16 @@ function ProfileLinks({ profile }: { profile: UserProfile }) {
 }
 
 // Opt-in, coarse location. Clicking the map image submits the pixel (location.x,
-// location.y) with no JS; the server snaps it to a grid cell. The number fields are the
-// fallback for keyboards, which can't click a spot. The marker shows exactly what is stored.
+// location.y) with no JS; the server snaps it to a grid cell. The marker shows exactly what
+// is stored.
 function LocationForms({ location, error }: { location: GeoPoint | null; error?: string }) {
   const marker = location && pointToPixel(location)
   return html`
-    <section class="panel" aria-label="Location" id="location">
-      <h2>Location</h2>
+    <section class="panel" aria-label="Location, time zone and language" id="location">
+      <h2>Location, time zone and language</h2>
       <p>
-        Optional. Set it to see <a href="/near">blurts near you</a>. Only ${gridDescription} is
-        stored, never the exact spot, and nobody else can see it.
+        Optional. Set it to see <a href="/near">blurts near you</a>. Setting it also sets your time
+        zone to that place's.
       </p>
       <${ValidationError} message=${error} />
       <p class="location-status">
@@ -1295,33 +1295,6 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
           </div>
         </div>
       </form>
-      <form method="post" action="/api/location" class="field-row">
-        <label
-          >Latitude (-90 to 90, south is negative)
-          <input
-            type="number"
-            name="lat"
-            min="-90"
-            max="90"
-            step="any"
-            required
-            value=${location?.lat ?? ''}
-          />
-        </label>
-        <label
-          >Longitude (-180 to 180, west is negative)
-          <input
-            type="number"
-            name="lon"
-            min="-180"
-            max="180"
-            step="any"
-            required
-            value=${location?.lon ?? ''}
-          />
-        </label>
-        <div class="actions"><${SubmitButton} icon="pin" label="Set location" /></div>
-      </form>
       ${
         location &&
         html`<form method="post" action="/api/location" class="inline">
@@ -1329,6 +1302,7 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
           <${SubmitButton} icon="trash" label="Remove my location" kind="secondary" />
         </form>`
       }
+      <${TimeZoneForm} />
     </section>
   `
 }
@@ -1436,35 +1410,36 @@ function ThemeForm() {
 function TimeZoneForm() {
   const { timeZone: current, pickedLocale: locale } = pageContext()
   return html`
-    <section class="panel" aria-label="Time zone" id="timezone">
-      <h2>Time zone and language</h2>
+    <div id="timezone">
       <p class="tiny">
         Times are shown in UTC until you pick your time zone. The language decides how dates and
         times are written (17.10.2026 14:37 or 10/17/2026 02:37 PM); until you pick one, your
         browser's language is used. Saved on your account, so it follows you to every device.
       </p>
       <form method="post" action="/api/timezone">
-        <label>
-          Time zone
-          <select name="timezone" required>
-            ${timeZones.map(
-              (zone) => html`<option value=${zone} selected=${zone === current}>${zone}</option>`,
-            )}
-          </select>
-        </label>
-        <label>
-          Language
-          <select name="locale">
-            <option value="" selected=${locale === null}>Same as my browser</option>
-            ${locales.map(
-              (id) =>
-                html`<option value=${id} selected=${id === locale}>${localeLabel(id)}</option>`,
-            )}
-          </select>
-        </label>
+        <div class="field-grid">
+          <label>
+            Time zone
+            <select name="timezone" required>
+              ${timeZones.map(
+                (zone) => html`<option value=${zone} selected=${zone === current}>${zone}</option>`,
+              )}
+            </select>
+          </label>
+          <label>
+            Language
+            <select name="locale">
+              <option value="" selected=${locale === null}>Same as my browser</option>
+              ${locales.map(
+                (id) =>
+                  html`<option value=${id} selected=${id === locale}>${localeLabel(id)}</option>`,
+              )}
+            </select>
+          </label>
+        </div>
         <div class="actions"><${SubmitButton} icon="save" label="Save time settings" /></div>
       </form>
-    </section>
+    </div>
   `
 }
 
@@ -1568,7 +1543,7 @@ function ProfileEditForm({
         ['#profile', 'Profile and links'],
         ['#card', 'Share card'],
         ['#avatar', 'Avatar'],
-        ['#location', 'Location'],
+        ['#location', 'Location and time'],
         ['#theme', 'Theme'],
         ['#notifications', 'Notifications'],
       ]}
@@ -1633,7 +1608,6 @@ ${profile.bio}</textarea>
       <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
-      <${TimeZoneForm} />
       <${NotificationsForm} settings=${notifications} />
     <//>
   `

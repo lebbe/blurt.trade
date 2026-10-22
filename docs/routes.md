@@ -449,11 +449,19 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
     (equirectangular, 720 × 360 px, 2 px per degree). The browser sends the pixel as a
     plain form POST, so it works without JS. Pixels outside the map are a 400. `0,0` is
     what a keyboard sends for an image input, so it counts as no click (a 400 asking for
-    a click or numbers).
-  - `lat` and `lon` (degrees, `-90..90` and `-180..180`): the fallback form with two
-    number fields, or JSON `{ "lat": 59.91, "lon": 10.75 }`.
+    a click).
+  - `lat` and `lon` (degrees, `-90..90` and `-180..180`): JSON only, for API
+    clients: `{ "lat": 59.91, "lon": 10.75 }`.
   - `clear` (any non-empty value, or JSON `{ "clear": true }`): the "Remove my
     location" button.
+- Where `lat` and `lon` are used, outside tests. No page of the site sends them: the edit
+  page only sends the map click (`location.x`/`location.y`) and `clear`.
+  - `src/templates/pages.md.ts`: the Markdown version of `/:username/edit` (Location
+    section) and of `/near` (when no location is set) tell API clients to
+    `POST /api/location` with `lat` and `lon`. This is how an agent sets a location, since
+    a map pixel is no use to it.
+  - `http/home.http`: the "Set your location from fetch()" example request.
+  - `tickets/013b-geo-picker-enhancement.md`: planned. The JS map will post `{ lat, lon }`.
 - Errors are 400 with `field` `location`, `lat` or `lon`. Forms get the edit page again
   with the error.
 - The edit page shows what is stored, as text and as a marker on the map.

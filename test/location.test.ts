@@ -60,17 +60,14 @@ test('locations are snapped to the grid, validated, and shown only to their owne
   assert.equal(precise.statusCode, 200)
   assert.deepEqual(JSON.parse(precise.body), { location: { lat: 59.5, lon: 10.5 } })
 
-  // The fallback form for keyboards, and the edges of the world.
-  const typed = await request('POST', '/api/location', 'lat=-33.8688&lon=151.2093', { cookie })
-  assert.equal(typed.statusCode, 303)
-  assert.equal(await storedLocation('Lars'), 'POINT(151.5 -33.5)')
+  // The edges of the world.
   const corner = await sendJson('/api/location', { lat: 90, lon: 180 }, { cookie })
   assert.deepEqual(JSON.parse(corner.body), { location: { lat: 89.5, lon: -179.5 } })
 
   // A keyboard "click" on the image sends 0,0: the form comes back with the error.
   const keyboard = await request('POST', '/api/location', 'location.x=0&location.y=0', { cookie })
   assert.equal(keyboard.statusCode, 400)
-  assert.match(keyboard.body, /Click a spot on the map, or enter a latitude and longitude\./)
+  assert.match(keyboard.body, /Click a spot on the map\./)
   assert.match(keyboard.body, /<h1>Edit profile: Lars<\/h1>/)
 
   const invalid: [Record<string, unknown>, string][] = [
@@ -174,4 +171,25 @@ test('"blurts near you" lists blurts from people within the radius, without JS',
   const page = await request('GET', '/near?radius=100', '', { cookie })
   assert.match(page.body, /<a href="\/near\?radius=100&amp;before=[^"]+" rel="next">Older blurts/)
   assert.deepEqual(texts(await near(`?radius=100&before=${first.next}`)), ['old 1'])
+})
+
+test('setting a location also sets the time zone of that place, removing it keeps the zone', async () => {
+  const cookie = await createSession('Lars')
+  const zone = async () =>
+    (
+      await db().query(
+        `SELECT p.timezone FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE u.username = 'Lars'`,
+      )
+    ).rows[0].timezone
+
+  assert.equal(await zone(), null)
+  const oslo = await request('POST', '/api/location', 'location.x=381&location.y=60', { cookie })
+  assert.equal(await zone(), 'Europe/Oslo')
+  assert.ok(oslo.headers['set-cookie']?.some((header) => header.startsWith('access_token=')))
+
+  await request('POST', '/api/location', 'lat=-33.8688&lon=151.2093', { cookie })
+  assert.equal(await zone(), 'Australia/Sydney')
+
+  await request('POST', '/api/location', 'clear=1', { cookie })
+  assert.equal(await zone(), 'Australia/Sydney')
 })

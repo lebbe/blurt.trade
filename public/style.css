@@ -243,7 +243,9 @@ code {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  /* The main column fits the 720 px location map (plus panel padding and borders) on screens
+     from about 1140 px wide; with 2fr/1fr it was a few px too narrow even on the widest. */
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 18px;
   align-items: start;
 }
@@ -483,15 +485,6 @@ input[type='radio'] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   gap: 10px;
-}
-
-.field-row {
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  align-items: end;
-}
-
-.field-row .actions {
-  grid-column: 1 / -1;
 }
 
 button,
@@ -1157,6 +1150,9 @@ button.danger,
 
 /* The location map: clicking the image sends the spot, no JS. */
 .map {
+  /* As wide as the map, no wider; narrower screens scroll it sideways. */
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
   border: 2px solid var(--line-soft);
   background: #fffdf8;
@@ -1164,6 +1160,12 @@ button.danger,
 
 .panel .map-form {
   display: block;
+  margin-bottom: 12px;
+}
+
+/* Air between the parts of the location panel: map, remove button, time settings. */
+#timezone {
+  margin-top: 16px;
 }
 
 .map-inner {

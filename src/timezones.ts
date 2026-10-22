@@ -4,6 +4,8 @@
 // theme. Browsers send no time zone and the site runs without JS, so everyone who hasn't
 // picked one, logged out visitors included, gets UTC, and the zone is always shown next to
 // the time. The 12 or 24 hour clock follows the browser's Accept-Language instead.
+import tzLookup from 'tz-lookup'
+
 export const defaultTimeZone = 'UTC'
 
 // IANA names ("Europe/Oslo"). UTC is added by hand: not every runtime lists it.
@@ -82,4 +84,18 @@ export function formatTimestamp(date: Date, timeZone: string, locale: string): s
   })
   const time = date.toLocaleTimeString(locale, { timeZone, hour: '2-digit', minute: '2-digit' })
   return `${day} ${time}${timeZone === defaultTimeZone ? ' UTC' : ''}`
+}
+
+// The zone a place is in, for setting it along with a location. Undefined where the lookup
+// finds none or names one the picker doesn't list. Old aliases (Europe/Kiev) are mapped to
+// the canonical name (Europe/Kyiv) first.
+export function timeZoneAt({ lat, lon }: { lat: number; lon: number }): string | undefined {
+  try {
+    const { timeZone } = new Intl.DateTimeFormat('en', {
+      timeZone: tzLookup(lat, lon),
+    }).resolvedOptions()
+    return isTimeZone(timeZone) ? timeZone : undefined
+  } catch {
+    return undefined
+  }
 }

@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express'
 import { mapHeight, mapWidth, pixelToPoint, snapToGrid, type GeoPoint } from '../geo.ts'
-import { clearSessionCookies, requireAuth } from '../middleware/auth.ts'
+import { clearSessionCookies, requireAuth, setSessionTime } from '../middleware/auth.ts'
+import { timeZoneAt } from '../timezones.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError, sendFormErrors, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import {
@@ -11,6 +12,7 @@ import {
   markViewerFlags,
   parseCursor,
   setLocation,
+  setTimeSettings,
 } from './state.ts'
 import { renderNearPage, renderProfileEditPage } from '../templates/index.ts'
 import { nearMarkdown } from '../templates/pages.md.ts'
@@ -38,7 +40,7 @@ function toNumber(value: unknown): number | undefined {
 
 // The body of POST /api/location, any of: `clear` (the "Remove my location" button or
 // `{ clear: true }`), `location.x` + `location.y` (a click on the map image) or `lat` +
-// `lon` (the fallback form, or JSON).
+// `lon` (JSON, for API clients: the edit page has no form for it).
 export function parseLocationInput(body: unknown): LocationInput {
   const values = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
   if (isGiven(values.clear)) {
@@ -53,7 +55,7 @@ export function parseLocationInput(body: unknown): LocationInput {
       return {
         error: {
           field: 'location',
-          message: 'Click a spot on the map, or enter a latitude and longitude.',
+          message: 'Click a spot on the map.',
         },
       }
     }
@@ -117,6 +119,12 @@ locationRouter.post(
         response.redirect(303, '/')
       }
       return
+    }
+
+    // Setting a location also sets the time zone of that place. Removing it leaves the zone.
+    const timeZone = location ? timeZoneAt(location) : undefined
+    if (timeZone && (await setTimeSettings(viewer.id, { timeZone }))) {
+      await setSessionTime(request, response, { timeZone })
     }
 
     sendFormSuccess(request, response, {
