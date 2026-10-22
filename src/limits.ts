@@ -92,7 +92,7 @@ export function normalizedWebUrl(value: string): string | undefined {
     }
   })
   if (!stripped) {
-    return value
+    return value.trim()
   }
   url.search = searchParams.toString()
   return url.href

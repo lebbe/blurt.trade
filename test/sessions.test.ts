@@ -151,8 +151,8 @@ test('logging out revokes the session, and logging in again starts a new one', a
   const login = await request('POST', '/login', 'username=Lars&password=correct-horse')
   assert.equal(viewerName(await feedWithRefreshToken(cookiesSet(login).refresh_token)), 'Lars')
   assert.deepEqual(await sessionRows(), [
-    { generation: 0, revoked: true },
-    { generation: 1, revoked: false },
+    { generation: 0, revoked: true, persistent: false },
+    { generation: 1, revoked: false, persistent: false },
   ])
 })
 
