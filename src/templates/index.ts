@@ -1244,8 +1244,48 @@ function ProfileLinks({ profile }: { profile: UserProfile }) {
 // Opt-in, coarse location. Clicking the map image submits the pixel (location.x,
 // location.y) with no JS; the server snaps it to a grid cell. The marker shows exactly what
 // is stored.
-function LocationForms({ location, error }: { location: GeoPoint | null; error?: string }) {
+function LocationMap({ location, returnTo }: { location: GeoPoint | null; returnTo?: 'near' }) {
   const marker = location && pointToPixel(location)
+  return html`
+    <form method="post" action="/api/location" class="map-form">
+      ${returnTo && html`<input type="hidden" name="return" value=${returnTo} />`}
+      <div class="map">
+        <div class="map-inner">
+          <input
+            type="image"
+            name="location"
+            src=${mapUrl}
+            width=${mapWidth}
+            height=${mapHeight}
+            alt="World map: click to set your location"
+          />
+          ${
+            marker &&
+            html`<svg
+              class="map-marker"
+              width=${mapWidth}
+              height=${mapHeight}
+              viewBox="0 0 ${mapWidth} ${mapHeight}"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle
+                cx=${marker.x}
+                cy=${marker.y}
+                r="6"
+                fill="#a32020"
+                stroke="#fffdf8"
+                stroke-width="2"
+              />
+            </svg>`
+          }
+        </div>
+      </div>
+    </form>
+  `
+}
+
+function LocationForms({ location, error }: { location: GeoPoint | null; error?: string }) {
   return html`
     <section class="panel" aria-label="Location, time zone and language" id="location">
       <h2>Location, time zone and language</h2>
@@ -1261,40 +1301,7 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
             : "You haven't set a location."
         }
       </p>
-      <form method="post" action="/api/location" class="map-form">
-        <div class="map">
-          <div class="map-inner">
-            <input
-              type="image"
-              name="location"
-              src=${mapUrl}
-              width=${mapWidth}
-              height=${mapHeight}
-              alt="World map: click to set your location"
-            />
-            ${
-              marker &&
-              html`<svg
-                class="map-marker"
-                width=${mapWidth}
-                height=${mapHeight}
-                viewBox="0 0 ${mapWidth} ${mapHeight}"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <circle
-                  cx=${marker.x}
-                  cy=${marker.y}
-                  r="6"
-                  fill="#a32020"
-                  stroke="#fffdf8"
-                  stroke-width="2"
-                />
-              </svg>`
-            }
-          </div>
-        </div>
-      </form>
+      <${LocationMap} location=${location} />
       ${
         location &&
         html`<form method="post" action="/api/location" class="inline">
@@ -1747,6 +1754,17 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
         <${SupportLinks} />
       `}
     >
+      ${
+        !location &&
+        html`<section class="panel" aria-label="Set your location">
+          <h2>Set your location</h2>
+          <p>
+            You haven't set a location. Click the map to pick one and see blurts from people near
+            you. Only ${gridDescription} is stored.
+          </p>
+          <${LocationMap} location=${location} returnTo="near" />
+        </section>`
+      }
       <${Composer} heading="Blurt from your area" placeholder="Local thought? Share it." />
       ${
         location
@@ -1755,7 +1773,7 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                 <h2>Radius</h2>
                 <p>
                   From people within ${radius} km of ${formatLocation(location)}.${' '}
-                  <a href=${edit}>Change your location</a>
+                  <a href=${`${edit}#location`}>Change your location</a>
                 </p>
                 <form method="get" action="/near" class="radius-form">
                   <label
@@ -1790,13 +1808,7 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                 }
               </section>
             `
-          : html`<section class="panel">
-              <p>
-                You haven't set a location.${' '}
-                <a href=${edit}>Click the map on your edit page</a> to see blurts from people near
-                you.
-              </p>
-            </section>`
+          : null
       }
     <//>
   `

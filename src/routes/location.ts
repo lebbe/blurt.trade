@@ -128,7 +128,7 @@ locationRouter.post(
     }
 
     sendFormSuccess(request, response, {
-      redirect: `/${viewer.username}/edit`,
+      redirect: request.body?.return === 'near' ? '/near' : `/${viewer.username}/edit#location`,
       data: { location },
     })
   },

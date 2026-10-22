@@ -31,7 +31,7 @@ test('sets, moves and removes a coarse location by clicking the map without JS',
   // Pixel (381, 60) is around 59.75° N, 10.75° E: stored as the middle of its 1° cell.
   const click = await request('POST', '/api/location', 'location.x=381&location.y=60', { cookie })
   assert.equal(click.statusCode, 303)
-  assert.equal(click.location, '/Lars/edit')
+  assert.equal(click.location, '/Lars/edit#location')
   assert.equal(await storedLocation('Lars'), 'POINT(10.5 59.5)')
 
   const after = await request('GET', '/Lars/edit', '', { cookie })
@@ -47,7 +47,7 @@ test('sets, moves and removes a coarse location by clicking the map without JS',
 
   const removed = await request('POST', '/api/location', 'clear=1', { cookie })
   assert.equal(removed.statusCode, 303)
-  assert.equal(removed.location, '/Lars/edit')
+  assert.equal(removed.location, '/Lars/edit#location')
   assert.equal(await storedLocation('Lars'), null)
   assert.match((await request('GET', '/Lars/edit', '', { cookie })).body, /You haven't set/)
 })
@@ -140,7 +140,7 @@ test('"blurts near you" lists blurts from people within the radius, without JS',
 
   const html = await request('GET', '/near?radius=500', '', { cookie })
   assert.match(html.body, /<form method="get" action="\/near"/)
-  assert.match(html.body, /10\.5° E\. <a href="\/Lars\/edit">Change your location<\/a>/)
+  assert.match(html.body, /10\.5° E\. <a href="\/Lars\/edit#location">Change your location<\/a>/)
   assert.match(html.body, /<option value="500" selected>500 km<\/option>/)
   assert.match(html.body, /hello from Stockholm/)
   assert.doesNotMatch(html.body, /hello from nowhere|my own blurt/)
@@ -158,7 +158,8 @@ test('"blurts near you" lists blurts from people within the radius, without JS',
     await request('POST', '/login', 'username=Zed&password=correct-horse')
   ).setCookie?.[0]?.split(';', 1)[0]
   const zed = await request('GET', '/near', '', { cookie: zedCookie ?? '' })
-  assert.match(zed.body, /You haven't set a location\. <a href="\/Zed\/edit">/)
+  assert.match(zed.body, /<input type="hidden" name="return" value="near"\/>/)
+  assert.match(zed.body, /<input type="image" name="location"/)
 
   // Paging keeps the radius, as a plain link.
   await db().query(
