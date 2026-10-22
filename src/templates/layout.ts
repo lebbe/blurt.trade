@@ -147,6 +147,7 @@ function navItems(): NavItem[] {
   if (!viewer) {
     return [
       item('/', 'Home', 'home'),
+      item('/people', 'People', 'people'),
       item('/search', 'Search', 'search'),
       item('/login', 'Log in', 'login'),
       item('/signup', 'Sign up', 'personPlus'),
@@ -156,6 +157,7 @@ function navItems(): NavItem[] {
   return [
     item('/', 'Home', 'home'),
     item('/everyone', 'Everyone', 'globe'),
+    item('/people', 'People', 'people'),
     item('/search', 'Search', 'search'),
     item('/near', 'Near', 'pin'),
     item(profile, 'Profile', 'person', path === profile || path === `/${viewer.username}/edit`),

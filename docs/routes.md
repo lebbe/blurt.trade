@@ -31,6 +31,7 @@ carry `Vary: Accept`.
 | `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next }`                       | 400, 401, 403 not owner |
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
+| `/people`          | —     | `{ viewer, people, next }`                                                    | 400 bad cursor          |
 | `/login`           | —     | `{ viewer }`                                                                  |                         |
 | `/signup`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
 | `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
@@ -112,6 +113,12 @@ carry `Vary: Accept`.
   `radii` (50, 100, 250, 500, 1000, 2500), 250 when left out, anything else a 400. The
   HTML picks it with a `<select>` in a GET form. Without a location, `blurts` is empty
   and the page links to the edit page.
+- `/people` lists everyone with a live account, alphabetically (case-insensitive), 50 a
+  page. `people` is `{ username, avatar, bio, joinedAt, blurtCount, followerCount,
+  lastBlurtAt }`: `blurtCount` counts blurts, replies and quotes that still exist (not
+  plain reblurts), `lastBlurtAt` is `null` for someone who never blurted. `next` is the
+  cursor for `/people?after=<next>`, the last username of the page in lower case (keyset
+  paging on `lower(username)`, never OFFSET); `null` on the last page.
 - `/search?q=<words>` searches usernames and blurt text. Every HTML page has the search
   box, a plain GET form (`role="search"`), above its own header, so it works without JS.
   `users` is `[{ username, avatar }]`: usernames containing `q` (a leading `@` is

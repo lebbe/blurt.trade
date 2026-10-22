@@ -68,6 +68,7 @@ export const reservedUsernames = new Set([
   'login',
   'near',
   'og', // /og/:file, the share card images
+  'people', // everyone, A to Z
   'pictures', // /pictures/:file, the drawings of blurt pictures
   'privacy',
   'robots.txt',
@@ -80,6 +81,7 @@ export const reservedUsernames = new Set([
   'terms',
   // likely future pages
   'account',
+  'accounts',
   'assets',
   'discover',
   'explore',

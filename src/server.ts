@@ -32,6 +32,7 @@ import { homeRouter } from './routes/home.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
 import { notificationsRouter } from './routes/notifications.ts'
+import { peopleRouter } from './routes/people.ts'
 import { picturesRouter } from './routes/pictures.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
@@ -96,6 +97,7 @@ app.use(usersRouter)
 app.use(avatarRouter)
 app.use(adminRouter)
 app.use(searchRouter)
+app.use(peopleRouter)
 app.use(themeRouter)
 app.use(timeZoneRouter)
 app.use(notificationsRouter) // before profilesRouter, like locationRouter

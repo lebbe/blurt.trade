@@ -481,6 +481,54 @@ export async function searchUsers(query: string): Promise<UserMatch[]> {
   return rows
 }
 
+// A row of /people. Counts are blurts and replies with text (not plain reblurts, not
+// deleted ones). `lastBlurtAt` is null for someone who has never blurted.
+export type Person = {
+  username: string
+  avatar: Avatar
+  bio: string
+  joinedAt: Date
+  blurtCount: number
+  followerCount: number
+  lastBlurtAt: Date | null
+}
+
+const peoplePageSize = 50
+const peopleCursorPattern = /^[a-z0-9_]{1,40}$/
+
+// From the query string: null when there is no cursor, undefined when it is malformed.
+// The cursor is the last username of the previous page, in lower case (they are unique
+// regardless of case, see users_username_lower_key).
+export function parsePeopleCursor(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return null
+  }
+  return typeof value === 'string' && peopleCursorPattern.test(value) ? value : undefined
+}
+
+// Everyone with a live account, alphabetically, keyset-paged on lower(username) so it
+// walks users_username_lower_key and never uses OFFSET. The counts are subqueries run only
+// for the page's rows: blurts_user_id_created_at_idx and follows_followed_user_id_idx
+// serve them.
+export async function listPeople(after: string | null): Promise<Page<Person>> {
+  const { rows } = await dbRead().query<Person>(
+    `SELECT u.username, p.avatar, p.bio, u.created_at AS "joinedAt",
+       (SELECT count(*)::int FROM blurts b
+         WHERE b.user_id = u.id AND b.deleted_at IS NULL AND b.text IS NOT NULL) AS "blurtCount",
+       (SELECT count(*)::int FROM follows f WHERE f.followed_user_id = u.id) AS "followerCount",
+       (SELECT max(b.created_at) FROM blurts b
+         WHERE b.user_id = u.id AND b.deleted_at IS NULL AND b.text IS NOT NULL) AS "lastBlurtAt"
+     FROM users u JOIN user_profiles p ON p.user_id = u.id
+     WHERE u.deleted_at IS NULL AND ($1::text IS NULL OR lower(u.username) > $1)
+     ORDER BY lower(u.username)
+     LIMIT $2`,
+    [after, peoplePageSize + 1],
+  )
+  const items = rows.slice(0, peoplePageSize)
+  const next = rows.length > peoplePageSize ? items[items.length - 1].username.toLowerCase() : null
+  return { items, next }
+}
+
 // Must match the expression of blurts_text_search_idx exactly, or the index isn't used.
 // websearch_to_tsquery takes any input without a syntax error: words are ANDed, "quoted
 // phrases", `or` and `-word` work like a web search. Punctuation alone matches nothing.

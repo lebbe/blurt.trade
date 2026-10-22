@@ -26,6 +26,7 @@ import {
   notificationsPath,
   notificationVerbs,
   nearPageUrl,
+  peoplePageUrl,
   noPasswordReset,
   olderBlurtsUrl,
   parentUrl,
@@ -42,6 +43,7 @@ import {
   type InfoPageData,
   type NearData,
   type NotificationsData,
+  type PeopleData,
   type ProfileEditData,
   type ProfilePageData,
   type SearchData,
@@ -456,6 +458,23 @@ export function notificationsMarkdown({
     }
 
     ${next && link('Older notifications', notificationsPath(viewer.username, { read, before: next }))}
+  `
+}
+
+export function peopleMarkdown({ people, next }: PeopleData): Markdown {
+  return md`
+    # People
+
+    ${home}
+
+    Everyone, alphabetically.
+
+    ${people.map(
+      (person) =>
+        md`- ${link(person.username, `/${person.username}/`)}: ${plural(person.blurtCount, 'blurt')}, ${plural(person.followerCount, 'follower')}, joined ${person.joinedAt.toISOString().slice(0, 10)}${person.lastBlurtAt ? `, last blurt ${person.lastBlurtAt.toISOString().slice(0, 10)}` : ''}`,
+    )}
+
+    ${next && link('Next', peoplePageUrl(next))}
   `
 }
 
