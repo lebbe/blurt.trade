@@ -7,9 +7,11 @@ import {
   deleteBlurts,
   dismissReports,
   getBlurt,
+  getSignupLimits,
   getUserByUsername,
   listOpenReports,
   mintInviteCodes,
+  setSignupLimits,
 } from './state.ts'
 import { renderAdminReportsPage, renderAdminToolsPage } from '../templates/index.ts'
 import { adminReportsMarkdown, adminToolsMarkdown } from '../templates/pages.md.ts'
@@ -21,13 +23,36 @@ const maxMintedCodes = 1000
 export const adminRouter = Router()
 
 // The forms for the admin APIs below.
-adminRouter.get('/admin', requireAdmin, (request, response) => {
+adminRouter.get('/admin', requireAdmin, async (request, response) => {
   represent(
     request,
     response,
-    { viewer: response.locals.authenticatedUser },
+    { viewer: response.locals.authenticatedUser, limits: await getSignupLimits() },
     { html: renderAdminToolsPage, markdown: adminToolsMarkdown },
   )
+})
+
+// The soft limit is where sign-up starts needing an invite code, the hard limit where it
+// closes (waitlist). Whole numbers, soft <= hard. Takes effect at once: the sign-up state
+// is worked out from the counter on every request.
+adminRouter.post('/api/admin/signup-limits', requireAdmin, async (request, response) => {
+  const softLimit = Number(request.body?.softLimit)
+  const hardLimit = Number(request.body?.hardLimit)
+  const valid = (n: number) => Number.isInteger(n) && n >= 0 && n <= 2_000_000_000
+  if (!valid(softLimit) || !valid(hardLimit)) {
+    sendError(request, response, 400, 'Limits must be whole numbers, 0 or more')
+    return
+  }
+  if (hardLimit < softLimit) {
+    sendError(request, response, 400, 'The hard limit can not be lower than the soft limit')
+    return
+  }
+  await setSignupLimits(softLimit, hardLimit)
+  if (wantsJson(request)) {
+    response.json(await getSignupLimits())
+    return
+  }
+  sendFormSuccess(request, response, { redirect: '/admin' })
 })
 
 adminRouter.get('/admin/reports', requireAdmin, async (request, response) => {
@@ -98,6 +123,7 @@ adminRouter.post(
       .send(
         renderAdminToolsPage({
           viewer: response.locals.authenticatedUser,
+          limits: await getSignupLimits(),
           minted: { username: user.username, codes },
         }),
       )

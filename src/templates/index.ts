@@ -2,7 +2,7 @@ import { h, type ComponentChildren } from 'preact'
 import htm from 'htm'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
-import type { Contact } from '../config.ts'
+import { publicUrl, type Contact } from '../config.ts'
 import {
   avatarLabels,
   eyeTypes,
@@ -49,6 +49,7 @@ import type {
   NotificationSettings,
   QuotedBlurt,
   ReportedBlurt,
+  SignupLimits,
   SignupState,
   UserMatch,
   UserProfile,
@@ -112,7 +113,8 @@ export type BlurtPageData = {
 }
 
 // `invitedBy` is the username of whoever invited them (null if nobody did).
-// `inviteCodes` are the profile's own codes, only for its owner (null for anyone else).
+// `inviteCodes` are the profile's own codes, only for its owner and only while sign-up needs
+// an invite code (null otherwise).
 export type ProfilePageData = {
   viewer: Viewer
   profile: UserProfile
@@ -198,7 +200,8 @@ export function searchUrl(query: string, next?: string): string {
 export type FormPageData = { viewer: Viewer }
 
 // /about, /terms and /privacy: fixed text, plus how to reach whoever runs the site.
-export type InfoPageData = { viewer: Viewer; contact: Contact }
+// `inviteOnly`: sign-up needs an invite code, so the texts may talk about them.
+export type InfoPageData = { viewer: Viewer; contact: Contact; inviteOnly: boolean }
 
 // `signup` says whether the sign-up form is open, needs an invite code, or is full.
 // `inviteCode` fills in the form's invite code (from ?invite= or the submitted form).
@@ -217,6 +220,7 @@ export type WaitlistData = {
 // /admin: forms for the admin APIs. `minted` is set after minting invite codes.
 export type AdminToolsData = {
   viewer: AuthenticatedUser
+  limits: SignupLimits
   minted?: { username: string; codes: string[] }
 }
 
@@ -227,7 +231,7 @@ export type AdminReportsData = { viewer: AuthenticatedUser; reports: ReportedBlu
 export type SettingsData = { viewer: AuthenticatedUser; activeSessions: number }
 
 // /settings/delete, the account deletion confirmation.
-export type DeleteAccountData = { viewer: AuthenticatedUser }
+export type DeleteAccountData = { viewer: AuthenticatedUser; inviteOnly: boolean }
 
 // `parentId` makes it a reply form, `reblurtOfId` a quote form. `label` names the text
 // box for screen readers; `id` is the panel's, for links to it (#quote).
@@ -379,7 +383,21 @@ function SupportLinks() {
 
 // The sign-up page in each state. Open sign-up takes an invite code too, optionally, so
 // "invited by" still shows on the profile.
-function CreateUserPage({ signup, inviteCode, username, validationError }: CreateUserProps) {
+function CreateUserPage({
+  viewer,
+  signup,
+  inviteCode,
+  username,
+  validationError,
+}: CreateUserProps) {
+  // Nothing to sign up for when you're logged in: invite your friends instead.
+  if (viewer) {
+    return html`
+      <${Page} title="Invite your friends" tagline="You already have a profile.">
+        <${InviteFriends} />
+      <//>
+    `
+  }
   const form = html`<${CreateUserForm}
     username=${username}
     inviteCode=${inviteCode ?? ''}
@@ -537,17 +555,21 @@ function CreateUserForm({
         ><input type="checkbox" name="remember" value="1" /> Keep me logged in</label
       >
       <p class="hint password-hint">${noPasswordReset}</p>
-      <label
-        >Invite code${inviteRequired ? '' : ' (optional)'}
-        <input
-          name="inviteCode"
-          maxlength=${usernameMaxLength}
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-          required=${inviteRequired}
-          value=${inviteCode}
-      /></label>
+      ${
+        inviteRequired
+          ? html`<label
+              >Invite code
+              <input
+                name="inviteCode"
+                maxlength=${usernameMaxLength}
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                required
+                value=${inviteCode}
+            /></label>`
+          : inviteCode && html`<input type="hidden" name="inviteCode" value=${inviteCode} />`
+      }
       <div class="actions"><${SubmitButton} icon="personPlus" label="Create user" /></div>
     </form>
   `
@@ -653,14 +675,14 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
 }
 
 // What deleting an account does: on the confirmation page, in both views.
-export const accountDeletionEffects = [
-  'Your profile, avatar, location, follows (both ways), likes, reblurts, sessions, invite codes and reports are deleted.',
+export const accountDeletionEffects = (inviteOnly: boolean) => [
+  `Your profile, avatar, location, follows (both ways), likes, reblurts, sessions, ${inviteOnly ? 'invite codes ' : ''}and reports are deleted.`,
   'Your blurts, replies and quotes are deleted: their text is removed, and nothing shows they were yours. One that someone replied to stays as an empty placeholder, with no text and no author, so their replies still read.',
   'Your username is retired: nobody can sign up with it again, so nobody can pass for you.',
   "You're logged out everywhere. It can't be undone; nightly backups still hold the account for up to 30 days.",
 ]
 
-function DeleteAccountPage({ viewer, validationError }: DeleteAccountData & FormProps) {
+function DeleteAccountPage({ viewer, inviteOnly, validationError }: DeleteAccountData & FormProps) {
   return html`
     <${Page}
       title=${`Delete account: ${viewer.username}`}
@@ -670,7 +692,7 @@ function DeleteAccountPage({ viewer, validationError }: DeleteAccountData & Form
       <section class="panel">
         <h2 class="warn">What happens</h2>
         <ul>
-          ${accountDeletionEffects.map((effect) => html`<li>${effect}</li>`)}
+          ${accountDeletionEffects(inviteOnly).map((effect) => html`<li>${effect}</li>`)}
         </ul>
         <form method="post" action="/settings/delete">
           ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
@@ -1113,10 +1135,53 @@ function BlurtPage({
   `
 }
 
+const signupStateLabels: Record<SignupState, string> = {
+  open: 'open to everyone',
+  invite: 'invite-only',
+  waitlist: 'closed (waitlist)',
+}
+
 // The admin tools: one form per admin API.
-function AdminToolsPage({ minted }: AdminToolsData) {
+function AdminToolsPage({ minted, limits }: AdminToolsData) {
   return html`
     <${Page} title="Admin" tagline="Tools for moderators.">
+      <section class="panel" aria-label="Sign-up limits">
+        <h2>Sign-up limits</h2>
+        <p>
+          ${plural(limits.count, 'sign-up')} so far. Sign-up is
+          <strong>${signupStateLabels[limits.state]}</strong>.
+        </p>
+        <p class="tiny">
+          Below the soft limit anyone can sign up. From there to the hard limit it takes an invite
+          code, and at the hard limit sign-up closes and people can join the waitlist. Changes take
+          effect at once.
+        </p>
+        <form method="post" action="/api/admin/signup-limits">
+          <label
+            >Soft limit (invite codes from here)
+            <input
+              name="softLimit"
+              type="number"
+              min="0"
+              step="1"
+              value=${limits.softLimit}
+              required
+          /></label>
+          <label
+            >Hard limit (closed from here)
+            <input
+              name="hardLimit"
+              type="number"
+              min="0"
+              step="1"
+              value=${limits.hardLimit}
+              required
+          /></label>
+          <div class="actions">
+            <${SubmitButton} icon="shield" label="Save limits" />
+          </div>
+        </form>
+      </section>
       <section class="panel" aria-label="Reports">
         <h2>Reports</h2>
         <p>Blurts that people have reported.</p>
@@ -1841,7 +1906,8 @@ function FollowForm({ username, following }: { username: string; following: bool
   `
 }
 
-// Unused codes link to sign-up with the code filled in, ready to share.
+// Unused codes link to sign-up with the code filled in, ready to share. The route only
+// sends them while sign-up needs an invite code.
 function InviteCodes({ codes }: { codes: InviteCode[] }) {
   const now = new Date()
   const items = codes.map((invite) => {
@@ -1871,6 +1937,19 @@ function InviteCodes({ codes }: { codes: InviteCode[] }) {
             </ul>`
           : html`<p class="empty">You have no invite codes.</p>`
       }
+    </section>
+  `
+}
+
+// What the profile's owner sees while sign-up doesn't need an invite code: share the
+// sign-up page itself.
+function InviteFriends() {
+  const url = `${publicUrl()}/signup`
+  return html`
+    <section class="panel" aria-label="Invite your friends">
+      <h3>Invite your friends</h3>
+      <p>blurt.trade is better filled with people you know. Share this link:</p>
+      <p><a href=${url}>${url}</a></p>
     </section>
   `
 }
@@ -1919,7 +1998,11 @@ function ProfilePage({
       actions=${actions}
       aside=${html`
         <${ProfileLinks} profile=${profile} />
-        ${inviteCodes && html`<${InviteCodes} codes=${inviteCodes} />`}
+        ${
+          inviteCodes
+            ? html`<${InviteCodes} codes=${inviteCodes} />`
+            : own && html`<${InviteFriends} />`
+        }
       `}
     >
       <section class="panel" aria-label="Profile">
@@ -2054,7 +2137,7 @@ function TermsPage({ contact }: InfoPageData) {
   `
 }
 
-function PrivacyPage({ contact }: InfoPageData) {
+function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
   return html`
     <${InfoPage} title="Privacy" tagline="As little as we can.">
       <p>
@@ -2109,9 +2192,12 @@ function PrivacyPage({ contact }: InfoPageData) {
           Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your
           followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
         </li>
-        <li>
-          Your invite codes, and who signed up with them. Who invited you shows on your profile.
-        </li>
+        ${
+          inviteOnly &&
+          html`<li>
+            Your invite codes, and who signed up with them. Who invited you shows on your profile.
+          </li>`
+        }
         <li>Blurts you report, with your reason and when.</li>
         <li>
           Your sessions: one record per login, with when it started and was last used. No IP address
@@ -2216,16 +2302,21 @@ function PrivacyPage({ contact }: InfoPageData) {
         deletes at once, in one go, everything above that belongs to the account: your profile,
         avatar and location, the text of your blurts and their embeddings, your reblurts, who you
         follow and who follows you, your likes (and the likes on your blurts), your notifications,
-        your invite codes, your reports, your sessions and your waitlist entry. You're logged out
-        everywhere.
+        ${inviteOnly ? 'your invite codes, ' : ''}your reports, your sessions and your waitlist
+        entry. You're logged out everywhere.
       </p>
       <p>
         What stays: an empty record of the account, with no username, password or profile, and an
         empty row for each of your blurts, with no text, which shows nowhere and names nobody. A
         blurt someone replied to shows as an empty placeholder, with no text and no author, so the
-        thread still reads. The invite code you signed up with stays marked as used, with nothing
-        linking it to you. Your username goes on the list of retired names, with nothing else, so
-        nobody can sign up as you later. The count of sign-ups so far doesn't go down.
+        thread still reads.
+        ${
+          inviteOnly
+            ? 'The invite code you signed up with stays marked as used, with nothing linking it to you. '
+            : ''
+        }Your
+        username goes on the list of retired names, with nothing else, so nobody can sign up as you
+        later. The count of sign-ups so far doesn't go down.
       </p>
       <h2>Your rights</h2>
       <p>

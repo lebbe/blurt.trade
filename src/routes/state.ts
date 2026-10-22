@@ -858,6 +858,38 @@ export async function getSignupState(): Promise<SignupState> {
   return rows[0].state
 }
 
+export type SignupLimits = {
+  count: number
+  softLimit: number
+  hardLimit: number
+  state: SignupState
+}
+
+// The counter and its limits, for the admin page.
+export async function getSignupLimits(): Promise<SignupLimits> {
+  const { rows } = await db().query<Omit<SignupLimits, 'state'>>(
+    `SELECT current_count AS count, soft_limit AS "softLimit", hard_limit AS "hardLimit"
+     FROM signup_counter`,
+  )
+  return { ...rows[0], state: await getSignupState() }
+}
+
+// Raising or lowering the limits is all it takes: the state follows from the count. The
+// counter itself is only ever moved by sign-ups (see addUser). The CHECKs in the table
+// keep hard >= soft >= 0.
+export async function setSignupLimits(softLimit: number, hardLimit: number): Promise<void> {
+  await db().query('UPDATE signup_counter SET soft_limit = $1, hard_limit = $2', [
+    softLimit,
+    hardLimit,
+  ])
+}
+
+// Invite codes only show anywhere (profiles, texts that mention them) while sign-up needs
+// one. In every other state they are kept but hidden.
+export async function isInviteOnly(): Promise<boolean> {
+  return (await getSignupState()) === 'invite'
+}
+
 // Claims a sign-up slot and creates the user, an empty profile and the user's own invite
 // codes, in one transaction. Without an invite code the slot must be under the soft limit;
 // with one, under the hard limit, and the code is redeemed. Returns 'taken' if the username

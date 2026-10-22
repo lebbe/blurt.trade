@@ -37,6 +37,7 @@ test('about, terms and privacy come as JSON and Markdown too', async (t) => {
       JSON.parse(response.body),
       {
         viewer: null,
+        inviteOnly: false,
         contact: {
           email: 'owner@example.com',
           issuesUrl: 'https://github.com/example/blurt.trade/issues',

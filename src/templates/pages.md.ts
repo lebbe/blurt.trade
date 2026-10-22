@@ -570,7 +570,7 @@ export function termsMarkdown({ contact }: InfoPageData): Markdown {
   `
 }
 
-export function privacyMarkdown({ contact }: InfoPageData): Markdown {
+export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown {
   return md`
     # Privacy
 
@@ -597,7 +597,12 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
     - Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt from someone you follow, with who did it, which blurt and when, and whether you've read it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile. Only you see them.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
     - Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
-    - Your invite codes, and who signed up with them. Who invited you shows on your profile.
+    ${
+      inviteOnly &&
+      md`
+- Your invite codes, and who signed up with them. Who invited you shows on your profile.
+      `
+    }
     - Blurts you report, with your reason and when.
     - Your sessions: one record per login, with when it started and was last used. No IP address and no browser details.
 
@@ -635,9 +640,9 @@ export function privacyMarkdown({ contact }: InfoPageData): Markdown {
 
     ## Deleting your account
 
-    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, ${inviteOnly ? 'your invite codes, ' : ''}your reports, your sessions and your waitlist entry. You're logged out everywhere.
 
-    What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
+    What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. ${inviteOnly ? 'The invite code you signed up with stays marked as used, with nothing linking it to you. ' : ''}Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
 
     ## Your rights
 
@@ -707,7 +712,7 @@ export function createUserMarkdown({ viewer, signup, inviteCode }: SignupPageDat
   return formMarkdown(
     'Create a profile',
     '/signup',
-    md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${invite} and ${code('remember')} (${code('1')} to stay logged in; otherwise the login ends when the browser closes, or after a day unused)`,
+    md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${code('remember')} (${code('1')} to stay logged in; otherwise the login ends when the browser closes, or after a day unused)`,
     viewer,
     noPasswordReset,
   )
@@ -742,11 +747,13 @@ Sign-up is full. When it opens again, this page will say so.
   `
 }
 
-export function adminToolsMarkdown({ minted }: AdminToolsData): Markdown {
+export function adminToolsMarkdown({ minted, limits }: AdminToolsData): Markdown {
   return md`
     # Admin
 
     ${home}
+
+    Sign-up: ${limits.state} (${limits.count} sign-ups so far, soft limit ${limits.softLimit}, hard limit ${limits.hardLimit}).
 
     ${minted ? md`Minted for ${minted.username}:` : ''}
 
@@ -762,7 +769,8 @@ export function adminToolsMarkdown({ minted }: AdminToolsData): Markdown {
     - ${link('Open reports', '/admin/reports')}
     - Delete a blurt: ${code('POST /api/admin/blurts/delete')} with ${code('blurtId')}
     - Dismiss reports: ${code('POST /api/admin/reports/dismiss')} with ${code('blurtId')}
-    - Mint invite codes: ${code('POST /api/admin/invites')} with ${code('username')}, ${code('count')} (1–1000) and optionally ${code('days')}
+    - Set the sign-up limits: ${code('POST /api/admin/signup-limits')} with ${code('softLimit')} (invite codes needed from here) and ${code('hardLimit')} (closed from here)
+    - Mint invite codes:${code('POST /api/admin/invites')} with ${code('username')}, ${code('count')} (1–1000) and optionally ${code('days')}
   `
 }
 
@@ -813,13 +821,13 @@ export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Mark
   `
 }
 
-export function deleteAccountMarkdown({ viewer }: DeleteAccountData): Markdown {
+export function deleteAccountMarkdown({ viewer, inviteOnly }: DeleteAccountData): Markdown {
   return md`
     # Delete account: ${viewer.username}
 
     ${link('Back to settings', '/settings')}
 
-    ${accountDeletionEffects.map((effect) => md`- ${effect}`)}
+    ${accountDeletionEffects(inviteOnly).map((effect) => md`- ${effect}`)}
 
     Send ${code('POST /settings/delete')} as a form or as JSON with your ${code('password')} to confirm.
   `

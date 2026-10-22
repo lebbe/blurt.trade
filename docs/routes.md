@@ -36,7 +36,7 @@ carry `Vary: Accept`.
 | `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
 | `/settings`        | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
 | `/settings/delete` | yes   | `{ viewer }`                                                                  | 401                     |
-| `/admin`           | admin | `{ viewer }`                                                                  | 401, 403 not an admin   |
+| `/admin`           | admin | `{ viewer, limits }`                                                               | 401, 403 not an admin   |
 | `/admin/reports`   | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
 | `/about`           | —     | `{ viewer, contact }`                                                         |                         |
 | `/terms`           | —     | `{ viewer, contact }`                                                         |                         |
@@ -160,6 +160,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
 | `/api/admin/blurts/delete`  | admin         | `blurtId`                            | 303 → `/admin`              | 204                                            |
 | `/api/admin/invites`         | admin         | `username`, `count`, optional `days` | 201 `/admin` with the codes | 201 `{ username, codes }`                      |
+| `/api/admin/signup-limits`   | admin         | `softLimit`, `hardLimit`             | 303 → `/admin`              | 200 `{ count, softLimit, hardLimit, state }`   |
 | `/api/follow`                | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
 | `/api/like`                  | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
@@ -539,6 +540,10 @@ Sign-up claims a slot with one `UPDATE ... WHERE current_count < limit RETURNING
 same transaction as creating the user, so concurrent sign-ups never pass the limit. A
 taken username rolls the transaction back, releasing the slot. The 403 carries
 `{ errors: [{ message }] }` for JSON, or the page in its current state for forms.
+
+Admins change the limits on `/admin` (`POST /api/admin/signup-limits`, soft <= hard); the
+state follows at once. Invite codes only show (profile, privacy and deletion texts) while
+the state is `invite`.
 
 ## Invite codes
 

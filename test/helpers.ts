@@ -8,6 +8,7 @@ import { migrate } from '../db/migrate.ts'
 import { closeDb, db } from '../src/db.ts'
 import { embedPendingBlurts, setEmbedder } from '../src/embeddings.ts'
 import { closePicturePool } from '../src/picture-pool.ts'
+import { listInviteCodes } from '../src/routes/state.ts'
 import { app } from '../src/server.ts'
 import {
   resetRateLimits,
@@ -274,13 +275,17 @@ export function viewerName(response: { body: string }): string | null {
   return JSON.parse(response.body).viewer?.username ?? null
 }
 
-// The codes listed on the user's own profile, unused first.
+// The user's invite codes, unused first. Straight from the database: the profile only lists
+// them while sign-up needs a code.
 export async function inviteCodes(
   username: string,
-  cookie: string,
+  _cookie?: string,
 ): Promise<{ code: string; usedBy: string | null }[]> {
-  const response = await request('GET', `/${username}/`, '', { ...json, cookie })
-  return JSON.parse(response.body).inviteCodes
+  const { rows } = await db().query<{ id: number }>(
+    'SELECT id FROM users WHERE lower(username) = lower($1)',
+    [username],
+  )
+  return listInviteCodes(rows[0].id)
 }
 
 // The real limits, and request.ip from X-Forwarded-For so each test can be its own client.

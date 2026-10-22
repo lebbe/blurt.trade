@@ -24,6 +24,7 @@ import {
   countWaiting,
   deleteAccount,
   getSignupState,
+  isInviteOnly,
   getUserByUsername,
   getWaitlistEntry,
   isUsernameRetired,
@@ -323,11 +324,11 @@ const deleteAccountSchema = z.object({
     .max(passwordMaxLength, 'Password is too long'),
 })
 
-usersRouter.get('/settings/delete', requireAuth, (request, response) => {
+usersRouter.get('/settings/delete', requireAuth, async (request, response) => {
   represent(
     request,
     response,
-    { viewer: response.locals.authenticatedUser },
+    { viewer: response.locals.authenticatedUser, inviteOnly: await isInviteOnly() },
     { html: (data) => renderDeleteAccountPage(data), markdown: deleteAccountMarkdown },
   )
 })
@@ -338,8 +339,8 @@ usersRouter.post(
   rateLimit('deleteAccount', accountKey),
   async (request, response) => {
     const viewer = response.locals.authenticatedUser
-    const rerender = (validationError: string) =>
-      renderDeleteAccountPage({ viewer }, validationError)
+    const rerender = async (validationError: string) =>
+      renderDeleteAccountPage({ viewer, inviteOnly: await isInviteOnly() }, validationError)
     const result = deleteAccountSchema.safeParse(request.body ?? {})
     if (!result.success) {
       await sendFormErrors(request, response, fieldErrors(result.error), rerender)

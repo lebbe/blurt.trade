@@ -242,7 +242,10 @@ test('account deletion answers JSON and Markdown, needs a login, and is rate lim
   const anonymous = await request('POST', '/settings/delete', 'password=correct-horse')
   assert.equal(anonymous.statusCode, 401)
   const data = await request('GET', '/settings/delete', '', { ...json, cookie })
-  assert.deepEqual(JSON.parse(data.body), { viewer: { id: 1, username: 'Lars' } })
+  assert.deepEqual(JSON.parse(data.body), {
+    viewer: { id: 1, username: 'Lars' },
+    inviteOnly: false,
+  })
   const markdown = await request('GET', '/settings/delete', '', { accept: 'text/markdown', cookie })
   assert.match(markdown.body, /^# Delete account: Lars\n[^]*`POST \/settings\/delete`/)
   const settings = await request('GET', '/settings', '', { accept: 'text/markdown', cookie })

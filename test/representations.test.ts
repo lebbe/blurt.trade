@@ -73,7 +73,7 @@ test('serves every GET page as JSON with the data the HTML is rendered from', as
       (data) => {
         assert.equal(data.profile.username, 'Lars')
         assert.equal(data.invitedBy, null)
-        assert.equal(data.inviteCodes.length, 3)
+        assert.equal(data.inviteCodes, null) // hidden unless sign-up needs a code
         assert.deepEqual(texts(data.blurts), ['Nice one', 'Original blurt'])
       },
     ],

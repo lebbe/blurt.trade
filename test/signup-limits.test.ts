@@ -124,18 +124,40 @@ test('new users get invite codes that only they can see', async () => {
     assert.match(code, /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{12}$/)
     assert.equal(usedBy, null)
   }
+  // While sign-up is open the codes are hidden everywhere; the owner is asked to share the
+  // sign-up page instead.
+  const open = await request('GET', '/Lars/', '', { cookie: larsCookie })
+  assert.match(open.body, /Invite your friends/)
+  assert.match(open.body, /href="https:\/\/blurt\.trade\/signup"/)
+  assert.doesNotMatch(open.body, /Your invite codes/)
+  assert.ok(!open.body.includes(codes[0].code))
+  const openJson = await request('GET', '/Lars/', '', { ...json, cookie: larsCookie })
+  assert.equal(JSON.parse(openJson.body).inviteCodes, null)
+  const openMarkdown = await request('GET', '/Lars/', '', {
+    accept: 'text/markdown',
+    cookie: larsCookie,
+  })
+  assert.doesNotMatch(openMarkdown.body, /invite codes/)
+
+  // Once sign-up needs a code (the soft limit is reached) they show up by themselves.
+  await setSignupLimits(0, 10)
   const own = await request('GET', '/Lars/', '', { cookie: larsCookie })
   assert.match(own.body, /Your invite codes/)
   assert.ok(own.body.includes(`href="/signup?invite=${codes[0].code}"`))
+  assert.doesNotMatch(own.body, /Invite your friends/)
+  const ownJson = await request('GET', '/Lars/', '', { ...json, cookie: larsCookie })
+  assert.equal(JSON.parse(ownJson.body).inviteCodes.length, 3)
   const markdown = await request('GET', '/Lars/', '', {
     accept: 'text/markdown',
     cookie: larsCookie,
   })
   assert.match(markdown.body, /## Your invite codes\n[^]*sign-up link/)
+  const privacy = await request('GET', '/privacy')
+  assert.match(privacy.body, /Your invite codes, and who signed up with them/)
 
   for (const headers of [{ cookie: adaCookie }, {}]) {
     const other = await request('GET', '/Lars/', '', headers)
-    assert.doesNotMatch(other.body, /invite codes|signup\?invite/)
+    assert.doesNotMatch(other.body, /invite codes|signup\?invite|Invite your friends/)
     const data = JSON.parse((await request('GET', '/Lars/', '', { ...json, ...headers })).body)
     assert.equal(data.inviteCodes, null)
   }
@@ -230,7 +252,16 @@ test('an invite code does not get past the hard limit', async () => {
 
 test('open sign-up takes an optional invite code', async () => {
   const [{ code }] = await inviteCodes('Lars', await createSession('Lars'))
-  assert.match((await request('GET', '/signup')).body, /Invite code \(optional\)/)
+  // Open sign-up hides the field, and keeps a code from a shared link in a hidden input.
+  const form = (await request('GET', '/signup')).body
+  assert.doesNotMatch(form, /Invite code/)
+  assert.doesNotMatch(form, /name="inviteCode"/)
+  const shared = (await request('GET', `/signup?invite=${code}`)).body
+  assert.match(shared, new RegExp(`type="hidden" name="inviteCode" value="${code}"`))
+  const loggedIn = (await request('GET', '/signup', '', { cookie: await createSession('Bob') }))
+    .body
+  assert.match(loggedIn, /Invite your friends/)
+  assert.doesNotMatch(loggedIn, /Create user/)
 
   const created = await sendJson('/signup', {
     username: 'Ada',

@@ -199,3 +199,46 @@ test('the admin tools page, header link, and its delete and invite forms', async
     404,
   )
 })
+
+test('admins set the sign-up limits, and the sign-up state follows at once', async () => {
+  const ownerCookie = await createSession('Owner')
+  const adaCookie = await createSession('Ada')
+  await db().query("UPDATE users SET is_admin = true WHERE username = 'Owner'")
+
+  const page = await request('GET', '/admin', '', { cookie: ownerCookie })
+  assert.match(page.body, /action="\/api\/admin\/signup-limits"/)
+  const data = JSON.parse(
+    (await request('GET', '/admin', '', { ...json, cookie: ownerCookie })).body,
+  )
+  assert.equal(data.limits.count, 2)
+  assert.equal(data.limits.state, 'open')
+
+  const forbidden = await request('POST', '/api/admin/signup-limits', 'softLimit=1&hardLimit=2', {
+    cookie: adaCookie,
+  })
+  assert.equal(forbidden.statusCode, 403)
+  for (const body of [
+    'softLimit=5&hardLimit=4',
+    'softLimit=-1&hardLimit=4',
+    'softLimit=x&hardLimit=4',
+  ]) {
+    const refused = await request('POST', '/api/admin/signup-limits', body, { cookie: ownerCookie })
+    assert.equal(refused.statusCode, 400, body)
+  }
+
+  const saved = await request('POST', '/api/admin/signup-limits', 'softLimit=2&hardLimit=10', {
+    cookie: ownerCookie,
+  })
+  assert.equal(saved.statusCode, 303)
+  assert.equal(saved.location, '/admin')
+  assert.equal(JSON.parse((await request('GET', '/signup', '', json)).body).signup, 'invite')
+
+  const closed = await sendJson(
+    '/api/admin/signup-limits',
+    { softLimit: 1, hardLimit: 2 },
+    { cookie: ownerCookie },
+  )
+  assert.equal(closed.statusCode, 200)
+  assert.equal(JSON.parse(closed.body).state, 'waitlist')
+  assert.equal(JSON.parse((await request('GET', '/signup', '', json)).body).signup, 'waitlist')
+})

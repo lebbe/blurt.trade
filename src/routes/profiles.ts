@@ -17,6 +17,7 @@ import {
   getNotificationSettings,
   getInvitedBy,
   getUserProfileByUsername,
+  isInviteOnly,
   listInviteCodes,
   listBlurtsByUserId,
   markViewerFlags,
@@ -90,7 +91,8 @@ profilesRouter.get('/:username/', async (request, response) => {
   const isOwner = viewer?.id === profile.userId
   const [invitedBy, inviteCodes, follows, { items: blurts, next }] = await Promise.all([
     getInvitedBy(profile.userId),
-    isOwner ? listInviteCodes(profile.userId) : null, // codes are only for their owner
+    // Codes are only for their owner, and only while sign-up needs one.
+    isOwner && (await isInviteOnly()) ? listInviteCodes(profile.userId) : null,
     getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
   ])

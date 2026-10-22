@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { contact } from '../config.ts'
 import { getViewer } from '../middleware/auth.ts'
 import { represent, type Views } from '../negotiate.ts'
+import { isInviteOnly } from './state.ts'
 import {
   renderAboutPage,
   renderPrivacyPage,
@@ -16,8 +17,13 @@ export const infoRouter = Router()
 // the viewer and the contact from the environment (CONTACT_EMAIL, CONTACT_REPO_URL), so
 // the privacy page has to be kept in step with what the database stores by hand.
 function infoPage(views: Views<InfoPageData>) {
-  return (request: Request, response: Response) => {
-    represent(request, response, { viewer: getViewer(request), contact: contact() }, views)
+  return async (request: Request, response: Response) => {
+    const data = {
+      viewer: getViewer(request),
+      contact: contact(),
+      inviteOnly: await isInviteOnly(),
+    }
+    represent(request, response, data, views)
   }
 }
 
