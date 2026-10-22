@@ -32,6 +32,10 @@ export function represent<T>(
   response.vary('Accept').status(status)
   const representation = request.accepts(representations)
   if (representation === 'html') {
+    // Tells crawlers and agents the same URL has a Markdown version (see /llms.txt).
+    if (!/[<>"\s]/.test(request.originalUrl)) {
+      response.set('Link', `<${request.originalUrl}>; rel="alternate"; type="text/markdown"`)
+    }
     response.type('html').send(views.html(data))
   } else if (representation === 'json') {
     response.type('json').send(toJson(data))

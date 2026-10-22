@@ -14,6 +14,10 @@ Each GET route fetches its data once and hands it to `represent()` in
 (`src/templates/index.ts`) or Markdown template (`src/templates/pages.md.ts`). Responses
 carry `Vary: Accept`.
 
+HTML responses carry `Link: <url>; rel="alternate"; type="text/markdown"` for the same
+URL. `/llms.txt` (llmstxt.org format, in `src/routes/crawl.ts`) describes this to
+agents, next to `/robots.txt` and `/sitemap.xml`.
+
 `fetch()` sends `Accept: */*` by default, which gets HTML. Send
 `Accept: application/json` to get JSON, from GET and POST routes alike.
 
@@ -712,7 +716,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
+| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `no-referrer`                                            |
@@ -725,7 +729,7 @@ responses.
 - **There is no `script-src`, so no JavaScript runs at all.** Adding any script (the
   planned Preact client, an inline `<script>`, an `on...=` attribute) means changing the
   CSP first: serve the files from `/static` and add `script-src 'self'`, never
-  `'unsafe-inline'`. The same goes for fonts, `fetch()` (`connect-src`), web app
+  `'unsafe-inline'`. The same goes for fonts, web app
   manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
 - **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
   at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see

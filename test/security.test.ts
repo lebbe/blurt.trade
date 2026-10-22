@@ -43,6 +43,7 @@ function assertSecurityHeaders(headers: http.IncomingHttpHeaders, what: string):
 
 test('sends the security headers on pages, errors and static files', async () => {
   assert.match(contentSecurityPolicy, /default-src 'none'/)
+  assert.match(contentSecurityPolicy, /connect-src 'self'(;|$)/)
   assert.doesNotMatch(contentSecurityPolicy, /script-src|unsafe-inline|unsafe-eval/)
 
   const cookie = await createSession('Lars')

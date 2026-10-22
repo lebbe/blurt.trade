@@ -65,6 +65,7 @@ export const reservedUsernames = new Set([
   'deleted', // /deleted/:id, a deleted blurt's placeholder
   'everyone',
   'healthz',
+  'llms.txt',
   'login',
   'near',
   'og', // /og/:file, the share card images

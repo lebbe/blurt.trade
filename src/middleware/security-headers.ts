@@ -9,10 +9,15 @@ import { criticalCssHashes } from '../themes.ts'
 // plus, by hash, the small above-the-fold <style> of each theme (criticalCss in
 // src/themes.ts); no other inline <style> or style="..." runs. Images only from us (the
 // world map; avatars are inline SVG markup, which no policy restricts). Adding any
-// script, inline style, font, fetch() or third-party resource means changing this policy
+// script, inline style, font or third-party resource means changing this policy
 // (see docs/routes.md).
+//
+// connect-src 'self' is there for tools that fetch from the page's context, like
+// Lighthouse reading /robots.txt, which default-src 'none' blocks. Without any script
+// there is nothing on the page that can use it.
 export const contentSecurityPolicy = [
   "default-src 'none'",
+  "connect-src 'self'",
   `style-src 'self' ${criticalCssHashes.join(' ')}`,
   "img-src 'self'",
   "form-action 'self'",

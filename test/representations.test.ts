@@ -31,6 +31,19 @@ test('serves robots.txt and sitemap.xml for crawlers', async () => {
   assert.match(sitemap.body, /<loc>https:\/\/blurt\.trade\/everyone<\/loc>/)
 })
 
+test('serves llms.txt and announces the Markdown version of pages', async () => {
+  const llms = await request('GET', '/llms.txt')
+  assert.equal(llms.statusCode, 200)
+  assert.match(llms.contentType ?? '', /^text\/markdown/)
+  assert.match(llms.body, /^# blurt\.trade\n\n> /)
+  assert.match(llms.body, /Accept: text\/markdown/)
+  assert.match(llms.body, /- \[Everyone\]\(https:\/\/blurt\.trade\/everyone\): /)
+  assert.match(llms.body, /\n## Optional\n/)
+
+  const page = await request('GET', '/everyone')
+  assert.equal(page.headers.link, '</everyone>; rel="alternate"; type="text/markdown"')
+})
+
 test('profile and blurt pages include share metadata and canonical links', async () => {
   const cookie = await createSession('Lars')
   await request('POST', '/api/blurts', 'text=Hello+%3Cb%3Eworld%3C%2Fb%3E+++from+++blurt', {
