@@ -19,8 +19,17 @@ test('shows only one user feed and profile data on profile route', async () => {
   assert.match(response.body, /Lars post/)
   assert.doesNotMatch(response.body, /Ada post/)
   assert.match(response.body, /href="\/Lars\/edit"/)
-  assert.match(response.body, /Homepage/)
-  assert.match(response.body, /LinkedIn/)
+  // Links nobody has set are not listed, and neither is their panel.
+  assert.doesNotMatch(response.body, /Homepage|LinkedIn|Not set/)
+  assert.doesNotMatch(response.body, /aria-label="Links"/)
+
+  await request('POST', '/Lars/edit', 'homepage=https%3A%2F%2Fexample.com&bio=', {
+    cookie: larsCookie,
+  })
+  const withLink = await request('GET', '/Lars/', '', { cookie: larsCookie })
+  assert.match(withLink.body, /aria-label="Links"/)
+  assert.match(withLink.body, /Homepage/)
+  assert.doesNotMatch(withLink.body, /LinkedIn|Not set/)
 })
 
 test('hides edit button when viewing someone else profile', async () => {

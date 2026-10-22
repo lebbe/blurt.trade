@@ -1215,10 +1215,6 @@ function AdminReportsPage({ reports }: AdminReportsData) {
 }
 
 function renderSocial(value: string): unknown {
-  if (!value) {
-    return html`<span class="empty">Not set</span>`
-  }
-
   if (isWebUrl(value)) {
     const url = normalizedWebUrl(value) ?? value
     return html`<a href=${url} rel="noreferrer noopener nofollow ugc" referrerpolicy="no-referrer"
@@ -1239,12 +1235,17 @@ const socialFields = [
   ['linkedin', 'LinkedIn'],
 ] as const
 
+// Only the links that are set; no panel at all when none are.
 function ProfileLinks({ profile }: { profile: UserProfile }) {
+  const set = socialFields.filter(([key]) => profile[key])
+  if (set.length === 0) {
+    return null
+  }
   return html`
     <section class="panel" aria-label="Links">
       <h3>Links</h3>
       <dl class="profile-data">
-        ${socialFields.map(
+        ${set.map(
           ([key, label]) =>
             html`<dt>${label}</dt>
               <dd>${renderSocial(profile[key])}</dd>`,
