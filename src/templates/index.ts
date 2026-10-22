@@ -288,13 +288,15 @@ function Composer({
           placeholder=${placeholder}
         >
 ${text}</textarea>
-        <label class="picture-field tiny">
-          Picture (optional)
-          <input type="file" name="picture" accept="image/jpeg,image/png,image/webp" />
-        </label>
-        <p class="tiny">The picture is redrawn as a rough drawing. The original is not stored.</p>
+        <span class="tiny">${blurtMaxLength} characters max · public</span>
         <div class="row">
-          <span class="tiny">${blurtMaxLength} characters max · public</span>
+          <input
+            type="file"
+            name="picture"
+            class="picture-field"
+            aria-label="Picture (optional)"
+            accept="image/jpeg,image/png,image/webp"
+          />
           <button type="submit" class="blurt-button">
             <${Icon} name=${parentId === undefined ? 'megaphone' : 'reply'} /><span>${button}</span>
           </button>

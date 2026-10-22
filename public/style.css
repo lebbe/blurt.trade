@@ -427,6 +427,30 @@ input[type='radio'] {
   min-height: 120px;
 }
 
+/* The picture is optional, so the file chooser is a quiet inline line, not a full-width input. */
+.composer input.picture-field {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 8rem;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.composer input.picture-field::file-selector-button {
+  margin-right: 8px;
+  padding: 2px 8px;
+  border: 2px solid var(--line-soft);
+  border-radius: 0;
+  background: var(--panel-alt);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
 .validation-error {
   margin: 0;
   padding: 8px 10px;
