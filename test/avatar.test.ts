@@ -69,14 +69,17 @@ test("blurts show the blurter's avatar, on alternating sides, talking on hover",
   const feed = await request('GET', '/')
   const cards = [
     ...feed.body.matchAll(
-      /<article class="blurt" id="blurt-\d+"><svg class="avatar avatar-small"/g,
+      /<article class="blurt" id="blurt-\d+"><div class="blurt-main"><svg class="avatar avatar-small"/g,
     ),
   ]
   assert.equal(cards.length, 2)
   assert.match(feed.body, /<svg [^>]*aria-hidden="true"[^>]*>/)
   assert.match(feed.body, /fill="#123abc"/)
   // Sides and the talking are pure CSS, in the linked stylesheet: no JS needed.
-  assert.match(stylesheet, /\.blurt:nth-of-type\(even\) \{\s*flex-direction: row-reverse;/)
+  assert.match(
+    stylesheet,
+    /\.blurt:nth-of-type\(even\) > \.blurt-main \{\s*flex-direction: row-reverse;/,
+  )
   assert.match(stylesheet, /\.avatar:hover \.avatar-top,/)
   assert.match(stylesheet, /@keyframes avatar-talk/)
   assert.match(stylesheet, /@keyframes avatar-jaw/)

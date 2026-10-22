@@ -913,43 +913,55 @@ function BlurtCard({
   if (blurt.deleted) {
     return html`
       <article class="blurt deleted">
-        <div class="blurt-body">
-          <div class="blurt-meta">
-            <em>Deleted</em>
-            <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
+        <div class="blurt-main">
+          <div class="blurt-body">
+            <div class="blurt-meta">
+              <em>Deleted</em>
+              <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
+            </div>
+            <p class="empty">This blurt was deleted.</p>
           </div>
-          <p class="empty">This blurt was deleted.</p>
-          ${replyCards}
-          ${
-            showActions &&
-            html`<div class="blurt-actions">
-              <a href=${blurtUrl(blurt)} class="action"
-                ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
-              >
-            </div>`
-          }
         </div>
+        ${
+          (showActions || replyCards) &&
+          html`<div class="blurt-footer">
+            ${
+              showActions &&
+              html`<div class="blurt-actions">
+                <a href=${blurtUrl(blurt)} class="action"
+                  ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
+                >
+              </div>`
+            }
+            ${replyCards}
+          </div>`
+        }
       </article>
     `
   }
 
-  // The avatar sits on the left of odd blurts and the right of even ones (CSS).
+  // Two boxes. .blurt-main is what was said: avatar, nick, date, text and the picture (which
+  // runs the full width of the card). .blurt-footer is what you can do about it: actions
+  // and replies. The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
     <article class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'} id=${blurtAnchor(blurt)}>
-      <${AvatarSvg} avatar=${blurt.avatar} />
-      <div class="blurt-body">
-        ${
-          blurt.reblurtedBy &&
-          html`<p class="reblurted-by">
-            Reblurted by <a href="/${blurt.reblurtedBy}/">${blurt.reblurtedBy}</a>
-          </p>`
-        }
-        ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
-        <div class="blurt-meta">
-          <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
-          <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
+      <div class="blurt-main">
+        <${AvatarSvg} avatar=${blurt.avatar} />
+        <div class="blurt-body">
+          ${
+            blurt.reblurtedBy &&
+            html`<p class="reblurted-by">
+              Reblurted by <a href="/${blurt.reblurtedBy}/">${blurt.reblurtedBy}</a>
+            </p>`
+          }
+          ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
+          <div class="blurt-meta">
+            <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
+            <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
+          </div>
+          <p>${renderBlurtText(blurt.text ?? '')}</p>
+          ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`}
         </div>
-        <p>${renderBlurtText(blurt.text ?? '')}</p>
         ${
           blurt.picture &&
           html`<img
@@ -961,7 +973,8 @@ function BlurtCard({
             loading="lazy"
           />`
         }
-        ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`}
+      </div>
+      <div class="blurt-footer">
         <div class="blurt-actions">
           ${
             showActions &&
@@ -2306,22 +2319,26 @@ function NotificationItem({ notification }: { notification: Notification }) {
   const { kind, actor, avatar, blurtId, blurtUsername, text, createdAt, read, id } = notification
   return html`
     <article class=${read ? 'blurt notification' : 'blurt notification unread'}>
-      <${AvatarSvg} avatar=${avatar} />
-      <div class="blurt-body">
-        <div class="blurt-meta">
-          <strong><a href="/${actor}/">${actor}</a></strong>
-          <span>${notificationVerbs[kind]}</span>
-          <a href="/${blurtUsername}/${blurtId}"><${Timestamp} date=${createdAt} /></a>
+      <div class="blurt-main">
+        <${AvatarSvg} avatar=${avatar} />
+        <div class="blurt-body">
+          <div class="blurt-meta">
+            <strong><a href="/${actor}/">${actor}</a></strong>
+            <span>${notificationVerbs[kind]}</span>
+            <a href="/${blurtUsername}/${blurtId}"><${Timestamp} date=${createdAt} /></a>
+          </div>
+          ${text !== null && html`<p><a href="/${blurtUsername}/${blurtId}">${preview(text, 140)}</a></p>`}
         </div>
-        ${text !== null && html`<p><a href="/${blurtUsername}/${blurtId}">${preview(text, 140)}</a></p>`}
-        ${
-          !read &&
-          html`<form method="post" action="/api/notifications/read" class="blurt-actions">
+      </div>
+      ${
+        !read &&
+        html`<div class="blurt-footer">
+          <form method="post" action="/api/notifications/read" class="blurt-actions">
             <input type="hidden" name="id" value=${id} />
             <${SubmitButton} icon="check" label="Mark as read" kind="secondary" />
-          </form>`
-        }
-      </div>
+          </form>
+        </div>`
+      }
     </article>
   `
 }

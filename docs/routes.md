@@ -493,7 +493,8 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
   the database `CHECK`s the same rules, and the template checks them again when drawing
   (anything unexpected gets a default).
 - Blurts show the blurter's avatar, on the left of odd blurts and the right of even ones
-  (`.blurt:nth-of-type(even)`). It talks (CSS animation, no JS) while the pointer is over
+  (`.blurt:nth-of-type(even)`). A blurt is two boxes: `.blurt-main` (avatar, nick, date,
+  text, and the picture edge to edge) and `.blurt-footer` (actions and replies). It talks (CSS animation, no JS) while the pointer is over
   the avatar or its blurt (an uneven chatter of big and small flaps, the jaw bobbing along),
   and holds still with `prefers-reduced-motion`. The profile page
   shows it large.

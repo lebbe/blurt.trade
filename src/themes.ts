@@ -68,7 +68,7 @@ function buildCriticalCss(theme: ThemeId): string {
     '.layout.single{grid-template-columns:minmax(0,1fr);max-width:820px}',
     '@media (max-width:920px){.layout{grid-template-columns:minmax(0,1fr)}}',
     '.icon{width:1.05em;height:1.05em}',
-    '.avatar{width:3rem;height:3rem}.blurt>.avatar{width:72px;height:72px}.avatar-large{width:84px;height:84px}',
+    '.avatar{width:3rem;height:3rem}.blurt-main>.avatar{width:72px;height:72px}.avatar-large{width:84px;height:84px}',
   ].join('\n')
 }
 

@@ -678,13 +678,11 @@ button.danger,
 
 /* --- Blurts ------------------------------------------------------------------------------------ */
 
+/* A blurt is two boxes: .blurt-main (avatar, nick, date, text, picture) and .blurt-footer
+   (actions, replies). */
 .blurt {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   border: 2px solid var(--line-soft);
   border-left-width: 5px;
-  padding: 11px;
   margin-bottom: 10px;
   background: var(--panel-alt);
 }
@@ -693,11 +691,27 @@ button.danger,
   margin-bottom: 0;
 }
 
+.blurt-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  padding: 11px;
+}
+
+.blurt-footer {
+  padding: 8px 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
 /* Avatars take turns: left on odd blurts, right on even ones. */
 .blurt:nth-of-type(even) {
-  flex-direction: row-reverse;
   border-left-width: 2px;
   border-right-width: 5px;
+}
+
+.blurt:nth-of-type(even) > .blurt-main {
+  flex-direction: row-reverse;
 }
 
 .blurt.reblurt {
@@ -923,7 +937,7 @@ button.danger,
   height: 3rem;
 }
 
-.blurt > .avatar {
+.blurt-main > .avatar {
   width: 72px;
   height: 72px;
   padding: 4px;
@@ -931,8 +945,8 @@ button.danger,
   background: var(--panel);
 }
 
-.replies .blurt > .avatar,
-.thread-children .blurt > .avatar {
+.replies .blurt-main > .avatar,
+.thread-children .blurt-main > .avatar {
   width: 52px;
   height: 52px;
 }
@@ -1027,12 +1041,12 @@ button.danger,
 }
 
 .avatar:hover .avatar-top,
-.blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-top {
+.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-top {
   animation: avatar-talk 1.6s ease-in-out infinite;
 }
 
 .avatar:hover .avatar-jaw,
-.blurt:hover:not(:has(.blurt:hover)) > .avatar .avatar-jaw {
+.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-jaw {
   animation: avatar-jaw 1.6s ease-in-out infinite;
 }
 
@@ -1285,7 +1299,7 @@ button.danger,
     width: auto;
   }
 
-  .blurt > .avatar {
+  .blurt-main > .avatar {
     width: 52px;
     height: 52px;
   }
@@ -1301,9 +1315,14 @@ button.danger,
   }
 }
 
+/* Edge to edge in the card: undo .blurt-main's padding on the sides and at the bottom. */
 .blurt-picture {
-  max-width: 100%;
+  display: block;
+  flex: none;
+  width: calc(100% + 22px);
+  max-width: none;
   height: auto;
+  margin: 0 -11px -11px;
 }
 
 table {
