@@ -87,7 +87,7 @@ test('the server shuts down cleanly on SIGTERM', async () => {
     child.on('exit', () => reject(new Error(`Server exited before listening:\n${output}`)))
   })
 
-  const response = await fetch(`http://localhost:${port}/createUser`)
+  const response = await fetch(`http://localhost:${port}/signup`)
   assert.equal(response.status, 200)
   child.kill('SIGTERM')
   assert.equal(await exited, 0, output)
@@ -122,7 +122,7 @@ test('logs one line per request, without the query string', async (t) => {
 test('never logs passwords, tokens or cookies', async (t) => {
   const logs = collectLogs(t)
   const password = 'very-secret-password-42'
-  const created = await request('POST', '/createUser', `username=Lars&password=${password}`)
+  const created = await request('POST', '/signup', `username=Lars&password=${password}`)
   assert.equal(created.statusCode, 303)
   const cookie = created.setCookie?.[0]?.split(';', 1)[0] ?? ''
   const wrong = await request('POST', '/login', `username=Lars&password=${password}-wrong`)

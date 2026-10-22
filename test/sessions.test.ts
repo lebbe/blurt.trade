@@ -25,7 +25,7 @@ async function sessionRows(): Promise<
 test('ticking "Keep me logged in" sets a short access token and a 400-day refresh token, both HttpOnly', async () => {
   const response = await request(
     'POST',
-    '/createUser',
+    '/signup',
     'username=Lars&password=correct-horse&remember=1',
   )
 
@@ -192,7 +192,7 @@ test('logs out every browser and device from settings', async () => {
 
 test('without "Keep me logged in" the refresh cookie is a browser-session cookie', async () => {
   for (const [path, body] of [
-    ['/createUser', 'username=Lars&password=correct-horse'],
+    ['/signup', 'username=Lars&password=correct-horse'],
     ['/login', 'username=Lars&password=correct-horse&remember=0'],
   ]) {
     const response = await request('POST', path, body)
@@ -250,7 +250,7 @@ test('the choice survives a refresh', async (t) => {
 })
 
 test('a session-only login ends after a day unused, a persistent one does not', async () => {
-  const temporary = await request('POST', '/createUser', 'username=Lars&password=correct-horse')
+  const temporary = await request('POST', '/signup', 'username=Lars&password=correct-horse')
   const kept = await request('POST', '/login', 'username=Lars&password=correct-horse&remember=1')
   await db().query(`UPDATE sessions SET last_used_at = now() - interval '25 hours'`)
 

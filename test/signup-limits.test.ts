@@ -16,11 +16,11 @@ test('a taken username releases the slot it claimed', async () => {
   // One slot left after Lars. Ada only gets it if the taken name gave it back.
   await setSignupLimits(2, 2)
   await createSession('Lars')
-  const taken = await sendJson('/createUser', { username: 'lars', password: 'correct-horse' })
+  const taken = await sendJson('/signup', { username: 'lars', password: 'correct-horse' })
   assert.equal(taken.statusCode, 400)
   assert.equal(await signupCount(), 1)
 
-  const created = await sendJson('/createUser', { username: 'Ada', password: 'correct-horse' })
+  const created = await sendJson('/signup', { username: 'Ada', password: 'correct-horse' })
   assert.equal(created.statusCode, 201)
   assert.equal(await signupCount(), 2)
 })
@@ -29,18 +29,18 @@ test('at the soft limit, sign-up needs an invite', async () => {
   await setSignupLimits(1, 10)
   await createSession('Lars')
 
-  const form = await request('GET', '/createUser')
+  const form = await request('GET', '/signup')
   assert.match(form.body, /invite-only/)
   assert.match(form.body, /<input name="inviteCode"[^>]* required/)
-  const data = JSON.parse((await request('GET', '/createUser', '', json)).body)
+  const data = JSON.parse((await request('GET', '/signup', '', json)).body)
   assert.equal(data.signup, 'invite')
-  const markdown = await request('GET', '/createUser', '', { accept: 'text/markdown' })
+  const markdown = await request('GET', '/signup', '', { accept: 'text/markdown' })
   assert.match(markdown.body, /invite-only/)
 
-  const refused = await request('POST', '/createUser', 'username=Ada&password=correct-horse')
+  const refused = await request('POST', '/signup', 'username=Ada&password=correct-horse')
   assert.equal(refused.statusCode, 403)
   assert.match(refused.body, /role="alert">blurt\.trade is invite-only/)
-  const refusedJson = await sendJson('/createUser', { username: 'Ada', password: 'correct-horse' })
+  const refusedJson = await sendJson('/signup', { username: 'Ada', password: 'correct-horse' })
   assert.equal(refusedJson.statusCode, 403)
   assert.match(JSON.parse(refusedJson.body).errors[0].message, /invite-only/)
   assert.equal(await getUserByUsername('Ada'), undefined)
@@ -54,11 +54,11 @@ test('at the hard limit, sign-up closes and the waitlist takes a username only',
   await setSignupLimits(1, 1)
   await createSession('Lars')
 
-  const form = await request('GET', '/createUser')
+  const form = await request('GET', '/signup')
   assert.match(form.body, /Sign-up is full/)
   assert.match(form.body, /action="\/waitlist"/)
-  assert.doesNotMatch(form.body, /action="\/createUser"/)
-  const refused = await request('POST', '/createUser', 'username=Ada&password=correct-horse')
+  assert.doesNotMatch(form.body, /action="\/signup"/)
+  const refused = await request('POST', '/signup', 'username=Ada&password=correct-horse')
   assert.equal(refused.statusCode, 403)
   assert.match(refused.body, /Join the waitlist instead/)
   assert.match(refused.body, /action="\/waitlist"/)
@@ -102,7 +102,7 @@ test('concurrent sign-ups never pass the hard limit', async () => {
   await setSignupLimits(5, 5)
   const responses = await Promise.all(
     Array.from({ length: 20 }, (_, i) =>
-      sendJson('/createUser', { username: `racer${i}`, password: 'correct-horse' }),
+      sendJson('/signup', { username: `racer${i}`, password: 'correct-horse' }),
     ),
   )
 
@@ -126,7 +126,7 @@ test('new users get invite codes that only they can see', async () => {
   }
   const own = await request('GET', '/Lars/', '', { cookie: larsCookie })
   assert.match(own.body, /Your invite codes/)
-  assert.ok(own.body.includes(`href="/createUser?invite=${codes[0].code}"`))
+  assert.ok(own.body.includes(`href="/signup?invite=${codes[0].code}"`))
   const markdown = await request('GET', '/Lars/', '', {
     accept: 'text/markdown',
     cookie: larsCookie,
@@ -135,7 +135,7 @@ test('new users get invite codes that only they can see', async () => {
 
   for (const headers of [{ cookie: adaCookie }, {}]) {
     const other = await request('GET', '/Lars/', '', headers)
-    assert.doesNotMatch(other.body, /invite codes|createUser\?invite/)
+    assert.doesNotMatch(other.body, /invite codes|signup\?invite/)
     const data = JSON.parse((await request('GET', '/Lars/', '', { ...json, ...headers })).body)
     assert.equal(data.inviteCodes, null)
   }
@@ -147,18 +147,18 @@ test('invite-only sign-up works end to end, and each code works once', async () 
   const [{ code }, second] = await inviteCodes('Lars', larsCookie)
 
   // The shared link fills in the code.
-  const form = await request('GET', `/createUser?invite=${code}`)
+  const form = await request('GET', `/signup?invite=${code}`)
   assert.match(form.body, new RegExp(`name="inviteCode"[^>]* value="${code}"`))
-  const data = JSON.parse((await request('GET', `/createUser?invite=${code}`, '', json)).body)
+  const data = JSON.parse((await request('GET', `/signup?invite=${code}`, '', json)).body)
   assert.equal(data.inviteCode, code)
-  const markdown = await request('GET', '/createUser', '', { accept: 'text/markdown' })
-  assert.match(markdown.body, /invite-only[^]*`POST \/createUser`[^]*`inviteCode`/)
+  const markdown = await request('GET', '/signup', '', { accept: 'text/markdown' })
+  assert.match(markdown.body, /invite-only[^]*`POST \/signup`[^]*`inviteCode`/)
 
   // Typed in lower case with a dash still works.
   const typed = `${code.slice(0, 6)}-${code.slice(6)}`.toLowerCase()
   const created = await request(
     'POST',
-    '/createUser',
+    '/signup',
     `username=Ada&password=correct-horse&inviteCode=${typed}`,
   )
   assert.equal(created.statusCode, 303)
@@ -172,7 +172,7 @@ test('invite-only sign-up works end to end, and each code works once', async () 
   // Used, unknown, malformed and expired codes are refused and give the slot back.
   await db().query('UPDATE invite_codes SET expires_at = now() WHERE code = $1', [second.code])
   for (const inviteCode of [code, 'ABCDEFGHJKMN', 'nope', second.code]) {
-    const refused = await sendJson('/createUser', {
+    const refused = await sendJson('/signup', {
       username: 'Bob',
       password: 'correct-horse',
       inviteCode,
@@ -182,7 +182,7 @@ test('invite-only sign-up works end to end, and each code works once', async () 
   }
   const html = await request(
     'POST',
-    '/createUser',
+    '/signup',
     `username=Bob&password=correct-horse&inviteCode=${code}`,
   )
   assert.match(html.body, /role="alert">That invite code doesn(&#39;|')t exist/)
@@ -197,7 +197,7 @@ test('two sign-ups with the same code at the same moment: only one gets in', asy
 
   const responses = await Promise.all(
     Array.from({ length: 10 }, (_, i) =>
-      sendJson('/createUser', {
+      sendJson('/signup', {
         username: `racer${i}`,
         password: 'correct-horse',
         inviteCode: code,
@@ -218,7 +218,7 @@ test('an invite code does not get past the hard limit', async () => {
   const larsCookie = await createSession('Lars')
   const [{ code }] = await inviteCodes('Lars', larsCookie)
 
-  const refused = await sendJson('/createUser', {
+  const refused = await sendJson('/signup', {
     username: 'Ada',
     password: 'correct-horse',
     inviteCode: code,
@@ -230,9 +230,9 @@ test('an invite code does not get past the hard limit', async () => {
 
 test('open sign-up takes an optional invite code', async () => {
   const [{ code }] = await inviteCodes('Lars', await createSession('Lars'))
-  assert.match((await request('GET', '/createUser')).body, /Invite code \(optional\)/)
+  assert.match((await request('GET', '/signup')).body, /Invite code \(optional\)/)
 
-  const created = await sendJson('/createUser', {
+  const created = await sendJson('/signup', {
     username: 'Ada',
     password: 'correct-horse',
     inviteCode: code,

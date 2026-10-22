@@ -6,12 +6,22 @@ import { getUserByUsername } from '../src/routes/state.ts'
 import { reservedUsernames } from '../src/routes/users.ts'
 import { countBlurts, createSession, request } from './helpers.ts'
 
-test('creates a user, logs them in, and redirects to the feed', async () => {
-  const form = await request('GET', '/createUser')
-  assert.equal(form.statusCode, 200)
-  assert.match(form.body, /action="\/createUser"/)
+test('the old /createUser address redirects permanently to /signup, keeping the query', async () => {
+  const plain = await request('GET', '/createUser')
+  assert.equal(plain.statusCode, 301)
+  assert.equal(plain.location, '/signup')
 
-  const response = await request('POST', '/createUser', 'username=Lars&password=correct-horse')
+  const invited = await request('GET', '/createUser?invite=abc')
+  assert.equal(invited.statusCode, 301)
+  assert.equal(invited.location, '/signup?invite=abc')
+})
+
+test('creates a user, logs them in, and redirects to the feed', async () => {
+  const form = await request('GET', '/signup')
+  assert.equal(form.statusCode, 200)
+  assert.match(form.body, /action="\/signup"/)
+
+  const response = await request('POST', '/signup', 'username=Lars&password=correct-horse')
 
   assert.equal(response.statusCode, 303)
   assert.equal(response.location, '/')
@@ -94,12 +104,8 @@ test('every top-level route is a reserved username, and every POST has a page or
 })
 
 test('rejects reserved usernames in any letter case', async () => {
-  for (const username of ['login', 'Login', 'API', 'createUser', 'settings']) {
-    const response = await request(
-      'POST',
-      '/createUser',
-      `username=${username}&password=correct-horse`,
-    )
+  for (const username of ['login', 'Login', 'API', 'createUser', 'signup', 'SignUp', 'settings']) {
+    const response = await request('POST', '/signup', `username=${username}&password=correct-horse`)
     assert.equal(response.statusCode, 400, username)
     assert.match(response.body, /That username is reserved/)
   }
@@ -110,7 +116,7 @@ test('rejects usernames that are not safe as a URL segment', async () => {
   for (const username of ['a/b', 'favicon.ico', 'with space', 'x?y', 'æøå']) {
     const response = await request(
       'POST',
-      '/createUser',
+      '/signup',
       `username=${encodeURIComponent(username)}&password=correct-horse`,
     )
     assert.equal(response.statusCode, 400, username)
@@ -121,7 +127,7 @@ test('rejects usernames that are not safe as a URL segment', async () => {
 test('treats usernames as case-insensitive', async () => {
   await createSession('Lars')
 
-  const taken = await request('POST', '/createUser', 'username=lars&password=other-horse')
+  const taken = await request('POST', '/signup', 'username=lars&password=other-horse')
   assert.equal(taken.statusCode, 400)
   assert.match(taken.body, /Username is already taken/)
 

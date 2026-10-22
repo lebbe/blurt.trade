@@ -59,7 +59,7 @@ export const reservedUsernames = new Set([
   'about',
   'admin',
   'api',
-  'createuser',
+  'createuser', // redirects to /signup
   'debug', // /debug/og, the share card previews
   'deleted', // /deleted/:id, a deleted blurt's placeholder
   'everyone',
@@ -73,6 +73,7 @@ export const reservedUsernames = new Set([
   'robots',
   'search',
   'settings',
+  'signup',
   'sitemap.xml',
   'static',
   'terms',
@@ -93,7 +94,6 @@ export const reservedUsernames = new Set([
   'notifications',
   'public',
   'register',
-  'signup',
   'vendor',
   'waitlist',
 ])
@@ -189,7 +189,7 @@ const signupClosedMessages: Record<SignupState, string> = {
 }
 
 // ?invite=<code> fills in the invite code, so a shared link is all an invitee needs.
-usersRouter.get('/createUser', async (request, response) => {
+usersRouter.get('/signup', async (request, response) => {
   const invite = typeof request.query.invite === 'string' ? request.query.invite.trim() : ''
   if (invite.length > inviteCodeMaxLength) {
     sendError(request, response, 400, 'Invite code is too long', 'invite')
@@ -203,6 +203,11 @@ usersRouter.get('/createUser', async (request, response) => {
   )
 })
 
+// The old address of the sign-up page. Still reserved, so nobody can take it as a username.
+usersRouter.get('/createUser', (request, response) => {
+  response.redirect(301, request.originalUrl.replace(/^\/createUser/i, '/signup'))
+})
+
 usersRouter.get('/login', async (request, response) => {
   represent(
     request,
@@ -212,7 +217,7 @@ usersRouter.get('/login', async (request, response) => {
   )
 })
 
-usersRouter.post('/createUser', rateLimit('createUserIp'), async (request, response) => {
+usersRouter.post('/signup', rateLimit('createUserIp'), async (request, response) => {
   const result = createUserSchema.safeParse(request.body ?? {})
   const rerender = async (validationError: string) =>
     renderCreateUserPage({

@@ -32,7 +32,7 @@
 
 ### Identity, auth, and account lifecycle
 
-- Sign-up (`/createUser`), login (`/login`), logout, logout everywhere.
+- Sign-up (`/signup`), login (`/login`), logout, logout everywhere.
 - Invite-code onboarding and waitlist states.
 - Settings page (`/settings`) and delete-account confirmation (`/settings/delete`).
 - Profile page (`/:username/`) and edit page (`/:username/edit`).

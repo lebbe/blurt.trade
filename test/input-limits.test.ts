@@ -63,8 +63,7 @@ test('rejects over-long and non-http(s) profile fields with the field named', as
 })
 
 test('rejects over-long usernames, passwords and query parameters', async () => {
-  const signUp = (username: string, password: string) =>
-    sendJson('/createUser', { username, password })
+  const signUp = (username: string, password: string) => sendJson('/signup', { username, password })
   const longName = await signUp('x'.repeat(41), 'long enough')
   assert.equal(JSON.parse(longName.body).errors[0].field, 'username')
   const longPassword = await signUp('Lars', 'x'.repeat(201))
@@ -79,7 +78,7 @@ test('rejects over-long usernames, passwords and query parameters', async () => 
   const longCursor = Buffer.from(`2026-10-10T12:00:00.000000Z_1${' '.repeat(100)}`)
   for (const [path, field] of [
     [`/waitlist?username=${'x'.repeat(41)}`, 'username'],
-    [`/createUser?invite=${'x'.repeat(41)}`, 'invite'],
+    [`/signup?invite=${'x'.repeat(41)}`, 'invite'],
     [`/?before=${longCursor.toString('base64url')}`, 'before'],
     [`/Lars/?before=${'A'.repeat(5000)}`, 'before'],
     [`/Lars/${id}?after=nonsense`, 'after'],

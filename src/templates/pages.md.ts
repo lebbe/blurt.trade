@@ -60,7 +60,7 @@ const home = link('Back to blurt.trade', '/')
 function viewerLine(viewer: Viewer): Markdown {
   return viewer
     ? md`Logged in as ${link(viewer.username, `/${viewer.username}/`)} · ${link('Near you', '/near')} · ${link('Settings', '/settings')}`
-    : md`${link('Log in', '/login')} or ${link('create a profile', '/createUser')} to blurt.`
+    : md`${link('Log in', '/login')} or ${link('create a profile', '/signup')} to blurt.`
 }
 
 // The blurt a quote quotes, as a blockquote under its text.
@@ -269,7 +269,7 @@ function inviteCodeMarkdown(invite: InviteCode, now: Date): Markdown {
       : 'used'
     : invite.expiresAt && invite.expiresAt <= now
       ? 'expired'
-      : md`${link('sign-up link', `/createUser?invite=${invite.code}`)}${invite.expiresAt && md`, expires ${invite.expiresAt}`}`
+      : md`${link('sign-up link', `/signup?invite=${invite.code}`)}${invite.expiresAt && md`, expires ${invite.expiresAt}`}`
   return md`- ${code(invite.code)} · ${status}`
 }
 
@@ -688,7 +688,7 @@ export function createUserMarkdown({ viewer, signup, inviteCode }: SignupPageDat
       blurt.trade is invite-only right now. You need an invite code from someone who's already
       here to sign up.
 
-      Send ${code('POST /createUser')} as a form or as JSON with ${usernameRules}, ${code('password')} (at least 8 characters) and ${invite}.
+      Send ${code('POST /signup')} as a form or as JSON with ${usernameRules}, ${code('password')} (at least 8 characters) and ${invite}.
 
       ${noPasswordReset}
 
@@ -706,7 +706,7 @@ export function createUserMarkdown({ viewer, signup, inviteCode }: SignupPageDat
   }
   return formMarkdown(
     'Create a profile',
-    '/createUser',
+    '/signup',
     md`${usernameRules}, ${code('password')} (at least 8 characters) and, optionally, ${invite} and ${code('remember')} (${code('1')} to stay logged in; otherwise the login ends when the browser closes, or after a day unused)`,
     viewer,
     noPasswordReset,
@@ -721,9 +721,9 @@ export function waitlistMarkdown({ signup, waiting, username, entry }: WaitlistD
     : username && md`${username} isn't on the waitlist.`
   const opening =
     signup === 'open'
-      ? md`Sign-up is open again: ${link('create your profile', '/createUser')}.`
+      ? md`Sign-up is open again: ${link('create your profile', '/signup')}.`
       : signup === 'invite'
-        ? md`Sign-up has reopened, with an invite code: ${link('sign up', '/createUser')}.`
+        ? md`Sign-up has reopened, with an invite code: ${link('sign up', '/signup')}.`
         : md`
 Sign-up is full. When it opens again, this page will say so.
           `

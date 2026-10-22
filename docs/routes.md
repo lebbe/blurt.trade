@@ -32,7 +32,7 @@ carry `Vary: Accept`.
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
 | `/login`           | —     | `{ viewer }`                                                                  |                         |
-| `/createUser`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
+| `/signup`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
 | `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
 | `/settings`        | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
 | `/settings/delete` | yes   | `{ viewer }`                                                                  | 401                     |
@@ -100,7 +100,7 @@ carry `Vary: Accept`.
 - `signup` is `'open'`, `'invite'` or `'waitlist'` (see Sign-up limits below).
   `/waitlist?username=<name>` looks that name up: `username` echoes it (or `null`), and
   `entry` is `{ username, status: 'waiting' | 'joined', createdAt }` or `null`. `waiting`
-  is how many entries are still waiting. `/createUser?invite=<code>` fills in the form's
+  is how many entries are still waiting. `/signup?invite=<code>` fills in the form's
   invite code (`inviteCode`, or `null`), so a shared link is all an invitee needs.
 - `activeSessions` is how many browsers and devices the viewer is logged in on.
   `/settings` also links to `/settings/delete` (see Deleting an account).
@@ -150,7 +150,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 
 | Path                         | Auth          | Body                                 | Form success                | JSON success                                   |
 | ---------------------------- | ------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
-| `/createUser`                | —             | `username`, `password`, `inviteCode`, `remember` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
+| `/signup`                | —             | `username`, `password`, `inviteCode`, `remember` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
 | `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
 | `/login`                     | —             | `username`, `password`, `remember`   | 303 → `/`                   | 200 `{ id, username }`                         |
 | `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
@@ -528,7 +528,7 @@ preview.
 One row in `signup_counter` holds the number of sign-ups so far and two limits. The
 sign-up page (`signup` in its data) is in one of three states:
 
-| State      | When                            | `/createUser` shows                 | `POST /createUser` |
+| State      | When                            | `/signup` shows                 | `POST /signup` |
 | ---------- | ------------------------------- | ----------------------------------- | ------------------ |
 | `open`     | count below `soft_limit`        | the sign-up form                    | creates the user   |
 | `invite`   | `soft_limit` up to `hard_limit` | "invite-only", the form with a code | needs a valid code |
@@ -542,7 +542,7 @@ taken username rolls the transaction back, releasing the slot. The 403 carries
 ## Invite codes
 
 Every new user gets 3 invite codes, listed under "Your invite codes" on their own
-profile, each with a `/createUser?invite=<code>` link to share. A code is single-use and
+profile, each with a `/signup?invite=<code>` link to share. A code is single-use and
 lets one person sign up while sign-up is invite-only. It doesn't get past the hard limit
 (403, the waitlist). Open sign-up takes a code too, optionally, so "Invited by" still
 shows on the invitee's profile.
@@ -610,7 +610,7 @@ error table below.
 | ---------------------- | ------------------------------ | -------------------- | ------- |
 | `LOGIN_IP`             | `/login`, every attempt        | IP                   | 10/10m  |
 | `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)  | 5/5m    |
-| `CREATE_USER_IP`       | `/createUser` (and invites)    | IP                   | 5/1h    |
+| `CREATE_USER_IP`       | `/signup` (and invites)    | IP                   | 5/1h    |
 | `WAITLIST_IP`          | `/waitlist`                    | IP                   | 10/1h   |
 | `BLURT`                | `/api/blurts` (replies, quotes) | account             | 20/10m  |
 | `REBLURT`              | `/api/reblurt`, `/api/unreblurt` | account (one budget) | 60/10m |
@@ -679,7 +679,7 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 | `?before=` / `?after=` cursors             | 100 characters, and must decode                 |
 | `?radius=` on `/near`                      | one of the listed radii                         |
 | `?q=` on `/search`                         | 200 characters                                  |
-| `?invite=` on `/createUser`                | 40 characters                                   |
+| `?invite=` on `/signup`                | 40 characters                                   |
 | `?username=` on `/waitlist`                | 40 characters                                   |
 | Request body (form or JSON)                | 64 KB, else 413                                 |
 | Blurt `picture` upload                     | 15 MB, else 413 (nginx: 16 MB)                  |

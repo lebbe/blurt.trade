@@ -74,7 +74,7 @@ test('pages use no inline styles or scripts, so the CSP needs no unsafe-inline',
   await request('POST', '/api/location', 'location.x=381&location.y=60', { cookie })
   const id = (await db().query('SELECT id FROM blurts')).rows[0].id
 
-  for (const path of ['/', '/login', '/createUser', '/Lars/', `/Lars/${id}`, '/Lars/edit']) {
+  for (const path of ['/', '/login', '/signup', '/Lars/', `/Lars/${id}`, '/Lars/edit']) {
     const page = await request('GET', path, '', { cookie })
     assert.equal(page.statusCode, 200, path)
     // The one inline <style> is the theme's above-the-fold CSS, allowed by its hash.
@@ -141,7 +141,7 @@ test('in production: HSTS, and session cookies are __Host-, Secure, HttpOnly, Sa
     const server = app.listen(0)
     await new Promise((resolve) => server.once('listening', resolve))
     const base = 'http://localhost:' + server.address().port
-    const response = await fetch(base + '/createUser', {
+    const response = await fetch(base + '/signup', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: 'username=Prod&password=correct-horse',

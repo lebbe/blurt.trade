@@ -103,7 +103,7 @@ test('every page has the same navigation, with the current page marked', async (
   const nav = (body: string) => /<nav class="top-nav"[^]*?<\/nav>/.exec(body)?.[0] ?? ''
 
   const anonymous = nav((await request('GET', '/about')).body)
-  for (const href of ['/', '/search', '/login', '/createUser']) {
+  for (const href of ['/', '/search', '/login', '/signup']) {
     assert.match(anonymous, new RegExp(`href="${href}"`), href)
   }
   assert.doesNotMatch(anonymous, /href="\/settings"/)

@@ -88,7 +88,7 @@ test('sign-up is limited per IP', async () => {
     for (let index = 0; index < 5; index++) {
       const response = await request(
         'POST',
-        '/createUser',
+        '/signup',
         `username=user${index}&password=correct-horse`,
         from('203.0.113.7'),
       )
@@ -96,14 +96,14 @@ test('sign-up is limited per IP', async () => {
     }
     const limited = await request(
       'POST',
-      '/createUser',
+      '/signup',
       'username=user5&password=correct-horse',
       from('203.0.113.7'),
     )
     assert.equal(limited.statusCode, 429)
     const other = await request(
       'POST',
-      '/createUser',
+      '/signup',
       'username=user5&password=correct-horse',
       from('198.51.100.1'),
     )

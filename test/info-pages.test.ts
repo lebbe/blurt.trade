@@ -8,7 +8,7 @@ test('every page links to about, terms and privacy in its footer, without JS', a
   await request('POST', '/api/blurts', 'text=Original+blurt', { cookie })
   const id = await blurtIdByText('Original blurt')
   const pages = ['/', '/everyone', '/Lars/', `/Lars/${id}`, '/Lars/edit', '/near', '/settings']
-  const anonymousPages = ['/login', '/createUser', '/waitlist', '/about', '/terms', '/privacy']
+  const anonymousPages = ['/login', '/signup', '/waitlist', '/about', '/terms', '/privacy']
   const footer = /<footer>[^]*href="\/about"[^]*href="\/terms"[^]*href="\/privacy"[^]*<\/footer>/
   for (const path of [...pages, ...anonymousPages]) {
     const response = await request('GET', path, '', pages.includes(path) ? { cookie } : {})
@@ -82,11 +82,11 @@ test('the contact page says where not to post sensitive things', async (t) => {
 })
 
 test('sign-up and the privacy page say a lost password cannot be recovered', async () => {
-  for (const path of ['/createUser', '/privacy', '/terms']) {
+  for (const path of ['/signup', '/privacy', '/terms']) {
     const { body } = await request('GET', path)
     assert.match(body, /no password reset/, path)
   }
-  const markdown = await request('GET', '/createUser', '', { accept: 'text/markdown' })
+  const markdown = await request('GET', '/signup', '', { accept: 'text/markdown' })
   assert.match(markdown.body, /no password reset/)
 })
 

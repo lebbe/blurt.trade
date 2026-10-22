@@ -69,7 +69,7 @@ test('deletes an account and everything that refers to it, after asking for the 
   const bobCode = (await inviteCodes('Bob', bobCookie))[0].code
   const signedUp = await request(
     'POST',
-    '/createUser',
+    '/signup',
     `username=Leaver&password=correct-horse&inviteCode=${bobCode}`,
   )
   assert.equal(signedUp.statusCode, 303)
@@ -81,7 +81,7 @@ test('deletes an account and everything that refers to it, after asking for the 
   const leaverCode = (await inviteCodes('Leaver', cookie))[0].code
   const adaSignUp = await request(
     'POST',
-    '/createUser',
+    '/signup',
     `username=Ada&password=correct-horse&inviteCode=${leaverCode}`,
   )
   const ada = `access_token=${cookiesSet(adaSignUp).access_token}`
@@ -223,7 +223,7 @@ test('deletes an account and everything that refers to it, after asking for the 
   assert.match(login.body, /Invalid username or password/)
 
   // The username is retired, in any letter case, for sign-up and the waitlist.
-  const again = await request('POST', '/createUser', 'username=LEAVER&password=correct-horse')
+  const again = await request('POST', '/signup', 'username=LEAVER&password=correct-horse')
   assert.equal(again.statusCode, 400)
   assert.match(again.body, /Username is already taken/)
   await setSignupLimits(0, 0)

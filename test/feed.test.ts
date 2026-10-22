@@ -19,7 +19,7 @@ test('shows the empty feed', async () => {
   assert.match(response.body, /Nothing has been blurted yet/)
   assert.doesNotMatch(response.body, /action="\/api\/blurts"/)
   assert.match(response.body, /href="\/login"/)
-  assert.match(response.body, /href="\/createUser"/)
+  assert.match(response.body, /href="\/signup"/)
 })
 
 test('serves the feed as JSON when requested', async () => {

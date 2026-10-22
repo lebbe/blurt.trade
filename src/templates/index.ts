@@ -462,9 +462,9 @@ function WaitlistPage({
     : lookedUp && html`<p>${lookedUp} isn't on the waitlist.</p>`
   const opening =
     signup === 'open'
-      ? html`<p>Sign-up is open again: <a href="/createUser">create your profile</a>.</p>`
+      ? html`<p>Sign-up is open again: <a href="/signup">create your profile</a>.</p>`
       : signup === 'invite'
-        ? html`<p>Sign-up has reopened, with an invite code: <a href="/createUser">sign up</a>.</p>`
+        ? html`<p>Sign-up has reopened, with an invite code: <a href="/signup">sign up</a>.</p>`
         : html`<p>Sign-up is full. When it opens again, this page will say so.</p>`
   return html`
     <${Page}
@@ -507,7 +507,7 @@ function CreateUserForm({
   validationError,
 }: FormProps & { inviteCode?: string; inviteRequired?: boolean }) {
   return html`
-    <form method="post" action="/createUser">
+    <form method="post" action="/signup">
       ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
       <label
         >Username <input name="username" maxlength=${usernameMaxLength} required value=${username}
@@ -560,7 +560,7 @@ function AnonymousActions({ heading = 'Blurt now' }: { heading?: string }) {
       <h2>${heading}</h2>
       <p>Make a profile to blurt. It takes a username and a password, nothing else.</p>
       <div class="actions">
-        <${ButtonLink} href="/createUser" icon="personPlus" label="Create a profile" kind="" />
+        <${ButtonLink} href="/signup" icon="personPlus" label="Create a profile" kind="" />
         <${ButtonLink} href="/login" icon="login" label="Log in" />
       </div>
     </section>
@@ -576,7 +576,7 @@ function LoginPage({ username = '', validationError }: LoginProps) {
         <section class="panel">
           <h3>New here?</h3>
           <p>A username and a password is all it takes. No email, no phone number.</p>
-          <${ButtonLink} href="/createUser" icon="personPlus" label="Create a profile" />
+          <${ButtonLink} href="/signup" icon="personPlus" label="Create a profile" />
         </section>
         <${SupportLinks} />
       `}
@@ -1644,7 +1644,7 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
           JavaScript, no email address needed.
         </p>
         <div class="actions">
-          <${ButtonLink} href="/createUser" icon="personPlus" label="Sign up" kind="" />
+          <${ButtonLink} href="/signup" icon="personPlus" label="Sign up" kind="" />
           <${ButtonLink} href="/login" icon="login" label="Log in" />
         </div>
       </section>
@@ -1825,7 +1825,7 @@ function InviteCodes({ codes }: { codes: InviteCode[] }) {
         : 'used'
       : invite.expiresAt && invite.expiresAt <= now
         ? 'expired'
-        : html`<a href="/createUser?invite=${invite.code}">sign-up link</a>${
+        : html`<a href="/signup?invite=${invite.code}">sign-up link</a>${
               invite.expiresAt &&
               html`, expires
                 <time datetime=${invite.expiresAt.toISOString()}>

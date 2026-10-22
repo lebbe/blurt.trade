@@ -3,7 +3,7 @@ import { publicUrl } from '../config.ts'
 
 export const crawlRouter = Router()
 
-const robotsDisallow = ['/login', '/createUser', '/settings', '/api/']
+const robotsDisallow = ['/login', '/signup', '/settings', '/api/']
 
 crawlRouter.get('/robots.txt', (_request, response) => {
   const lines = [

@@ -127,7 +127,9 @@ app.use(
 // Everything else: logged with its stack and request id, and a generic 500.
 app.use(serverErrorHandler)
 
-const port = Number(process.env.PORT) || 3000
+// PORT=0 asks the OS for a free port (the shutdown test does), so only an unset or empty
+// PORT means 3000.
+const port = process.env.PORT ? Number(process.env.PORT) : 3000
 
 // Housekeeping while the server runs. Both are cheap when there is nothing to do.
 const sessionCleanupMs = 60 * 60 * 1000 // revoked and idle sessions, old read notifications, hourly

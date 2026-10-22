@@ -19,7 +19,7 @@ test('serves robots.txt and sitemap.xml for crawlers', async () => {
   const robots = await request('GET', '/robots.txt')
   assert.equal(robots.statusCode, 200)
   assert.match(robots.contentType ?? '', /^text\/plain/)
-  for (const path of ['/login', '/createUser', '/settings', '/api/']) {
+  for (const path of ['/login', '/signup', '/settings', '/api/']) {
     assert.match(robots.body, new RegExp(`Disallow: ${path.replace('/', '\\/')}`))
   }
   assert.match(robots.body, /Sitemap: https:\/\/blurt\.trade\/sitemap\.xml/)
@@ -103,7 +103,7 @@ test('serves every GET page as JSON with the data the HTML is rendered from', as
       },
     ],
     ['/login', (data) => assert.deepEqual(Object.keys(data), ['viewer'])],
-    ['/createUser', (data) => assert.equal(data.signup, 'open')],
+    ['/signup', (data) => assert.equal(data.signup, 'open')],
     [
       '/waitlist',
       (data) => {
@@ -138,7 +138,7 @@ test('serves every GET page as Markdown', async () => {
     [`/Lars/${id}`, /^# Lars\n[^]*Original blurt[^]*## Replies\n\nNothing here yet\./],
     ['/Lars/edit', /^# Edit profile: Lars\n[^]*`POST \/Lars\/edit`[^]*`POST \/api\/avatar`/],
     ['/login', /^# Log in\n[^]*`POST \/login`/],
-    ['/createUser', /^# Create a profile\n[^]*`POST \/createUser`/],
+    ['/signup', /^# Create a profile\n[^]*`POST \/signup`/],
     ['/waitlist', /^# Waitlist\n[^]*0 people waiting/],
     ['/near', /^# Blurts near you\n[^]*You haven't set a location\./],
   ]
@@ -179,20 +179,20 @@ test('answers errors as JSON for JSON clients', async () => {
 })
 
 test('POST routes answer JSON callers with JSON instead of redirects', async () => {
-  const invalidUser = await sendJson('/createUser', { username: 'a/b', password: 'short' })
+  const invalidUser = await sendJson('/signup', { username: 'a/b', password: 'short' })
   assert.equal(invalidUser.statusCode, 400)
   assert.deepEqual(
     JSON.parse(invalidUser.body).errors.map((error: { field: string }) => error.field),
     ['username', 'password'],
   )
 
-  const created = await sendJson('/createUser', { username: 'Ada', password: 'correct-horse' })
+  const created = await sendJson('/signup', { username: 'Ada', password: 'correct-horse' })
   assert.equal(created.statusCode, 201)
   assert.equal(created.location, '/Ada/')
   assert.deepEqual(JSON.parse(created.body), { id: 1, username: 'Ada' })
   assert.match(created.setCookie?.[0] ?? '', /^access_token=/)
 
-  const taken = await sendJson('/createUser', { username: 'ada', password: 'correct-horse' })
+  const taken = await sendJson('/signup', { username: 'ada', password: 'correct-horse' })
   assert.deepEqual(JSON.parse(taken.body), {
     errors: [{ field: 'username', message: 'Username is already taken' }],
   })

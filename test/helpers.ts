@@ -161,7 +161,7 @@ export async function insertBlurt(username: string, text: string, createdAt: Dat
 export async function createSession(username = 'Lars'): Promise<string> {
   const response = await request(
     'POST',
-    '/createUser',
+    '/signup',
     `username=${encodeURIComponent(username)}&password=correct-horse`,
   )
   assert.equal(response.statusCode, 303)
@@ -259,11 +259,7 @@ export function cookiesSet(response: { setCookie?: string[] }): Record<string, s
 }
 
 export async function signUp(username = 'Lars'): Promise<Record<string, string>> {
-  const response = await request(
-    'POST',
-    '/createUser',
-    `username=${username}&password=correct-horse`,
-  )
+  const response = await request('POST', '/signup', `username=${username}&password=correct-horse`)
   assert.equal(response.statusCode, 303)
   return cookiesSet(response)
 }

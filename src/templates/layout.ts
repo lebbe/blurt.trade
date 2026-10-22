@@ -149,7 +149,7 @@ function navItems(): NavItem[] {
       item('/', 'Home', 'home'),
       item('/search', 'Search', 'search'),
       item('/login', 'Log in', 'login'),
-      item('/createUser', 'Sign up', 'personPlus'),
+      item('/signup', 'Sign up', 'personPlus'),
     ]
   }
   const profile = `/${viewer.username}/`
