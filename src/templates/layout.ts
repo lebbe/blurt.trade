@@ -39,6 +39,7 @@ export type PageMeta = {
     description: string
     image?: string
     imageAlt?: string
+    imageType?: 'image/png' | 'image/jpeg' // of `image`; PNG when missing
     publishedTime?: string
     themeColor?: string
   }
@@ -85,7 +86,10 @@ function Head({ meta }: { meta: PageMeta }) {
           <meta property="og:description" content=${share.description} />
           ${canonical && html`<meta property="og:url" content=${canonical} />`}
           <meta property="og:image" content=${`${origin}${share.image ?? previewImagePath}`} />
-          <meta property="og:image:type" content="image/png" />
+          <meta
+            property="og:image:type"
+            content=${(share.image && share.imageType) || 'image/png'}
+          />
           <meta property="og:image:width" content=${String(previewImageSize.width)} />
           <meta property="og:image:height" content=${String(previewImageSize.height)} />
           <meta

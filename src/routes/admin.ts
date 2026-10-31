@@ -24,7 +24,7 @@ export const adminRouter = Router()
 
 // The forms for the admin APIs below.
 adminRouter.get('/admin', requireAdmin, async (request, response) => {
-  represent(
+  await represent(
     request,
     response,
     { viewer: response.locals.authenticatedUser, limits: await getSignupLimits() },
@@ -56,7 +56,7 @@ adminRouter.post('/api/admin/signup-limits', requireAdmin, async (request, respo
 })
 
 adminRouter.get('/admin/reports', requireAdmin, async (request, response) => {
-  represent(
+  await represent(
     request,
     response,
     { viewer: response.locals.authenticatedUser, reports: await listOpenReports() },

@@ -140,7 +140,7 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
       markRecentWrite(response) // the next page's count is read from the primary too
     }
   }
-  represent(request, response, await getBlurtPageData(request, blurt, after), {
+  await represent(request, response, await getBlurtPageData(request, blurt, after), {
     html: renderBlurtPage,
     markdown: blurtPageMarkdown,
   })

@@ -163,7 +163,7 @@ locationRouter.get('/near', requireAuth, async (request, response) => {
     ? await listNearbyBlurts(viewer.id, radius, before)
     : { items: [], next: null }
   await markViewerFlags(viewer.id, blurts)
-  represent(
+  await represent(
     request,
     response,
     { viewer, location, radius, radii: nearRadii, blurts, next },

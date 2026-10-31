@@ -1,6 +1,12 @@
 import { Router, type Request, type Response } from 'express'
 import { getViewer } from '../middleware/auth.ts'
-import { getBlurt, getCardColor, getUserProfileByUsername, isAdmin } from './state.ts'
+import {
+  getBlurt,
+  getCardColor,
+  getPictureShapes,
+  getUserProfileByUsername,
+  isAdmin,
+} from './state.ts'
 import { isCardColor, type CardColorId } from '../card-colors.ts'
 import {
   blurtOgInput,
@@ -11,6 +17,7 @@ import {
   ogImagePath,
   ogProfileImagePath,
   profileCardText,
+  renderOgJpeg,
   renderOgPng,
   type OgInput,
 } from '../og.ts'
@@ -63,21 +70,26 @@ function withQuery(path: string, color: CardColorId | undefined): string {
   return color ? `${path}?color=${color}` : path
 }
 
+// `picture`: the stored shapes of the blurt's picture, for a card drawn on it (a JPEG).
 async function sendCard(
   request: Request,
   response: Response,
   input: OgInput,
   cacheKey: string,
+  picture?: Uint8Array,
 ): Promise<void> {
+  const render = (debug: boolean) =>
+    picture ? renderOgJpeg(input, picture, debug) : renderOgPng(input, debug)
+  const type = picture ? 'image/jpeg' : 'image/png'
   if (request.query.debug === '1' && (await debugAllowed(request))) {
     response
       .set('Cache-Control', 'no-store')
-      .type('image/png')
-      .send(await renderOgPng(input, true))
+      .type(type)
+      .send(await render(true))
     return
   }
-  const image = await cachedOgPng(cacheKey, () => renderOgPng(input))
-  response.set('Cache-Control', 'public, max-age=31536000, immutable').type('image/png').send(image)
+  const image = await cachedOgPng(cacheKey, () => render(false), picture ? 'jpg' : 'png')
+  response.set('Cache-Control', 'public, max-age=31536000, immutable').type(type).send(image)
 }
 
 ogRouter.get('/og/u/:username/:filename', async (request, response) => {
@@ -110,7 +122,7 @@ ogRouter.get('/og/u/:username/:filename', async (request, response) => {
 })
 
 ogRouter.get('/og/:filename', async (request, response) => {
-  const match = /^(\d{1,15})(?:-([a-f0-9]{64}))?\.png$/.exec(request.params.filename)
+  const match = /^(\d{1,15})(?:-([a-f0-9]{64}))?\.(png|jpg)$/.exec(request.params.filename)
   const id = match ? parseBlurtId(match[1]) : undefined
   if (!match || id === undefined) {
     notFound(response)
@@ -122,17 +134,29 @@ ogRouter.get('/og/:filename', async (request, response) => {
     return
   }
   const stored = blurtOgInput(
-    { text: blurt.text, username: blurt.username, avatar: blurt.avatar },
+    { text: blurt.text, username: blurt.username, avatar: blurt.avatar, picture: blurt.picture },
     await getCardColor(blurt.username),
   )
   const hash = ogHash(stored)
   const override = colorOverride(request)
-  if (hash !== match[2]) {
+  // A blurt with a picture has a JPEG card, any other a PNG: the wrong one redirects too.
+  if (hash !== match[2] || match[3] !== (stored.picture ? 'jpg' : 'png')) {
     // A stale or missing hash (a hand-written link) gets a temporary redirect: a permanent one
     // would stick in browsers, and be wrong if the colour is later changed back.
-    response.redirect(302, withQuery(ogImagePath(id, hash), override))
+    response.redirect(302, withQuery(ogImagePath(id, hash, stored.picture), override))
+    return
+  }
+  const picture = stored.picture ? await getPictureShapes(id) : undefined
+  if (stored.picture && !picture) {
+    notFound(response) // deleted in between
     return
   }
   const input = override && stored.style !== 'blurt' ? { ...stored, color: override } : stored
-  await sendCard(request, response, input, `${id}-${hash}${input === stored ? '' : `-${override}`}`)
+  await sendCard(
+    request,
+    response,
+    input,
+    `${id}-${hash}${input === stored ? '' : `-${override}`}`,
+    picture,
+  )
 })

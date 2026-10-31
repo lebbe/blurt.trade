@@ -14,6 +14,7 @@ import { blurtMaxLength } from './limits.ts'
 import { cardColorOf, type CardColorId } from './card-colors.ts'
 import type { Avatar } from './avatar.ts'
 import { AvatarSvg } from './templates/avatar.ts'
+import { pictureSvg } from './picture.ts'
 
 export const OG_TEMPLATE_VERSION = 2
 export const OG_AVATAR_VERSION = 1
@@ -30,7 +31,12 @@ export type OgInput = {
   style?: 'post' | 'blurt'
   // The background (src/card-colors.ts); null or missing is the default. The red BLURT card ignores it.
   color?: CardColorId | null
+  // The blurt has a picture: the card is drawn on top of it, and is a JPEG, not a PNG.
+  picture?: boolean
 }
+
+// JPEG quality of cards drawn on a picture: well under the share sites' size limits.
+export const OG_JPEG_QUALITY = 85
 
 export type TextLayout = { fontSize: number; lines: string[]; width: number; height: number }
 
@@ -73,7 +79,7 @@ function normalizedAvatar(avatar: Avatar | null, version: number): string {
 
 // The card of a blurt (the red one when it says just BLURT) or of a profile's bio.
 export function blurtOgInput(
-  blurt: { text: string; username: string; avatar: Avatar | null },
+  blurt: { text: string; username: string; avatar: Avatar | null; picture?: object | null },
   color: CardColorId | null,
 ): OgInput {
   return {
@@ -82,6 +88,7 @@ export function blurtOgInput(
     avatar: blurt.avatar,
     style: blurt.text === 'BLURT' ? 'blurt' : 'post',
     color,
+    picture: Boolean(blurt.picture),
   }
 }
 
@@ -99,6 +106,8 @@ export function ogHash(
         input.style ?? 'post',
         input.style === 'blurt' ? null : cardColorOf(input.color).id,
         templateVersion,
+        // Only when there is one, so the hashes of cards without a picture stay as they were.
+        ...(input.picture ? ['picture'] : []),
       ]),
     )
     .digest('hex')
@@ -269,7 +278,27 @@ async function drawFace(context: SKRSContext2D, svg: string): Promise<void> {
   )
 }
 
-async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
+// The picture fills the card (cropped to its shape, like CSS `object-fit: cover`), under a
+// dark veil so the face and the light text stay readable on any drawing.
+async function drawPicture(context: SKRSContext2D, shapes: Uint8Array): Promise<void> {
+  const svg = pictureSvg(shapes)
+  const [width, height] = /viewBox="0 0 (\S+) (\S+)"/.exec(svg)!.slice(1).map(Number)
+  const scale = Math.max(OG_WIDTH / width, OG_HEIGHT / height)
+  const image = await rasterize(svg, Math.ceil(width * scale))
+  context.drawImage(image, (OG_WIDTH - image.width) / 2, (OG_HEIGHT - image.height) / 2)
+  const veil = context.createLinearGradient(0, 0, OG_WIDTH, 0)
+  veil.addColorStop(0, 'rgba(8, 10, 22, 0.35)')
+  veil.addColorStop(0.4, 'rgba(8, 10, 22, 0.6)')
+  veil.addColorStop(1, 'rgba(8, 10, 22, 0.75)')
+  context.fillStyle = veil
+  context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
+}
+
+async function canvasFor(
+  input: OgInput,
+  debug = false,
+  picture?: Uint8Array,
+): Promise<ReturnType<typeof createCanvas>> {
   const special = input.style === 'blurt'
   const font = fitOgText(input.text)
   const avatar = input.avatar ?? avatarFallback
@@ -288,6 +317,12 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
   gradient.addColorStop(1, colors.to)
   context.fillStyle = gradient
   context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
+  if (picture) {
+    await drawPicture(context, picture)
+    // A soft shadow under the face and the text, against the busier background.
+    context.shadowColor = 'rgba(0, 0, 0, 0.55)'
+    context.shadowBlur = 14
+  }
   const accent = special ? '#ffffff' : '#ffbd59'
   context.font = '900 25px "Lato Black"'
   context.textAlign = 'left'
@@ -318,11 +353,20 @@ async function canvasFor(input: OgInput, debug = false): Promise<Buffer> {
     context.fillStyle = '#00eaff'
     context.fillText(`${font.fontSize}px`, 1155, 32)
   }
-  return canvas.toBuffer('image/png')
+  return canvas
 }
 
 export async function renderOgPng(input: OgInput, debug = false): Promise<Buffer> {
-  return canvasFor(input, debug)
+  return (await canvasFor(input, debug)).toBuffer('image/png')
+}
+
+// The card of a blurt with a picture: drawn on the picture (its stored shapes), as a JPEG.
+export async function renderOgJpeg(
+  input: OgInput,
+  picture: Uint8Array,
+  debug = false,
+): Promise<Buffer> {
+  return (await canvasFor(input, debug, picture)).toBuffer('image/jpeg', OG_JPEG_QUALITY)
 }
 
 const cacheDir = process.env.OG_CACHE_DIR || join(import.meta.dirname, '..', 'og-cache')
@@ -331,8 +375,9 @@ const inFlight = new Map<string, Promise<Buffer>>()
 export async function cachedOgPng(
   cacheKey: string,
   generate: () => Buffer | Promise<Buffer>,
+  extension: 'png' | 'jpg' = 'png',
 ): Promise<Buffer> {
-  const path = join(cacheDir, `${cacheKey}.png`)
+  const path = join(cacheDir, `${cacheKey}.${extension}`)
   try {
     return await readFile(path)
   } catch (error) {
@@ -450,8 +495,9 @@ export async function debugOgPng(id: string, debug = false): Promise<Buffer | un
   return example ? renderOgPng(example.input, debug) : undefined
 }
 
-export function ogImagePath(id: number, hash: string): string {
-  return `/og/${id}-${hash}.png`
+// A card on a picture is a JPEG (.jpg), every other card a PNG.
+export function ogImagePath(id: number, hash: string, picture = false): string {
+  return `/og/${id}-${hash}.${picture ? 'jpg' : 'png'}`
 }
 
 export function ogProfileImagePath(username: string, hash: string): string {

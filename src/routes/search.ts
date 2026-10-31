@@ -48,5 +48,5 @@ searchRouter.get('/search', rateLimit('search'), async (request, response) => {
   ])
   await markViewerFlags(viewer?.id ?? null, blurts)
   const data: SearchData = { viewer, query, users, blurts, next }
-  represent(request, response, data, { html: renderSearchPage, markdown: searchMarkdown })
+  await represent(request, response, data, { html: renderSearchPage, markdown: searchMarkdown })
 })
