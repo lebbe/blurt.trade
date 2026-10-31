@@ -798,19 +798,29 @@ export function blurtAnchor(blurt: Blurt): string {
 
 // The count for everyone; logged-in viewers get it as a Like / Unlike button.
 function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
-  const count = plural(blurt.likeCount, 'like')
+  const countLabel = blurt.likeCount === 1 ? 'like' : 'likes'
   if (!viewer) {
     return html`<span class="action-count"
-      ><${Icon} name="heart" /><span class="like-count">${count}</span></span
+      ><${Icon} name="heart" /><span class="like-count"
+        >${blurt.likeCount} <span class="count-label">${countLabel}</span></span
+      ></span
     >`
   }
   return html`
     <form method="post" action=${blurt.viewerLikes ? '/api/unlike' : '/api/like'} class="like-form">
       <input type="hidden" name="blurtId" value=${blurt.id} />
-      <button type="submit" class="action" aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}>
+      <button
+        type="submit"
+        class="action"
+        aria-label=${blurt.viewerLikes ? 'Unlike' : 'Like'}
+        title=${blurt.viewerLikes ? 'Unlike' : 'Like'}
+        aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}
+      >
         <${Icon} name="heart" /><span>${blurt.viewerLikes ? 'Unlike' : 'Like'}</span>
       </button>
-      <span class="like-count">${count}</span>
+      <span class="like-count"
+        >${blurt.likeCount} <span class="count-label">${countLabel}</span></span
+      >
     </form>
   `
 }
@@ -818,11 +828,20 @@ function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
 // The count for everyone; a Reblurt / Undo reblurt button where reblurtAction allows one.
 // Quoting is a link to the quote form on the blurt's page.
 function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
-  const count = html`<span class="like-count">${plural(blurt.reblurtCount, 'reblurt')}</span>`
+  const countLabel = blurt.reblurtCount === 1 ? 'reblurt' : 'reblurts'
+  const count = html`<span class="like-count"
+    >${blurt.reblurtCount} <span class="count-label">${countLabel}</span></span
+  >`
   const action = reblurtAction(viewer, blurt)
   const quote =
     viewer &&
-    html`<a href=${quoteUrl(blurt)} class="action"><${Icon} name="quote" /><span>Quote</span></a>`
+    html`<a
+      href=${quoteUrl(blurt)}
+      class="action"
+      aria-label="Quote"
+      title="Quote"
+      ><${Icon} name="quote" /><span>Quote</span></a
+    >`
   if (!action) {
     return html`<span class="action-count"><${Icon} name="reblurt" />${count}</span> ${quote}`
   }
@@ -832,6 +851,8 @@ function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
       <button
         type="submit"
         class="action"
+        aria-label=${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
+        title=${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
         aria-pressed=${action === 'unreblurt' ? 'true' : 'false'}
       >
         <${Icon} name="reblurt" /><span
@@ -884,7 +905,9 @@ function ReplyingTo({ blurt }: { blurt: Blurt }) {
 function DeleteForm({ blurt }: { blurt: Blurt }) {
   return html`
     <details class="blurt-action">
-      <summary><${Icon} name="trash" /><span>Delete</span></summary>
+      <summary aria-label="Delete" title="Delete">
+        <${Icon} name="trash" /><span>Delete</span>
+      </summary>
       <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
         <span>Delete this blurt for good?</span>
         <button type="submit" class="danger">Delete</button>
@@ -896,7 +919,9 @@ function DeleteForm({ blurt }: { blurt: Blurt }) {
 function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
   return html`
     <details class="blurt-action" open=${Boolean(error)}>
-      <summary><${Icon} name="flag" /><span>Report</span></summary>
+      <summary aria-label="Report" title="Report">
+        <${Icon} name="flag" /><span>Report</span>
+      </summary>
       <form method="post" action="/api/report" class="inline-form">
         <${ValidationError} message=${error} />
         <input type="hidden" name="blurtId" value=${blurt.id} />
@@ -967,7 +992,11 @@ function BlurtCard({
             ${
               showActions &&
               html`<div class="blurt-actions">
-                <a href=${blurtUrl(blurt)} class="action"
+                <a
+                  href=${blurtUrl(blurt)}
+                  class="action"
+                  aria-label=${threadLink}
+                  title=${threadLink}
                   ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
                 >
               </div>`
@@ -1017,13 +1046,21 @@ function BlurtCard({
         <div class="blurt-actions">
           ${
             showActions &&
-            html`<a href=${blurtUrl(blurt)} class="action"
+            html`<a
+              href=${blurtUrl(blurt)}
+              class="action"
+              aria-label=${threadLink}
+              title=${threadLink}
               ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
             >`
           }
           <${Likes} blurt=${blurt} viewer=${viewer} />
           <${Reblurts} blurt=${blurt} viewer=${viewer} />
-          <a href=${sharePath ?? blurtUrl(blurt)} class="action"
+          <a
+            href=${sharePath ?? blurtUrl(blurt)}
+            class="action"
+            aria-label="Share"
+            title="Share"
             ><${Icon} name="share" /><span>Share</span></a
           >
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
