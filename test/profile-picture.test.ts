@@ -67,13 +67,12 @@ test('an uploaded profile picture replaces the cartoon, as two halves that talk'
   )
   assert.doesNotMatch(profile.body, /style="/)
 
-  // The edit page: the whole picture to click, and the cartoon's editor says so.
+  // The edit page: the whole picture to click.
   const editPage = await request('GET', '/Lars/edit', '', { cookie })
   assert.match(
     editPage.body,
     new RegExp(`<input type="image" name="cut" src="${base}-edit.svg" width="240" height="240"`),
   )
-  assert.match(editPage.body, /profile picture<\/a> is shown instead of this cartoon/)
 
   // In blurts, and in JSON.
   await request('POST', '/api/blurts', 'text=Hello', { cookie })
@@ -186,4 +185,50 @@ test('the photo halves talk with the same keyframes as the cartoon', () => {
   assert.match(stylesheet, /\.avatar-photo \.avatar-top \{[^}]*transform-origin: 86% 100%/)
   assert.match(stylesheet, /\.avatar-photo \.avatar-jaw \{[^}]*margin-top: -1\.25%/)
   assert.match(stylesheet, /\.avatar:hover \.avatar-top,/)
+})
+
+test('with a profile picture the cartoon settings give way to the picture panel', async () => {
+  const cookie = await createSession('Lars')
+  const before = await request('GET', '/Lars/edit', '', { cookie })
+  assert.match(before.body, /action="\/api\/avatar"/)
+  assert.match(before.body, /href="#avatar"/)
+
+  await uploadAs(cookie)
+  const after = await request('GET', '/Lars/edit', '', { cookie })
+  assert.doesNotMatch(after.body, /action="\/api\/avatar"/)
+  assert.doesNotMatch(after.body, /href="#avatar"/)
+  assert.match(
+    after.body,
+    /<span id="avatar"><\/span><section class="panel" aria-label="Profile picture"/,
+  )
+  assert.match(after.body, /<input type="image" name="cut"/)
+  const markdown = await request('GET', '/Lars/edit', '', { cookie, accept: 'text/markdown' })
+  assert.doesNotMatch(markdown.body, /## Avatar/)
+  assert.match(markdown.body, /## Profile picture/)
+})
+
+test('share cards show the profile picture, and change with it', async () => {
+  const cookie = await createSession('Lars')
+  await request('POST', '/api/blurts', 'text=Look+at+me', { cookie })
+  const { rows } = await db().query('SELECT id FROM blurts')
+  const cardOf = async () => {
+    const page = await request('GET', `/Lars/${rows[0].id}`)
+    return /<meta property="og:image" content="https:\/\/blurt\.trade(\/og\/[^"]+)"/.exec(
+      page.body,
+    )![1]
+  }
+  const cartoon = await cardOf()
+  await uploadAs(cookie)
+  const photo = await cardOf()
+  assert.notEqual(photo, cartoon)
+  const [cartoonPng, photoPng] = [await request('GET', cartoon), await request('GET', photo)]
+  assert.equal(photoPng.statusCode, 200)
+  assert.equal(photoPng.contentType, 'image/png')
+  assert.notDeepEqual(photoPng.bodyBytes, cartoonPng.bodyBytes)
+
+  // A new cut is a new card.
+  await sendJson('/api/profile-picture/cut', { cut: 40 }, { cookie })
+  const recut = await cardOf()
+  assert.notEqual(recut, photo)
+  assert.equal((await request('GET', recut)).statusCode, 200)
 })

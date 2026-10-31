@@ -557,6 +557,12 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
   like the location map), and the height becomes the percentage (pulled in to 5–95). A
   keyboard activation (0,0) is an error. API clients send `cut` (a whole number, 5–95).
 - In JSON the avatar gets `photo: { user, version, cut }` while there is a picture.
+- The edit page then hides the cartoon's settings (they would change nothing that shows):
+  the picture's panel, with the click for the cut, takes their place, and `#avatar` links
+  land on it. `POST /api/avatar` still works, for when the picture is removed.
+- Share cards show the picture instead of the cartoon, as the still of its biggest flap
+  (like the cartoon's `openMouth`). Its user, version and cut are in the card's hash, so a
+  new picture or cut is a new card.
 
 | Path                                        | Auth | Response                                                      | Errors |
 | ------------------------------------------- | ---- | ------------------------------------------------------------- | ------ |

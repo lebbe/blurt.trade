@@ -12,7 +12,7 @@ import { h } from 'preact'
 import { renderToString } from 'preact-render-to-string'
 import { blurtMaxLength } from './limits.ts'
 import { cardColorOf, type CardColorId } from './card-colors.ts'
-import type { Avatar } from './avatar.ts'
+import { photoOverlap, type Avatar } from './avatar.ts'
 import { AvatarSvg } from './templates/avatar.ts'
 import { pictureSvg } from './picture.ts'
 
@@ -67,6 +67,11 @@ const avatarFallback: Avatar = {
 function normalizedAvatar(avatar: Avatar | null, version: number): string {
   if (!avatar) {
     return JSON.stringify(['default', version])
+  }
+  if (avatar.photo) {
+    // A new upload has a new version, so the card changes with the picture and its cut.
+    const { user, version: photoVersion, cut } = avatar.photo
+    return JSON.stringify(['photo', version, user, photoVersion, cut])
   }
   return JSON.stringify([
     version,
@@ -242,6 +247,24 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&apos;')
 }
 
+// A profile picture as a face for the card: the still of its biggest flap, like the
+// cartoon's openMouth (33% of `avatar-talk` in public/style.css, scaled from its 100-wide
+// box to the picture's 640): the top lifted 26 and turned 21° around the back of the head
+// at the cut, the jaw dropped 19, the dark mouth showing between them. `cut` in percent.
+export function photoFaceSvg(shapes: Uint8Array, cut: number): string {
+  const size = 640
+  const line = Math.round((size * cut) / 100)
+  const band = (svg: string, y: number) => svg.replace('<svg ', `<svg y="${y}" `)
+  const top = band(pictureSvg(shapes, { top: 0, bottom: line + photoOverlap }), 0)
+  const jaw = band(pictureSvg(shapes, { top: line }), line)
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -260 720 940">` +
+    `<rect width="${size}" height="${size}" fill="#3a0d12"/>` +
+    `<g transform="translate(0 19)">${jaw}</g>` +
+    `<g transform="translate(0 -26) rotate(21 550 ${line})">${top}</g></svg>`
+  )
+}
+
 // The face area, left of the text: equal to the margin at the right of the card.
 const faceBox = { x: 50, y: 95, width: 400, height: 500 }
 
@@ -358,21 +381,27 @@ async function drawOnPicture(
   })
 }
 
+// `photo`: the stored drawing of the profile picture, when input.avatar has one. Without
+// it the card shows the cartoon.
 async function canvasFor(
   input: OgInput,
   debug = false,
   picture?: Uint8Array,
+  photo?: Uint8Array,
 ): Promise<ReturnType<typeof createCanvas>> {
   const special = input.style === 'blurt'
   const font = fitOgText(input.text)
   const avatar = input.avatar ?? avatarFallback
-  const faceSvg = renderToString(
-    h(AvatarSvg, {
-      avatar,
-      size: 'large',
-      openMouth: true,
-    }),
-  )
+  const faceSvg =
+    photo && avatar.photo
+      ? photoFaceSvg(photo, avatar.photo.cut)
+      : renderToString(
+          h(AvatarSvg, {
+            avatar,
+            size: 'large',
+            openMouth: true,
+          }),
+        )
   const canvas = createCanvas(OG_WIDTH, OG_HEIGHT)
   const context = canvas.getContext('2d')
   const colors = special ? { from: '#f00020', to: '#a90017' } : cardColorOf(input.color)
@@ -419,8 +448,13 @@ async function canvasFor(
   return canvas
 }
 
-export async function renderOgPng(input: OgInput, debug = false): Promise<Buffer> {
-  return (await canvasFor(input, debug)).toBuffer('image/png')
+// `photo`: the profile picture's stored drawing, when the avatar has one (see canvasFor).
+export async function renderOgPng(
+  input: OgInput,
+  debug = false,
+  photo?: Uint8Array,
+): Promise<Buffer> {
+  return (await canvasFor(input, debug, undefined, photo)).toBuffer('image/png')
 }
 
 // The card of a blurt with a picture: drawn on the picture (its stored shapes), as a JPEG.
@@ -428,8 +462,9 @@ export async function renderOgJpeg(
   input: OgInput,
   picture: Uint8Array,
   debug = false,
+  photo?: Uint8Array,
 ): Promise<Buffer> {
-  return (await canvasFor(input, debug, picture)).toBuffer('image/jpeg', OG_JPEG_QUALITY)
+  return (await canvasFor(input, debug, picture, photo)).toBuffer('image/jpeg', OG_JPEG_QUALITY)
 }
 
 const cacheDir = process.env.OG_CACHE_DIR || join(import.meta.dirname, '..', 'og-cache')

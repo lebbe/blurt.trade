@@ -347,6 +347,19 @@ export function profileEditMarkdown({
   const fields = profileFields.map(
     ([key, label]) => md`- ${code(key)} (${label}): ${profileValue(String(profile[key]))}`,
   )
+  // With a profile picture the cartoon is never shown, so its settings aren't either.
+  const cartoon = profile.avatar.photo
+    ? ''
+    : md`
+    ## Avatar
+
+    Yours: ${describeAvatar(profile.avatar)}.
+
+    Send ${code('POST /api/avatar')} with all of ${join(Object.keys(avatarSchema.shape).map(code), ', ')}
+    to change it, or with ${code('random')} for a random one. Colours are ${code('#rrggbb')}. The
+    head is one of ${join(headWidths.map(code), ', ')} wide. Hair is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
+    teeth one of ${join(toothTypes.map(code), ', ')}.
+    `
   return md`
     # Edit profile: ${profile.username}
 
@@ -357,14 +370,7 @@ export function profileEditMarkdown({
 
     ${join(fields, '\n')}
 
-    ## Avatar
-
-    Yours: ${describeAvatar(profile.avatar)}.
-
-    Send ${code('POST /api/avatar')} with all of ${join(Object.keys(avatarSchema.shape).map(code), ', ')}
-    to change it, or with ${code('random')} for a random one. Colours are ${code('#rrggbb')}. The
-    head is one of ${join(headWidths.map(code), ', ')} wide. Hair is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
-    teeth one of ${join(toothTypes.map(code), ', ')}.
+    ${cartoon}
 
     ## Profile picture
 
