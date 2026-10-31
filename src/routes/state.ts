@@ -95,6 +95,15 @@ const relatedLimit = 5
 // the average of someone's blurts (discovery): 0.5-0.7 on their topics, 0.83+ off them.
 const relatedMaxDistance = 0.75
 
+// The avatar of a user_profiles row (by its alias) as it is shown: the stored JSON, plus
+// `photo` when they have a profile picture (AvatarPhoto in src/avatar.ts). The picture
+// itself is never read here: IS NULL doesn't fetch it.
+function avatarColumn(profile: string): string {
+  return `(${profile}.avatar || CASE WHEN ${profile}.picture IS NULL THEN '{}'::jsonb
+    ELSE jsonb_build_object('photo', jsonb_build_object('user', ${profile}.user_id,
+      'version', ${profile}.picture_version, 'cut', ${profile}.picture_cut)) END)`
+}
+
 // A row of blurts that is a plain reblurt: one that points at another blurt and has no
 // text of its own. The deleted_at test matters: a deleted quote has no text either. The
 // only place this is written in the app; the indexes in db/migrations/*_reblurts.sql
@@ -137,14 +146,14 @@ function shownWhere(placeholders: boolean): string {
 const shownColumns = `b.id, u.username, b.text, b.created_at AS "createdAt", b.parent_id AS "parentId",
   pu.username AS "parentUsername", pic.width AS "pictureWidth", pic.height AS "pictureHeight",
   (SELECT count(*) FROM blurts c WHERE c.parent_id = b.id)::int AS "replyCount",
-  (SELECT a.avatar FROM user_profiles a WHERE a.user_id = u.id) AS avatar,
+  (SELECT ${avatarColumn('a')} FROM user_profiles a WHERE a.user_id = u.id) AS avatar,
   b.deleted_at IS NOT NULL AS deleted,
   coalesce(st.like_count, 0) AS "likeCount", false AS "viewerLikes",
   coalesce(st.reblurt_count, 0) AS "reblurtCount", false AS "viewerReblurted",
   ru.username AS "reblurtedBy",
   q.id AS "quotedId", qu.username AS "quotedUsername", q.text AS "quotedText",
   q.created_at AS "quotedCreatedAt", q.deleted_at IS NOT NULL AS "quotedDeleted",
-  (SELECT a.avatar FROM user_profiles a WHERE a.user_id = qu.id) AS "quotedAvatar",
+  (SELECT ${avatarColumn('a')} FROM user_profiles a WHERE a.user_id = qu.id) AS "quotedAvatar",
   to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt",
   r.id AS "cursorId"`
 
@@ -266,7 +275,7 @@ async function listPage(
 }
 
 const profileColumns = `p.user_id AS "userId", u.username, p.homepage, p.x, p.instagram,
-  p.tiktok, p.youtube, p.github, p.linkedin, p.bio, p.avatar,
+  p.tiktok, p.youtube, p.github, p.linkedin, p.bio, ${avatarColumn('p')} AS avatar,
   p.card_color AS "cardColor"`
 
 const followedBy = (userId: string) =>
@@ -471,7 +480,7 @@ const userSearchLimit = 20
 // (signup_counter's hard limit); a trigram index would serve substrings if it grows.
 export async function searchUsers(query: string): Promise<UserMatch[]> {
   const { rows } = await dbRead().query<UserMatch>(
-    `SELECT u.username, p.avatar FROM users u JOIN user_profiles p ON p.user_id = u.id
+    `SELECT u.username, ${avatarColumn('p')} AS avatar FROM users u JOIN user_profiles p ON p.user_id = u.id
      WHERE strpos(lower(u.username), lower($1)) > 0
      ORDER BY strpos(lower(u.username), lower($1)) = 1 DESC, length(u.username),
        lower(u.username)
@@ -512,7 +521,7 @@ export function parsePeopleCursor(value: unknown): string | null | undefined {
 // serve them.
 export async function listPeople(after: string | null): Promise<Page<Person>> {
   const { rows } = await dbRead().query<Person>(
-    `SELECT u.username, p.avatar, p.bio, u.created_at AS "joinedAt",
+    `SELECT u.username, ${avatarColumn('p')} AS avatar, p.bio, u.created_at AS "joinedAt",
        (SELECT count(*)::int FROM blurts b
          WHERE b.user_id = u.id AND b.deleted_at IS NULL AND b.text IS NOT NULL) AS "blurtCount",
        (SELECT count(*)::int FROM follows f WHERE f.followed_user_id = u.id) AS "followerCount",
@@ -1287,7 +1296,7 @@ export async function listNotifications(
   }
   const { rows } = await dbRead().query<NotificationRow>(
     `SELECT n.id, n.kind, au.username AS actor,
-       (SELECT a.avatar FROM user_profiles a WHERE a.user_id = au.id) AS avatar,
+       (SELECT ${avatarColumn('a')} FROM user_profiles a WHERE a.user_id = au.id) AS avatar,
        b.id AS "blurtId", bu.username AS "blurtUsername", b.text,
        n.created_at AS "createdAt", n.read_at IS NOT NULL AS read,
        to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt"
@@ -1567,6 +1576,48 @@ export function setReblurt(
         : await readStat(client, blurtId, 'reblurt_count')
     return { blurtId, reblurtCount, viewerReblurted: reblurts }
   })
+}
+
+// Sets the user's profile picture (a drawing from src/picture.ts, encodeShapes), or removes
+// it (null). A new one gets a new version, so its URLs change. False if the user has no
+// profile (e.g. a still-valid token after a database reset).
+export async function setProfilePicture(userId: number, shapes: Buffer | null): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `UPDATE user_profiles SET picture = $2::bytea, updated_at = now(),
+       picture_version = picture_version + CASE WHEN $2::bytea IS NULL THEN 0 ELSE 1 END
+     WHERE user_id = $1`,
+    [userId, shapes],
+  )
+  return rowCount === 1
+}
+
+// Where the profile picture is cut apart (percent from the top, already checked against
+// minPictureCut and maxPictureCut). False if the user has no profile.
+export async function setPictureCut(userId: number, cut: number): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'UPDATE user_profiles SET picture_cut = $2, updated_at = now() WHERE user_id = $1',
+    [userId, cut],
+  )
+  return rowCount === 1
+}
+
+// The stored drawing of a user's profile picture, only if `version` is the current one and
+// the account is live. Asked from the replica first; right after an upload the picture may
+// only be on the primary yet.
+export async function getProfilePicture(
+  userId: number,
+  version: number,
+): Promise<Buffer | undefined> {
+  const sql = `SELECT p.picture FROM user_profiles p JOIN users u ON u.id = p.user_id
+     WHERE p.user_id = $1 AND p.picture_version = $2 AND p.picture IS NOT NULL
+       AND u.deleted_at IS NULL`
+  for (const pool of [dbRead(), db()]) {
+    const { rows } = await pool.query<{ picture: Buffer }>(sql, [userId, version])
+    if (rows[0]) {
+      return rows[0].picture
+    }
+  }
+  return undefined
 }
 
 // The stored drawing of a blurt's picture (see src/picture.ts), if it has one and is not deleted.

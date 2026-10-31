@@ -1,21 +1,14 @@
 import { Router, type Request, type RequestHandler } from 'express'
-import multer from 'multer'
 import { z } from 'zod'
 import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
 import { pageContext } from '../page-context.ts'
 import { markRecentWrite } from '../middleware/replica.ts'
-import {
-  blurtMaxLength,
-  blurtMaxNewlines,
-  pictureMaxStoredBytes,
-  pictureMaxUploadBytes,
-  reportReasonMaxLength,
-  text,
-} from '../limits.ts'
+import { blurtMaxLength, blurtMaxNewlines, reportReasonMaxLength, text } from '../limits.ts'
 import { sanitizeBlurtLinks } from '../templates/blurt-text.ts'
-import { drawPicture, PictureBusyError, PictureTimeoutError } from '../picture-pool.ts'
+import type { DrawnPicture } from '../picture-pool.ts'
+import { drawUpload, uploadPicture } from './picture-upload.ts'
 import {
   fieldErrors,
   type FieldError,
@@ -64,26 +57,6 @@ const blurtSchema = z.object({
     )
     .transform(sanitizeBlurtLinks),
 })
-
-// The optional picture of a blurt: held in memory, never written to disk (see src/picture.ts).
-const pictureUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: pictureMaxUploadBytes, files: 1 },
-}).single('picture')
-
-const uploadPicture: RequestHandler = (request, response, next) => {
-  pictureUpload(request, response, (error: unknown) => {
-    if (error instanceof multer.MulterError) {
-      if (error.code === 'LIMIT_FILE_SIZE') {
-        sendError(request, response, 413, 'Picture is too large')
-      } else {
-        sendError(request, response, 400, error.message, 'picture')
-      }
-    } else {
-      next(error)
-    }
-  })
-}
 
 // From a URL segment, a form field (string) or a JSON body (number).
 export function parseBlurtId(value: unknown): number | undefined {
@@ -180,35 +153,16 @@ blurtsRouter.post(
     const result = blurtSchema.safeParse(request.body ?? {})
     const errors: FieldError[] = result.success ? [] : fieldErrors(result.error)
 
-    let picture: { width: number; height: number; shapes: Buffer } | undefined
+    let picture: DrawnPicture | undefined
     if (result.success && request.file) {
-      let drawn
-      try {
-        drawn = await drawPicture(request.file.buffer)
-      } catch (error) {
-        if (error instanceof PictureBusyError) {
-          response.set('Retry-After', '5')
-          sendError(
-            request,
-            response,
-            503,
-            'Too many pictures are being processed. Try again soon.',
-          )
-          return
-        }
-        if (!(error instanceof PictureTimeoutError)) {
-          throw error
-        }
-      }
+      const drawn = await drawUpload(request, response, request.file)
       if (!drawn) {
-        errors.push({
-          field: 'picture',
-          message: 'Could not read the picture. Use JPEG, PNG or WebP.',
-        })
-      } else if (drawn.shapes.length > pictureMaxStoredBytes) {
-        errors.push({ field: 'picture', message: 'The picture is too detailed' })
+        return
+      }
+      if ('error' in drawn) {
+        errors.push(drawn.error)
       } else {
-        picture = drawn
+        picture = drawn.picture
       }
     }
 

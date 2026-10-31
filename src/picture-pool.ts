@@ -14,6 +14,7 @@ export class PictureTimeoutError extends Error {}
 type Task = {
   id: number
   upload: ArrayBuffer
+  square: boolean
   resolve: (picture: DrawnPicture | undefined) => void
   reject: (error: Error) => void
 }
@@ -91,7 +92,7 @@ function next(slot: Slot): void {
     () => replace(slot, new PictureTimeoutError('picture took too long')),
     pictureTaskTimeoutMs,
   )
-  slot.worker.postMessage({ id: task.id, upload: task.upload }, [task.upload])
+  slot.worker.postMessage({ id: task.id, upload: task.upload, square: task.square }, [task.upload])
 }
 
 // The buffer's bytes as an ArrayBuffer of their own, which can be transferred. A multer
@@ -106,8 +107,12 @@ function transferable(buffer: Buffer): ArrayBuffer {
 // Draws an upload in a worker (see pictureFromUpload and encodeShapes in picture.ts): its
 // size and encoded shapes, or undefined when it is no picture. Rejects with
 // PictureBusyError when the queue is full, and PictureTimeoutError when it takes too long.
-// The upload's buffer is handed over, not copied, and can't be used afterwards.
-export function drawPicture(upload: Buffer): Promise<DrawnPicture | undefined> {
+// The upload's buffer is handed over, not copied, and can't be used afterwards. `square`:
+// a profile picture, cropped square (see pictureFromUpload).
+export function drawPicture(
+  upload: Buffer,
+  { square = false }: { square?: boolean } = {},
+): Promise<DrawnPicture | undefined> {
   closed = false
   if (slots.length === 0) {
     for (let i = 0; i < pictureWorkers; i++) {
@@ -119,7 +124,7 @@ export function drawPicture(upload: Buffer): Promise<DrawnPicture | undefined> {
     return Promise.reject(new PictureBusyError('too many pictures at once'))
   }
   return new Promise((resolve, reject) => {
-    queue.push({ id: nextId++, upload: transferable(upload), resolve, reject })
+    queue.push({ id: nextId++, upload: transferable(upload), square, resolve, reject })
     if (idle) {
       next(idle)
     }

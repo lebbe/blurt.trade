@@ -1,12 +1,17 @@
 import { h } from 'preact'
 import htm from 'htm'
 import {
+  maxPictureCut,
+  minPictureCut,
+  photoOverlap,
+  photoUrl,
   colorPattern,
   eyeTypes,
   hairTypes,
   headWidths,
   toothTypes,
   type Avatar,
+  type AvatarPhoto,
   type HeadWidth,
 } from '../avatar.ts'
 
@@ -263,4 +268,75 @@ export function AvatarSvg({
       </g>
     </g>
   </svg>`
+}
+
+// The size profile pictures are drawn at (src/picture.ts, square).
+const photoSize = 640
+
+// A photo, if it is a well-formed one: numbers only, so nothing else gets into its URLs.
+function safePhoto(photo: unknown): AvatarPhoto | undefined {
+  const { user, version, cut } = (photo ?? {}) as Partial<AvatarPhoto>
+  return Number.isSafeInteger(user) &&
+    Number.isSafeInteger(version) &&
+    Number.isInteger(cut) &&
+    cut! >= minPictureCut &&
+    cut! <= maxPictureCut
+    ? { user: user!, version: version!, cut: cut! }
+    : undefined
+}
+
+// A profile picture that talks like the cartoon: two empty <img>s stacked, the part above
+// the mouth (`avatar-top`) and the part below (`avatar-jaw`), each an SVG of just that
+// band (src/routes/profile-picture.ts). Their width and height give each its share of the
+// square (the top one a little more, photoOverlap, tucked over the jaw), so no inline
+// style is needed (the CSP allows none). On hover the same CSS as the
+// cartoon's flaps the top up around the back of the head and bobs the jaw, showing the
+// dark mouth behind them (public/style.css, .avatar-photo).
+function AvatarPhotoView({
+  photo,
+  label,
+  size,
+}: {
+  photo: AvatarPhoto
+  label?: string
+  size: 'small' | 'large'
+}) {
+  const line = Math.round((photoSize * photo.cut) / 100)
+  return html`<span
+    class="avatar avatar-${size} avatar-photo"
+    role=${label ? 'img' : undefined}
+    aria-label=${label}
+    aria-hidden=${label ? undefined : 'true'}
+    ><span class="avatar-mouth"
+      ><img
+        class="avatar-top"
+        src=${photoUrl(photo, 'top')}
+        width=${photoSize}
+        height=${line + photoOverlap}
+        alt=""
+        decoding="async" /><img
+        class="avatar-jaw"
+        src=${photoUrl(photo, 'jaw')}
+        width=${photoSize}
+        height=${photoSize - line}
+        alt=""
+        decoding="async" /></span
+  ></span>`
+}
+
+// The avatar as shown everywhere: the profile picture when there is one, otherwise the
+// cartoon (AvatarSvg).
+export function AvatarView(props: {
+  avatar: Avatar | null
+  label?: string
+  size?: 'small' | 'large'
+}) {
+  const photo = safePhoto(props.avatar?.photo)
+  return photo
+    ? html`<${AvatarPhotoView} photo=${photo} label=${props.label} size=${props.size ?? 'small'} />`
+    : html`<${AvatarSvg}
+        avatar=${props.avatar as Avatar}
+        label=${props.label}
+        size=${props.size}
+      />`
 }
