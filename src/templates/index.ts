@@ -1476,13 +1476,6 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
   return html`
     <section class="panel" aria-label="Avatar" id="avatar">
       <h2>Avatar</h2>
-      ${
-        avatar.photo &&
-        html`<p>
-          Your <a href="#picture">profile picture</a> is shown instead of this cartoon until you
-          remove it.
-        </p>`
-      }
       <${ValidationError} message=${error} />
       <form method="post" action="/api/avatar" class="avatar-form">
         <div class="avatar-preview">
@@ -1529,8 +1522,11 @@ function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string 
     <section class="panel" aria-label="Profile picture" id="picture">
       <h2>Profile picture</h2>
       <p>
-        Optional. Instead of the cartoon, your own picture: we redraw it as a rough drawing, like a
-        blurt's picture, and keep only that. It talks by flapping open where you click.
+        ${
+          photo
+            ? 'Shown instead of the cartoon avatar, also on your share cards. Remove it to get the cartoon back.'
+            : "Optional. Instead of the cartoon, your own picture: we redraw it as a rough drawing, like a blurt's picture, and keep only that. It talks by flapping open where you click."
+        }
       </p>
       <${ValidationError} message=${error} />
       ${
@@ -1749,8 +1745,12 @@ function ProfileEditForm({
       links=${[
         ['#profile', 'Profile and links'],
         ['#card', 'Share card'],
-        ['#avatar', 'Avatar'],
-        ['#picture', 'Profile picture'],
+        ...(profile.avatar.photo
+          ? [['#picture', 'Profile picture'] as [string, string]]
+          : [
+              ['#avatar', 'Avatar'] as [string, string],
+              ['#picture', 'Profile picture'] as [string, string],
+            ]),
         ['#location', 'Location and time'],
         ['#theme', 'Theme'],
         ['#notifications', 'Notifications'],
@@ -1813,7 +1813,13 @@ ${profile.bio}</textarea>
         </form>
       </section>
       <${CardForm} profile=${profile} />
-      <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
+      ${
+        // With a profile picture the cartoon is never shown, so neither are its settings:
+        // the picture's panel (where its mouth is) takes their place, and #avatar links there.
+        profile.avatar.photo
+          ? html`<span id="avatar"></span>`
+          : html`<${AvatarForm} avatar=${profile.avatar} error=${avatarError} />`
+      }
       <${ProfilePictureForm} avatar=${profile.avatar} error=${pictureError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />

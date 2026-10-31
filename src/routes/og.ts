@@ -4,6 +4,7 @@ import {
   getBlurt,
   getCardColor,
   getPictureShapes,
+  getProfilePicture,
   getUserProfileByUsername,
   isAdmin,
 } from './state.ts'
@@ -78,8 +79,15 @@ async function sendCard(
   cacheKey: string,
   picture?: Uint8Array,
 ): Promise<void> {
+  // The profile picture, when the avatar is one: the card shows it instead of the cartoon.
+  const photoOf = input.avatar?.photo
+  const photo = photoOf ? await getProfilePicture(photoOf.user, photoOf.version) : undefined
+  if (photoOf && !photo) {
+    notFound(response) // replaced or removed in between
+    return
+  }
   const render = (debug: boolean) =>
-    picture ? renderOgJpeg(input, picture, debug) : renderOgPng(input, debug)
+    picture ? renderOgJpeg(input, picture, debug, photo) : renderOgPng(input, debug, photo)
   const type = picture ? 'image/jpeg' : 'image/png'
   if (request.query.debug === '1' && (await debugAllowed(request))) {
     response
