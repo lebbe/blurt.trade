@@ -40,7 +40,7 @@ services:
       # One app container, so it can run the migrations itself on start.
       MIGRATE_ON_START: 'true'
       PUBLIC_URL: https://blurt.trade
-      CONTACT_REPO_URL: https://github.com/lebbe/blurt.trade
+      CONTACT_REPO_URL: ${CONTACT_REPO_URL:?Set CONTACT_REPO_URL in .env}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
 
 volumes:

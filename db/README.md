@@ -19,6 +19,16 @@ Run Node and npm inside WSL with `nvm use 26`. `node_modules` holds Linux-only n
 binaries (argon2, oxlint, onnxruntime), so running `npm install` from Windows breaks
 it. If that happens, run `npm ci` in WSL.
 
+The app commands (`npm run dev`, `npm start`, and the database/configuration commands) load optional
+environment variables from `.env` in the repository root using Node's built-in env-file
+support. For example, to show the GitHub issues link on the front page and `/about`, add:
+
+```dotenv
+CONTACT_REPO_URL=https://github.com/lebbe/blurt.trade
+```
+
+`.env` is ignored by Git. Variables already set in the shell take precedence.
+
 First time, from the repo root:
 
 ```powershell
