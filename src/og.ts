@@ -38,7 +38,12 @@ export type OgInput = {
 // JPEG quality of cards drawn on a picture: well under the share sites' size limits.
 export const OG_JPEG_QUALITY = 85
 
-export type TextLayout = { fontSize: number; lines: string[]; width: number; height: number }
+export type TextLayout = {
+  fontSize: number
+  lines: string[]
+  width: number
+  height: number
+}
 
 const fontDir = join(import.meta.dirname, '..', 'assets', 'fonts')
 GlobalFonts.registerFromPath(join(fontDir, 'Lato-Black.ttf'), 'Lato Black')
@@ -79,7 +84,12 @@ function normalizedAvatar(avatar: Avatar | null, version: number): string {
 
 // The card of a blurt (the red one when it says just BLURT) or of a profile's bio.
 export function blurtOgInput(
-  blurt: { text: string; username: string; avatar: Avatar | null; picture?: object | null },
+  blurt: {
+    text: string
+    username: string
+    avatar: Avatar | null
+    picture?: object | null
+  },
   color: CardColorId | null,
 ): OgInput {
   return {
@@ -107,7 +117,7 @@ export function ogHash(
         input.style === 'blurt' ? null : cardColorOf(input.color).id,
         templateVersion,
         // Only when there is one, so the hashes of cards without a picture stay as they were.
-        ...(input.picture ? ['picture'] : []),
+        ...(input.picture ? ['picture-band'] : []),
       ]),
     )
     .digest('hex')
@@ -178,7 +188,7 @@ export function measureOgText(text: string, fontSize: number): number {
 
 export function fitOgText(
   text: string,
-  { width = textBox.width, height = textBox.height } = {},
+  { width = textBox.width, height = textBox.height, maxFontSize = OG_MAX_FONT_SIZE } = {},
 ): TextLayout {
   const words = text.split(/s+/).filter(Boolean)
   // `whole`: only sizes at which no word has to be broken across lines.
@@ -196,7 +206,7 @@ export function fitOgText(
       }
     }
     let low = OG_MIN_FONT_SIZE
-    let high = OG_MAX_FONT_SIZE
+    let high = maxFontSize
     let best = fits(low)
     while (low <= high) {
       const middle = Math.floor((low + high) / 2)
@@ -245,7 +255,11 @@ async function rasterize(svg: string, width: number): Promise<Image> {
 
 // Draws the avatar as large as fits in `faceBox`, with the painted part (not the SVG's
 // padding) centred in it, so the margin to the left of the head matches the one above and below.
-async function drawFace(context: SKRSContext2D, svg: string): Promise<void> {
+async function drawFace(
+  context: SKRSContext2D,
+  svg: string,
+  box: { x: number; y: number; width: number; height: number } = faceBox,
+): Promise<void> {
   const probeWidth = 600
   const probe = await rasterize(svg, probeWidth)
   const probeCanvas = createCanvas(probe.width, probe.height)
@@ -268,30 +282,80 @@ async function drawFace(context: SKRSContext2D, svg: string): Promise<void> {
   }
   const paintedWidth = right - left + 1
   const paintedHeight = bottom - top + 1
-  const scale = Math.min(faceBox.width / paintedWidth, faceBox.height / paintedHeight)
+  const scale = Math.min(box.width / paintedWidth, box.height / paintedHeight)
   const face = await rasterize(svg, Math.round(probeWidth * scale))
   const factor = face.width / probe.width
   context.drawImage(
     face,
-    faceBox.x + (faceBox.width - paintedWidth * factor) / 2 - left * factor,
-    faceBox.y + (faceBox.height - paintedHeight * factor) / 2 - top * factor,
+    box.x + (box.width - paintedWidth * factor) / 2 - left * factor,
+    box.y + (box.height - paintedHeight * factor) / 2 - top * factor,
   )
 }
 
-// The picture fills the card (cropped to its shape, like CSS `object-fit: cover`), under a
-// dark veil so the face and the light text stay readable on any drawing.
+// The picture fills the card (cropped to its shape, like CSS `object-fit: cover`), unveiled.
 async function drawPicture(context: SKRSContext2D, shapes: Uint8Array): Promise<void> {
   const svg = pictureSvg(shapes)
   const [width, height] = /viewBox="0 0 (\S+) (\S+)"/.exec(svg)!.slice(1).map(Number)
   const scale = Math.max(OG_WIDTH / width, OG_HEIGHT / height)
   const image = await rasterize(svg, Math.ceil(width * scale))
   context.drawImage(image, (OG_WIDTH - image.width) / 2, (OG_HEIGHT - image.height) / 2)
-  const veil = context.createLinearGradient(0, 0, OG_WIDTH, 0)
-  veil.addColorStop(0, 'rgba(8, 10, 22, 0.35)')
-  veil.addColorStop(0.4, 'rgba(8, 10, 22, 0.6)')
-  veil.addColorStop(1, 'rgba(8, 10, 22, 0.75)')
-  context.fillStyle = veil
-  context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
+}
+
+// Over a picture: a small face top left, the text in a translucent band along the bottom.
+async function drawOnPicture(
+  context: SKRSContext2D,
+  input: OgInput,
+  faceSvg: string,
+): Promise<void> {
+  const margin = 20
+  const padding = 16
+  const bandWidth = OG_WIDTH - 2 * margin
+  const font = fitOgText(input.text, {
+    width: bandWidth - 2 * padding,
+    height: 190,
+    maxFontSize: 44,
+  })
+  const lineHeight = font.fontSize * lineHeightFactor
+  const bandHeight = font.lines.length * lineHeight + 2 * padding
+  const bandTop = OG_HEIGHT - margin - bandHeight
+  const badge = { x: margin, y: margin, width: 90, height: 90 }
+  const pill = (x: number, y: number, width: number, height: number) => {
+    context.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    context.beginPath()
+    context.roundRect(x, y, width, height, 12)
+    context.fill()
+  }
+  pill(badge.x, badge.y, badge.width, badge.height)
+  await drawFace(context, faceSvg, {
+    x: badge.x + 6,
+    y: badge.y + 6,
+    width: badge.width - 12,
+    height: badge.height - 12,
+  })
+  context.font = '900 22px "Lato Black"'
+  context.textAlign = 'left'
+  const name = `@${input.username}`
+  const nameWidth = Math.min(context.measureText(name).width, 500)
+  pill(badge.x + badge.width + 10, badge.y, nameWidth + 28, 40)
+  context.fillStyle = '#ffbd59'
+  context.fillText(name, badge.x + badge.width + 24, badge.y + 28, 500)
+  pill(bandWidth + margin - 132, badge.y, 132, 40)
+  context.font = '900 18px "Lato Black"'
+  context.textAlign = 'right'
+  context.fillStyle = '#ffbd59'
+  context.fillText('blurt.trade', OG_WIDTH - margin - 14, badge.y + 27)
+  pill(margin, bandTop, bandWidth, bandHeight)
+  context.font = `900 ${font.fontSize}px "Lato Black", "Noto Color Emoji"`
+  context.textAlign = 'left'
+  context.fillStyle = '#f9f5ef'
+  font.lines.forEach((line, index) => {
+    context.fillText(
+      line,
+      margin + padding,
+      bandTop + padding + font.fontSize * 0.85 + index * lineHeight,
+      bandWidth - 2 * padding,
+    )
+  })
 }
 
 async function canvasFor(
@@ -319,9 +383,8 @@ async function canvasFor(
   context.fillRect(0, 0, OG_WIDTH, OG_HEIGHT)
   if (picture) {
     await drawPicture(context, picture)
-    // A soft shadow under the face and the text, against the busier background.
-    context.shadowColor = 'rgba(0, 0, 0, 0.55)'
-    context.shadowBlur = 14
+    await drawOnPicture(context, input, faceSvg)
+    return canvas
   }
   const accent = special ? '#ffffff' : '#ffbd59'
   context.font = '900 25px "Lato Black"'
@@ -406,7 +469,11 @@ export async function cachedOgPng(
 }
 
 export const debugExamples: { id: string; label: string; input: OgInput }[] = [
-  { id: 'short', label: '3 characters', input: { text: 'Hey', username: 'poet', avatar: null } },
+  {
+    id: 'short',
+    label: '3 characters',
+    input: { text: 'Hey', username: 'poet', avatar: null },
+  },
   {
     id: 'sentence',
     label: 'A sentence',
@@ -419,12 +486,20 @@ export const debugExamples: { id: string; label: string; input: OgInput }[] = [
   {
     id: 'maximum',
     label: 'Maximum length',
-    input: { text: 'W'.repeat(blurtMaxLength), username: 'poet', avatar: avatarFallback },
+    input: {
+      text: 'W'.repeat(blurtMaxLength),
+      username: 'poet',
+      avatar: avatarFallback,
+    },
   },
   {
     id: 'emoji',
     label: 'Emoji',
-    input: { text: '🌈✨🗣️ This is blurted with feeling! 💥🎉', username: 'poet', avatar: null },
+    input: {
+      text: '🌈✨🗣️ This is blurted with feeling! 💥🎉',
+      username: 'poet',
+      avatar: null,
+    },
   },
   {
     id: 'norwegian',
@@ -456,12 +531,22 @@ export const debugExamples: { id: string; label: string; input: OgInput }[] = [
   {
     id: 'forest',
     label: 'Forest background',
-    input: { text: 'Green is good.', username: 'poet', avatar: avatarFallback, color: 'forest' },
+    input: {
+      text: 'Green is good.',
+      username: 'poet',
+      avatar: avatarFallback,
+      color: 'forest',
+    },
   },
   {
     id: 'plum',
     label: 'Plum background',
-    input: { text: 'Plum is fun.', username: 'poet', avatar: avatarFallback, color: 'plum' },
+    input: {
+      text: 'Plum is fun.',
+      username: 'poet',
+      avatar: avatarFallback,
+      color: 'plum',
+    },
   },
   {
     id: 'profile',
@@ -476,12 +561,21 @@ export const debugExamples: { id: string; label: string; input: OgInput }[] = [
   {
     id: 'blurt',
     label: 'BLURT post',
-    input: { text: 'BLURT', username: 'poet', avatar: avatarFallback, style: 'blurt' },
+    input: {
+      text: 'BLURT',
+      username: 'poet',
+      avatar: avatarFallback,
+      style: 'blurt',
+    },
   },
   {
     id: 'no-avatar',
     label: 'No avatar',
-    input: { text: 'No avatar? No problem.', username: 'avatarless', avatar: null },
+    input: {
+      text: 'No avatar? No problem.',
+      username: 'avatarless',
+      avatar: null,
+    },
   },
   {
     id: 'special',
@@ -525,7 +619,9 @@ export function debugOgPage(): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Open Graph images · blurt.trade</title><link rel="stylesheet" href="/static/og-debug.css"></head><body><h1>Open Graph image previews</h1><main>${debugExamples
     .map(
       ({ id, label }) =>
-        `<figure><img src="/og/debug/${id}.png?debug=1" alt="${escapeHtml(label)}"><figcaption>${escapeHtml(label)}</figcaption></figure>`,
+        `<figure><img src="/og/debug/${id}.png?debug=1" alt="${escapeHtml(
+          label,
+        )}"><figcaption>${escapeHtml(label)}</figcaption></figure>`,
     )
     .join('')}</main></body></html>`
 }
