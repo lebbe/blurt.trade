@@ -8,11 +8,11 @@
     "lint": "oxlint src test",
     "format": "oxfmt src test",
     "qa": "npm run lint && oxfmt --check src test && npm test",
-    "dev": "node --watch src/server.ts",
-    "start": "node src/server.ts",
-    "migrate": "node db/migrate.ts",
-    "check-config": "node src/config.ts",
-    "prefetch-model": "node src/embeddings.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "migrate": "node --env-file-if-exists=.env db/migrate.ts",
+    "check-config": "node --env-file-if-exists=.env src/config.ts",
+    "prefetch-model": "node --env-file-if-exists=.env src/embeddings.ts",
     "deploy": "bash docker/deploy.sh"
   },
   "keywords": [],
@@ -20,29 +20,33 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@huggingface/transformers": "^4.3.1",
-    "@napi-rs/canvas": "^1.0.11",
+    "@huggingface/transformers": "^4.3.2",
+    "@napi-rs/canvas": "^1.1.0",
     "@node-rs/argon2": "^2.2.2",
-    "@preact/signals": "^2.11.3",
+    "@preact/signals": "^2.11.4",
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
     "htm": "^3.1.1",
-    "jose": "^6.2.12",
-    "multer": "^2.4.0",
+    "jose": "^6.2.14",
+    "multer": "^2.5.0",
     "node-pg-migrate": "^9.0.0",
     "pg": "^8.23.1",
     "pgvector": "^0.3.0",
-    "preact": "^11.0.1",
-    "preact-render-to-string": "^6.8.0",
+    "preact": "^11.1.1",
+    "preact-render-to-string": "^6.8.2",
     "sharp": "^0.35.5",
     "tz-lookup": "^6.1.25",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/multer": "^2.3.0",
-    "@types/node": "^26.6.5",
-    "oxfmt": "^0.72.0",
-    "oxlint": "^1.87.0"
+    "@types/node": "^26.6.6",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0"
+  },
+  "allowScripts": {
+    "onnxruntime-node@1.30.0": true,
+    "protobufjs@7.6.6": true
   }
 }
