@@ -28,6 +28,8 @@ const defaults = {
   profileEdit: '30/10m',
   location: '30/10m',
   avatar: '60/10m',
+  // Uploading or removing a profile picture: drawing one costs CPU, like a blurt's picture.
+  profilePicture: '20/10m',
   theme: '60/10m',
   timezone: '60/10m',
   // The notification settings, and marking notifications as read.

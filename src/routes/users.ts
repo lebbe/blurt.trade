@@ -72,6 +72,7 @@ export const reservedUsernames = new Set([
   'people', // everyone, A to Z
   'pictures', // /pictures/:file, the drawings of blurt pictures
   'privacy',
+  'profile-pictures', // /profile-pictures/:file, the halves of profile pictures
   'robots.txt',
   'robots',
   'search',

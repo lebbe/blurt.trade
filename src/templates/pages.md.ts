@@ -3,6 +3,8 @@ import type { Contact } from '../config.ts'
 import {
   avatarSchema,
   describeAvatar,
+  maxPictureCut,
+  minPictureCut,
   eyeTypes,
   hairTypes,
   headWidths,
@@ -364,6 +366,16 @@ export function profileEditMarkdown({
     head is one of ${join(headWidths.map(code), ', ')} wide. Hair is one of ${join(hairTypes.map(code), ', ')}; eyes one of ${join(eyeTypes.map(code), ', ')};
     teeth one of ${join(toothTypes.map(code), ', ')}.
 
+    ## Profile picture
+
+    ${profile.avatar.photo ? md`You have one: it is shown instead of the cartoon, cut ${profile.avatar.photo.cut}% from the top to talk.` : "You haven't uploaded one: the cartoon is shown."}
+
+    Send ${code('POST /api/profile-picture')} as ${code('multipart/form-data')} with the image
+    (JPEG, PNG or WebP) in ${code('picture')} to upload one, or with ${code('remove')} to remove
+    it. It is cropped square and redrawn as a rough drawing; only the drawing is kept. Send
+    ${code('POST /api/profile-picture/cut')} with ${code('cut')}, from ${minPictureCut} to ${maxPictureCut}, for where it
+    opens its mouth, in percent from the top.
+
     ## Location
 
     ${location ? md`Your location: ${formatLocation(location)} (the middle of ${gridDescription}).` : "You haven't set a location."}
@@ -612,6 +624,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
+    - If you upload one, your profile picture: likewise only a rough drawing, and where you clicked for its mouth. It's public, like the avatar.
     - Who you follow.
     - Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt from someone you follow, with who did it, which blurt and when, and whether you've read it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile. Only you see them.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.

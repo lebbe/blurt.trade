@@ -184,6 +184,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
+| `/api/profile-picture`       | yes           | multipart `picture`, or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
+| `/api/profile-picture/cut`   | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`                   |
 | `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
@@ -531,6 +533,40 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
   and holds still with `prefers-reduced-motion`. The profile page
   shows it large.
 
+
+## Profile picture
+
+Instead of the cartoon avatar, anyone can upload a picture of their own. It goes through
+the same drawing as a blurt's picture (`src/picture.ts`), only cropped to the middle
+square first (640 × 640), and only the drawing is kept (`user_profiles.picture`). While
+there is one it is shown wherever the avatar is; removing it brings the cartoon back.
+
+- `POST /api/profile-picture` (multipart): the image in `picture` (JPEG, PNG or WebP), or
+  `remove` (any non-empty value). A file that is no picture, or no file, is a 400 on
+  `picture`; forms get the edit page again with the error. Too many pictures being drawn
+  at once is a 503, like a blurt's.
+- It talks like the cartoon, with no JS: two empty `<img>`s stacked, the part above the cut
+  (`avatar-top`) and the part below (`avatar-jaw`), each an SVG of just that band. Their
+  `width`/`height` attributes give each its share of the square, so there is no inline
+  style (the CSP allows none). The same keyframes flap the top up around the back of the
+  head and bob the jaw, showing a dark mouth behind them. The top band reaches 8 px (of 640)
+  below the cut and the jaw is pulled up as much (`margin-top: -1.25%`), so no seam shows.
+- The cut is `user_profiles.picture_cut`, in percent from the top (5–95, 65 by default).
+  The edit page shows the whole picture with the cut as a dashed line, as
+  `<input type="image" name="cut">` 240 × 240: a click sends `cut.x` and `cut.y` (no JS,
+  like the location map), and the height becomes the percentage (pulled in to 5–95). A
+  keyboard activation (0,0) is an error. API clients send `cut` (a whole number, 5–95).
+- In JSON the avatar gets `photo: { user, version, cut }` while there is a picture.
+
+| Path                                        | Auth | Response                                                      | Errors |
+| ------------------------------------------- | ---- | ------------------------------------------------------------- | ------ |
+| `/profile-pictures/{user}-{version}-{cut}-top.svg`  | — | the band above the cut, `width`/`height` set; `image/svg+xml`, `Cache-Control: public, max-age=31536000, immutable` | 404 no picture, an old version, a cut outside 5–95, or a deleted account |
+| `/profile-pictures/{user}-{version}-{cut}-jaw.svg`  | — | the band below the cut, likewise                              | likewise |
+| `/profile-pictures/{user}-{version}-{cut}-edit.svg` | — | the whole picture with the cut drawn on it, likewise          | likewise |
+
+The version goes up with every upload and the cut is in the URL, so each URL always gives
+the same SVG.
+
 ## Themes
 
 Five colour themes, picked on the profile edit page (`#theme`), listed in `src/themes.ts`.
@@ -655,7 +691,8 @@ error table below.
 | `LIKE`                 | `/api/like`, `/api/unlike`     | account (one budget) | 120/10m |
 | `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |
 | `LOCATION`             | `/api/location`                | account              | 30/10m  |
-| `AVATAR`               | `/api/avatar`                  | account              | 60/10m  |
+| `AVATAR`               | `/api/avatar`, `/api/profile-picture/cut` | account (one budget) | 60/10m |
+| `PROFILE_PICTURE`      | `/api/profile-picture`         | account              | 20/10m  |
 | `THEME`                | `/api/theme`                   | account              | 60/10m  |
 | `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read` | account (one budget) | 60/10m |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |

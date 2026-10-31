@@ -1061,6 +1061,41 @@ button.danger,
   animation: avatar-jaw 1.6s ease-in-out infinite;
 }
 
+/* A profile picture talks like the cartoon (AvatarView in src/templates/avatar.ts): two
+   images stacked in the dark mouth, the part above the cut and the part below. Their
+   width and height attributes give each its share of the square. The top one reaches
+   8/640 below the cut (photoOverlap) and lies over the jaw, which is pulled up as much, so
+   no seam shows; it flaps up around the back of the head at the cut. */
+.avatar-photo {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.avatar-mouth {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #3a0d12;
+}
+
+.avatar-mouth img {
+  display: block;
+  flex: none;
+  width: 100%;
+  height: auto;
+}
+
+.avatar-photo .avatar-top {
+  position: relative;
+  z-index: 1;
+  transform-origin: 86% 100%;
+}
+
+.avatar-photo .avatar-jaw {
+  margin-top: -1.25%;
+}
+
 /* !important: the talking selectors above are more specific than any plain list here. */
 @media (prefers-reduced-motion: reduce) {
   .avatar-top,
@@ -1200,6 +1235,36 @@ button.danger,
 .color-field input {
   height: 2.6rem;
   padding: 2px;
+}
+
+/* The profile picture: the whole picture to click for the cut, beside the talking preview. */
+.picture-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.panel .cut-form {
+  display: block;
+}
+
+/* Exactly cutImageSize (src/avatar.ts): the click is in these pixels. */
+.cut-form input[type='image'] {
+  display: block;
+  width: 240px;
+  height: 240px;
+  max-width: none;
+  padding: 0;
+  border: 2px solid var(--line-soft);
+  box-sizing: content-box;
+  cursor: crosshair;
+}
+
+.cut-form p {
+  margin: 6px 0 0;
+  max-width: 244px;
 }
 
 /* The location map: clicking the image sends the spot, no JS. */

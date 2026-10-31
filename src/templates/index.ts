@@ -10,8 +10,10 @@ import {
   headWidths,
   toothTypes,
   type Avatar,
+  cutImageSize,
+  photoUrl,
 } from '../avatar.ts'
-import { AvatarSvg } from './avatar.ts'
+import { AvatarSvg, AvatarView } from './avatar.ts'
 import { renderBlurtText } from './blurt-text.ts'
 import { Icon, type IconName } from './icons.ts'
 import { pageContext } from '../page-context.ts'
@@ -273,6 +275,7 @@ type ProfileEditProps = ProfileEditData & {
   validationError?: string
   locationError?: string
   avatarError?: string
+  pictureError?: string
 }
 
 // A blurt form in its own panel: the first thing on the pages people read blurts on.
@@ -835,11 +838,7 @@ function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
   const action = reblurtAction(viewer, blurt)
   const quote =
     viewer &&
-    html`<a
-      href=${quoteUrl(blurt)}
-      class="action"
-      aria-label="Quote"
-      title="Quote"
+    html`<a href=${quoteUrl(blurt)} class="action" aria-label="Quote" title="Quote"
       ><${Icon} name="quote" /><span>Quote</span></a
     >`
   if (!action) {
@@ -1014,7 +1013,7 @@ function BlurtCard({
   return html`
     <article class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'} id=${blurtAnchor(blurt)}>
       <div class="blurt-main">
-        <${AvatarSvg} avatar=${blurt.avatar} />
+        <${AvatarView} avatar=${blurt.avatar} />
         <div class="blurt-body">
           ${
             blurt.reblurtedBy &&
@@ -1056,11 +1055,7 @@ function BlurtCard({
           }
           <${Likes} blurt=${blurt} viewer=${viewer} />
           <${Reblurts} blurt=${blurt} viewer=${viewer} />
-          <a
-            href=${sharePath ?? blurtUrl(blurt)}
-            class="action"
-            aria-label="Share"
-            title="Share"
+          <a href=${sharePath ?? blurtUrl(blurt)} class="action" aria-label="Share" title="Share"
             ><${Icon} name="share" /><span>Share</span></a
           >
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
@@ -1481,6 +1476,13 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
   return html`
     <section class="panel" aria-label="Avatar" id="avatar">
       <h2>Avatar</h2>
+      ${
+        avatar.photo &&
+        html`<p>
+          Your <a href="#picture">profile picture</a> is shown instead of this cartoon until you
+          remove it.
+        </p>`
+      }
       <${ValidationError} message=${error} />
       <form method="post" action="/api/avatar" class="avatar-form">
         <div class="avatar-preview">
@@ -1511,6 +1513,70 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
         <div class="actions avatar-buttons">
           <button type="submit"><${Icon} name="save" /><span>Save avatar</span></button>
           <button type="submit" name="random" value="1" formnovalidate>Random</button>
+        </div>
+      </form>
+    </section>
+  `
+}
+
+// The profile picture: upload one (redrawn on the server like a blurt's picture, cropped
+// square), set where it opens its mouth by clicking the picture (cut.x/cut.y, no JS, like
+// the location map; the dashed line is the stored cut, drawn into the image), or remove
+// it. While there is one it is shown instead of the cartoon above.
+function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string }) {
+  const photo = avatar.photo
+  return html`
+    <section class="panel" aria-label="Profile picture" id="picture">
+      <h2>Profile picture</h2>
+      <p>
+        Optional. Instead of the cartoon, your own picture: we redraw it as a rough drawing, like a
+        blurt's picture, and keep only that. It talks by flapping open where you click.
+      </p>
+      <${ValidationError} message=${error} />
+      ${
+        photo &&
+        html`<div class="picture-editor">
+          <form method="post" action="/api/profile-picture/cut" class="cut-form">
+            <input
+              type="image"
+              name="cut"
+              src=${photoUrl(photo, 'edit')}
+              width=${cutImageSize}
+              height=${cutImageSize}
+              alt="Your profile picture: click where the mouth should open"
+            />
+            <p class="tiny">Click where the mouth should open (now ${photo.cut}% from the top).</p>
+          </form>
+          <div class="avatar-preview">
+            <${AvatarView} avatar=${avatar} label="Your profile picture" size="large" />
+            <p class="empty">Hover it to hear it talk.</p>
+          </div>
+        </div>`
+      }
+      <form
+        method="post"
+        action="/api/profile-picture"
+        enctype="multipart/form-data"
+        class="picture-upload"
+      >
+        <label
+          >${photo ? 'New picture' : 'Picture'}
+          <input
+            type="file"
+            name="picture"
+            class="picture-field"
+            accept="image/jpeg,image/png,image/webp"
+            required
+          />
+        </label>
+        <div class="actions">
+          <${SubmitButton} icon="save" label="Upload picture" />
+          ${
+            photo &&
+            html`<button type="submit" name="remove" value="1" class="secondary" formnovalidate>
+              <${Icon} name="trash" /><span>Remove picture</span>
+            </button>`
+          }
         </div>
       </form>
     </section>
@@ -1675,6 +1741,7 @@ function ProfileEditForm({
   validationError,
   locationError,
   avatarError,
+  pictureError,
 }: ProfileEditProps) {
   const aside = html`
     <${LinkPanel}
@@ -1683,6 +1750,7 @@ function ProfileEditForm({
         ['#profile', 'Profile and links'],
         ['#card', 'Share card'],
         ['#avatar', 'Avatar'],
+        ['#picture', 'Profile picture'],
         ['#location', 'Location and time'],
         ['#theme', 'Theme'],
         ['#notifications', 'Notifications'],
@@ -1746,6 +1814,7 @@ ${profile.bio}</textarea>
       </section>
       <${CardForm} profile=${profile} />
       <${AvatarForm} avatar=${profile.avatar} error=${avatarError} />
+      <${ProfilePictureForm} avatar=${profile.avatar} error=${pictureError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
       <${NotificationsForm} settings=${notifications} />
@@ -2044,7 +2113,7 @@ function ProfilePage({
     <${Page}
       title=${profile.username}
       tagline=${`${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following`}
-      lead=${html`<${AvatarSvg}
+      lead=${html`<${AvatarView}
         avatar=${profile.avatar}
         label="${profile.username}'s avatar"
         size="large"
@@ -2230,6 +2299,10 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
         <li>
           If you attach one, a blurt's picture: only a rough drawing of it, made on our own server.
           The photo you upload is never stored.
+        </li>
+        <li>
+          If you upload one, your profile picture: likewise only a rough drawing, and where you
+          clicked for its mouth. It's public, like the avatar.
         </li>
         <li>Who you follow.</li>
         <li>
@@ -2435,7 +2508,7 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
                       (user) =>
                         html`<li>
                           <a href="/${user.username}/"
-                            ><${AvatarSvg} avatar=${user.avatar} /> ${user.username}</a
+                            ><${AvatarView} avatar=${user.avatar} /> ${user.username}</a
                           >
                         </li>`,
                     )}
@@ -2475,7 +2548,7 @@ function PeoplePage({ people, next }: PeopleData) {
                   (person) =>
                     html`<li>
                       <a href="/${person.username}/" class="person-avatar"
-                        ><${AvatarSvg} avatar=${person.avatar}
+                        ><${AvatarView} avatar=${person.avatar}
                       /></a>
                       <div class="person-body">
                         <strong><a href="/${person.username}/">${person.username}</a></strong>
@@ -2508,7 +2581,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
   return html`
     <article class=${read ? 'blurt notification' : 'blurt notification unread'}>
       <div class="blurt-main">
-        <${AvatarSvg} avatar=${avatar} />
+        <${AvatarView} avatar=${avatar} />
         <div class="blurt-body">
           <div class="blurt-meta">
             <strong><a href="/${actor}/">${actor}</a></strong>

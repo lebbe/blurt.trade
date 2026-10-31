@@ -34,6 +34,7 @@ import { locationRouter } from './routes/location.ts'
 import { notificationsRouter } from './routes/notifications.ts'
 import { peopleRouter } from './routes/people.ts'
 import { picturesRouter } from './routes/pictures.ts'
+import { profilePictureRouter } from './routes/profile-picture.ts'
 import { profilesRouter } from './routes/profiles.ts'
 import { searchRouter } from './routes/search.ts'
 import { themeRouter } from './routes/theme.ts'
@@ -92,6 +93,7 @@ app.use((request, _response, next) => {
 app.use(homeRouter)
 app.use(infoRouter)
 app.use(picturesRouter)
+app.use(profilePictureRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
 app.use(avatarRouter)

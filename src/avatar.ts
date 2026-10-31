@@ -15,7 +15,14 @@ export type EyeType = (typeof eyeTypes)[number]
 export type ToothType = (typeof toothTypes)[number]
 export type HeadWidth = (typeof headWidths)[number]
 
+// An uploaded profile picture, which replaces the cartoon wherever the avatar is shown
+// (src/templates/avatar.ts, AvatarView). Never stored in the avatar JSON: the queries add
+// it (avatarColumn in src/routes/state.ts). `cut` is where the mouth is, in percent from
+// the top; `version` changes with every upload.
+export type AvatarPhoto = { user: number; version: number; cut: number }
+
 export type Avatar = {
+  photo?: AvatarPhoto | null
   headWidth: HeadWidth
   skin: string
   hairType: HairType
@@ -114,8 +121,35 @@ export const avatarSchema = z.object({
   toothColor: color('Tooth colour'),
 })
 
+// Where the mouth of a profile picture may be, in percent from the top. The table's
+// CHECK on user_profiles.picture_cut repeats it; 65 is the default there too.
+export const minPictureCut = 5
+export const maxPictureCut = 95
+export const defaultPictureCut = 65
+
+// The size the edit page shows the whole profile picture at, as <input type="image">: a
+// click on it sends `cut.x` and `cut.y` in these pixels (src/routes/profile-picture.ts).
+export const cutImageSize = 240
+
+// The top half of a profile picture reaches this far (in its 640 px) below the cut, under
+// nothing: the jaw is pulled up by as much (public/style.css, -1.25% = 8 / 640), so no
+// seam shows between the two images.
+export const photoOverlap = 8
+
+export type PicturePart = 'top' | 'jaw' | 'edit'
+
+// The URL of a part of a profile picture (src/routes/profile-picture.ts): `top` and `jaw`,
+// the two halves that talk, or `edit`, the whole picture with the cut drawn on it. The
+// version and cut are in it, so each URL always gives the same SVG.
+export function photoUrl(photo: AvatarPhoto, part: PicturePart): string {
+  return `/profile-pictures/${photo.user}-${photo.version}-${photo.cut}-${part}.svg`
+}
+
 // For text representations, e.g. "regular head, skin #f1c27d, flat #2c222b hair, ...".
 export function describeAvatar(avatar: Avatar): string {
+  if (avatar.photo) {
+    return `a profile picture (${photoUrl(avatar.photo, 'top')} over ${photoUrl(avatar.photo, 'jaw')}, cut ${avatar.photo.cut}% from the top)`
+  }
   return [
     `${avatarLabels[avatar.headWidth]?.toLowerCase() ?? 'regular'} head`,
     `skin ${avatar.skin}`,

@@ -285,15 +285,19 @@ const inputFormats = new Set(['jpeg', 'png', 'webp', 'gif'])
 
 // Decodes an uploaded image (JPEG, PNG, WebP, GIF) and vectorizes it. Undefined when the
 // bytes are not such an image, or it has too many pixels. libvips shrinks JPEG and WebP
-// while decoding, so memory stays small however large the image is.
-export async function pictureFromUpload(file: Buffer): Promise<Shapes | undefined> {
+// while decoding, so memory stays small however large the image is. `square` (profile
+// pictures) crops the middle square out of it first, at 640 × 640.
+export async function pictureFromUpload(
+  file: Buffer,
+  { square = false }: { square?: boolean } = {},
+): Promise<Shapes | undefined> {
   try {
     const options = { limitInputPixels: maxInputPixels, failOn: 'error' } as const
     const { format } = await sharp(file, options).metadata()
     if (!format || !inputFormats.has(format)) return undefined
     const { data, info } = await sharp(file, options)
       .rotate() // applies the EXIF orientation
-      .resize(size, size, { fit: 'inside' })
+      .resize(size, size, { fit: square ? 'cover' : 'inside' })
       .flatten({ background: '#ffffff' })
       .ensureAlpha()
       .raw()
@@ -403,16 +407,39 @@ function path(points: Point[], width: number, height: number): string {
 }
 
 // The picture as SVG. Only paths in the palette's colours: no markup comes from the data.
-export function pictureSvg(bytes: Uint8Array): string {
+// `top` and `bottom` (in the picture's pixels) show only that band of it: the two halves
+// of a talking profile picture. `line` draws a dashed line across at that height (where
+// the profile picture's mouth is, on the edit page).
+export function pictureSvg(
+  bytes: Uint8Array,
+  { top, bottom, line }: { top?: number; bottom?: number; line?: number } = {},
+): string {
   const { width, height, background, areas } = decodeShapes(bytes)
+  const y0 = Math.max(0, Math.min(height, top ?? 0))
+  const y1 = Math.max(y0, Math.min(height, bottom ?? height))
   const paths = areas
     .map(
       ({ color, points }) =>
         `<path fill="${pictureColors[color]}" d="${path(points, width, height)}"/>`,
     )
     .join('')
+  const dashes =
+    line === undefined
+      ? ''
+      : [
+          ['#16141f', 9, ''],
+          ['#f7f4ea', 5, ' stroke-dasharray="16 10"'],
+        ]
+          .map(
+            ([color, strokeWidth, dash]) =>
+              `<path d="M0 ${Math.round(line)}H${width}" stroke="${color}" stroke-width="${strokeWidth}"${dash}/>`,
+          )
+          .join('')
+  // width and height give the SVG its aspect ratio as an <img> (the halves stack by it).
+  const sized =
+    top === undefined && bottom === undefined ? '' : ` width="${width}" height="${y1 - y0}"`
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">` +
-    `<rect width="${width}" height="${height}" fill="${pictureColors[background]}"/>${paths}</svg>`
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${y0} ${width} ${y1 - y0}"${sized}>` +
+    `<rect width="${width}" height="${height}" fill="${pictureColors[background]}"/>${paths}${dashes}</svg>`
   )
 }
