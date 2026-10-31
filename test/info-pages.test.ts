@@ -82,6 +82,22 @@ test('the contact page says where not to post sensitive things', async (t) => {
   assert.doesNotMatch((await request('GET', '/about')).body, /javascript:/)
 })
 
+test('the front page links to the GitHub issues as "Submit suggestions"', async (t) => {
+  t.after(() => {
+    delete process.env.CONTACT_REPO_URL
+  })
+  const link =
+    /<a href="https:\/\/github\.com\/example\/blurt\.trade\/issues">Submit suggestions<\/a>/
+  assert.doesNotMatch((await request('GET', '/')).body, /Submit suggestions/)
+
+  process.env.CONTACT_REPO_URL = 'https://github.com/example/blurt.trade'
+  const cookie = await createSession('Sofie')
+  assert.match((await request('GET', '/')).body, link)
+  assert.match((await request('GET', '/', '', { cookie })).body, link)
+  // Only the front page: other asides keep the plain About links.
+  assert.doesNotMatch((await request('GET', '/about')).body, /Submit suggestions/)
+})
+
 test('sign-up and the privacy page say a lost password cannot be recovered', async () => {
   for (const path of ['/signup', '/privacy', '/terms']) {
     const { body } = await request('GET', path)

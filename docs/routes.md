@@ -144,6 +144,8 @@ agents, next to `/robots.txt` and `/sitemap.xml`.
   `contact` is `{ email, issuesUrl, securityUrl }`, each `null` when not configured:
   `CONTACT_EMAIL`, and `CONTACT_REPO_URL` for the issues and private vulnerability
   report links (docs/deploy.md, Environment).
+- The front page's (`/`, `/everyone`) "About this site" panel also has a "Submit
+  suggestions" link to the GitHub issues, when `CONTACT_REPO_URL` is set.
 - `/privacy` lists what the database stores. A test compares every table and column
   with a fixed list, so a migration that changes them fails until the page (and the
   list) is updated.
