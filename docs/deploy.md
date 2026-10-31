@@ -68,7 +68,7 @@ file without starting anything: `node --env-file=/etc/blurt/blurt.env src/config
 | `ALERT_WEBHOOK_URL`        | unset: no alerts from the app | Gets a POST with `{"text": "..."}` when the app crashes or 5xx responses spike (Logs and monitoring). A secret; never logged. Warned about in production if missing. |
 | `ALERT_5XX_THRESHOLD`      | `10`                          | How many 5xx responses within 5 minutes make a spike. One alert per 5 minutes at most.                                                                           |
 | `CONTACT_EMAIL`            | unset                         | A public address for things that shouldn't go in a public issue (security, illegal content, data requests), shown on `/about`, `/terms` and `/privacy`. A placeholder until the owner picks one; use a role address, not a personal one. |
-| `CONTACT_REPO_URL`         | unset                         | The public GitHub repository, `https://github.com/<owner>/<repo>`: `/about` links its issues and its private "Report a vulnerability" form. Warned about in production when neither this nor `CONTACT_EMAIL` is set. |
+| `CONTACT_REPO_URL`         | unset                         | The public GitHub repository, `https://github.com/<owner>/<repo>`: `/about` links its issues (so does the front page, as "Submit suggestions") and its private "Report a vulnerability" form. Warned about in production when neither this nor `CONTACT_EMAIL` is set. |
 | `PUBLIC_URL`               | `https://blurt.trade`         | The site's origin, no path. Absolute URLs in share previews (`og:url`, `og:image`) and `rel="canonical"` links use it. Set it on a staging host. |
 
 Only for tests: `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL`,
