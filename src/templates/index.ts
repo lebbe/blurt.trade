@@ -2,7 +2,7 @@ import { h, type ComponentChildren } from 'preact'
 import htm from 'htm'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
-import { publicUrl, type Contact } from '../config.ts'
+import { contact, publicUrl, type Contact } from '../config.ts'
 import {
   avatarLabels,
   eyeTypes,
@@ -383,11 +383,15 @@ function LinkPanel({
 }
 
 // The links below every logged-in page's aside, and the whole aside for anonymous ones.
-function SupportLinks() {
+// `suggestions` (the front page) adds a link to the GitHub issues, when CONTACT_REPO_URL
+// is set.
+function SupportLinks({ suggestions = false }: { suggestions?: boolean }) {
+  const { issuesUrl } = contact()
   return html`<${LinkPanel}
     title="About this site"
     links=${[
       ['/about', 'About and contact'],
+      ...(suggestions && issuesUrl ? [[issuesUrl, 'Submit suggestions'] as [string, string]] : []),
       ['/terms', 'Terms'],
       ['/privacy', 'Privacy'],
     ]}
@@ -1747,7 +1751,7 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
           <${ButtonLink} href="/login" icon="login" label="Log in" />
         </div>
       </section>
-      <${SupportLinks} />
+      <${SupportLinks} suggestions />
     `
   }
   return html`
@@ -1767,7 +1771,7 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
         ['/settings', 'Account settings'],
       ]}
     />
-    <${SupportLinks} />
+    <${SupportLinks} suggestions />
   `
 }
 
