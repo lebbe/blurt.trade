@@ -1041,24 +1041,25 @@ button.danger,
 }
 
 .avatar:hover .avatar-top,
-.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-top {
+.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-top,
+.people li:is(:hover, :focus-within) .avatar-top {
   animation: avatar-talk 1.6s ease-in-out infinite;
 }
 
 .avatar:hover .avatar-jaw,
-.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-jaw {
+.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar .avatar-jaw,
+.people li:is(:hover, :focus-within) .avatar-jaw {
   animation: avatar-jaw 1.6s ease-in-out infinite;
 }
 
+/* !important: the talking selectors above are more specific than any plain list here. */
 @media (prefers-reduced-motion: reduce) {
-  .avatar:hover .avatar-top,
-  .blurt:hover .avatar .avatar-top,
-  .avatar:hover .avatar-jaw,
-  .blurt:hover .avatar .avatar-jaw,
-  .blurt-button:hover,
-  .blurt-button:hover::before,
-  .blurt-button:hover::after {
-    animation: none;
+  .avatar-top,
+  .avatar-jaw,
+  .blurt-button,
+  .blurt-button::before,
+  .blurt-button::after {
+    animation: none !important;
   }
 }
 
