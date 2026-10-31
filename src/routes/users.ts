@@ -199,7 +199,7 @@ usersRouter.get('/signup', async (request, response) => {
     sendError(request, response, 400, 'Invite code is too long', 'invite')
     return
   }
-  represent(
+  await represent(
     request,
     response,
     { viewer: getViewer(request), signup: await getSignupState(), inviteCode: invite || null },
@@ -213,7 +213,7 @@ usersRouter.get('/createUser', (request, response) => {
 })
 
 usersRouter.get('/login', async (request, response) => {
-  represent(
+  await represent(
     request,
     response,
     { viewer: getViewer(request) },
@@ -303,7 +303,7 @@ usersRouter.post('/api/logout', async (request, response) => {
 
 usersRouter.get('/settings', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
-  represent(
+  await represent(
     request,
     response,
     { viewer, activeSessions: await countActiveSessions(viewer.id) },
@@ -328,7 +328,7 @@ const deleteAccountSchema = z.object({
 })
 
 usersRouter.get('/settings/delete', requireAuth, async (request, response) => {
-  represent(
+  await represent(
     request,
     response,
     { viewer: response.locals.authenticatedUser, inviteOnly: await isInviteOnly() },
@@ -389,7 +389,7 @@ usersRouter.get('/waitlist', async (request, response) => {
     sendError(request, response, 400, 'Username is too long', 'username')
     return
   }
-  represent(request, response, await getWaitlistData(request, username || null), {
+  await represent(request, response, await getWaitlistData(request, username || null), {
     html: (data) => renderWaitlistPage(data),
     markdown: waitlistMarkdown,
   })

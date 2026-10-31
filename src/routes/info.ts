@@ -23,7 +23,7 @@ function infoPage(views: Views<InfoPageData>) {
       contact: contact(),
       inviteOnly: await isInviteOnly(),
     }
-    represent(request, response, data, views)
+    await represent(request, response, data, views)
   }
 }
 

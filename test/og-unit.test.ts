@@ -15,9 +15,12 @@ import {
   fitOgText,
   measureOgText,
   ogHash,
+  renderOgJpeg,
   renderOgPng,
   wrapOgText,
 } from '../src/og.ts'
+import { encodeShapes, pictureFromUpload } from '../src/picture.ts'
+import { createCanvas } from '@napi-rs/canvas'
 import { renderBlurtPage } from '../src/templates/index.ts'
 import { AvatarSvg } from '../src/templates/avatar.ts'
 import type { Blurt } from '../src/routes/state.ts'
@@ -108,6 +111,32 @@ test('every example renders as a compact 1200-by-630 PNG', async () => {
     assert.equal(image.readUInt32BE(20), OG_HEIGHT)
     assert.ok(image.length < 1_000_000)
   }
+})
+
+test('a picture changes the card hash, but cards without one keep theirs', () => {
+  const input = { text: 'Hi', username: 'poet', avatar }
+  assert.equal(ogHash({ ...input, picture: false }), ogHash(input))
+  assert.notEqual(ogHash({ ...input, picture: true }), ogHash(input))
+})
+
+test('a card on a picture is a compact 1200-by-630 JPEG', async () => {
+  const canvas = createCanvas(400, 800)
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#3fae49'
+  context.fillRect(0, 0, 400, 800)
+  context.fillStyle = '#ffd23f'
+  context.fillRect(100, 200, 200, 400)
+  const shapes = encodeShapes((await pictureFromUpload(canvas.toBuffer('image/png')))!)
+  const input = { text: 'Look at this', username: 'poet', avatar, picture: true }
+  const jpeg = await renderOgJpeg(input, shapes)
+  assert.deepEqual([...jpeg.subarray(0, 3)], [0xff, 0xd8, 0xff])
+  // The JPEG's size, from its start-of-frame marker.
+  const sof = jpeg.findIndex(
+    (byte, i) => byte === 0xff && jpeg[i + 1] >= 0xc0 && jpeg[i + 1] <= 0xc2,
+  )
+  assert.equal(jpeg.readUInt16BE(sof + 5), OG_HEIGHT)
+  assert.equal(jpeg.readUInt16BE(sof + 7), OG_WIDTH)
+  assert.ok(jpeg.length < 1_000_000)
 })
 
 test('open-mouth avatar is the static peak flap pose, not an extra mouth drawing', () => {

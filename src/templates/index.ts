@@ -2564,10 +2564,16 @@ function blurtCardPath(blurt: Blurt, cardColor: CardColorId | null): string | un
         blurt.id,
         ogHash(
           blurtOgInput(
-            { text: blurt.text, username: blurt.username, avatar: blurt.avatar },
+            {
+              text: blurt.text,
+              username: blurt.username,
+              avatar: blurt.avatar,
+              picture: blurt.picture,
+            },
             cardColor,
           ),
         ),
+        Boolean(blurt.picture),
       )
 }
 
@@ -2601,12 +2607,7 @@ function blurtPageMeta({ blurt, cardColor = null }: BlurtPageData): PageMeta {
   const description = deleted ? 'This blurt was deleted.' : blurt.text!
   const username = blurt.username ?? 'deleted'
   const title = deleted ? 'Deleted blurt' : `${username} blurted`
-  const image = deleted
-    ? undefined
-    : ogImagePath(
-        blurt.id,
-        ogHash(blurtOgInput({ text: blurt.text!, username, avatar: blurt.avatar }, cardColor)),
-      )
+  const image = deleted ? undefined : blurtCardPath(blurt, cardColor)
   return {
     title,
     description,
@@ -2620,6 +2621,7 @@ function blurtPageMeta({ blurt, cardColor = null }: BlurtPageData): PageMeta {
           description,
           image,
           imageAlt: `${username}: ${description}`,
+          imageType: blurt.picture ? 'image/jpeg' : 'image/png',
           publishedTime: blurt.createdAt.toISOString(),
           themeColor: blurt.text === 'BLURT' ? '#d4001c' : '#11152c',
         },

@@ -17,7 +17,7 @@ peopleRouter.get('/people', async (request, response) => {
   }
 
   const { items: people, next } = await listPeople(after)
-  represent(
+  await represent(
     request,
     response,
     { viewer: getViewer(request), people, next },

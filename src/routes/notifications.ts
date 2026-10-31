@@ -33,7 +33,7 @@ notificationsRouter.get('/:username/notifications/', requireAuth, async (request
     listNotifications(viewer.id, read, before),
     countUnreadNotifications(viewer.id),
   ])
-  represent(
+  await represent(
     request,
     response,
     { viewer, read, unread, notifications, next },

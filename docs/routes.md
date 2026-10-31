@@ -204,9 +204,27 @@ Pictures are drawn in two worker threads, with at most 8 uploads waiting; when a
 the answer is a 503 (`Retry-After: 5`) and nothing is saved. A picture that takes over 4 s
 is refused like an unreadable one (400 on `picture`). The blurt is saved only once its
 picture is.
-The text is still required. A blurt with a picture has `picture: { width, height }` (else
-`null`) in JSON, an `<img>` in HTML and `![Picture](/pictures/{id}.svg)` in Markdown; quotes
-and share cards don't show it. Deleting the blurt deletes the picture.
+The text is still required. A blurt with a picture has an `<img>` in HTML and
+`![Picture](/pictures/{id}.svg)` in Markdown; quotes don't show it. Deleting the blurt
+deletes the picture.
+
+In JSON (any GET), a blurt without a picture has `picture: null`, and one with a picture
+`picture: { width, height, url, data }`: `url` is `/pictures/{id}.svg`, and `data` is the
+stored drawing itself, as base64 (the binary format of `encodeShapes` in `src/picture.ts`,
+at most 64 KB before base64). `?pictures=` changes that, on any JSON GET (an unknown value
+is the default):
+
+| `?pictures=`     | `picture`                                                         |
+| ---------------- | ----------------------------------------------------------------- |
+| `data` (default) | `{ width, height, url, data }`, `data` the drawing as base64      |
+| `svg`            | `{ width, height, url, svg }`, `svg` the markup of `url`          |
+| `none`           | `{ width, height, url }`, for clients that fetch `url` themselves |
+
+The share card of a blurt with a picture (its `og:image` and `twitter:image`) is drawn on the
+picture: the drawing fills the 1200 × 630 card, cropped to fit, under a dark veil, with the
+avatar and the text on top. It is a JPEG, `/og/{id}-{hash}.jpg` (`og:image:type`
+`image/jpeg`); every other card stays a PNG, `/og/{id}-{hash}.png`. The wrong extension
+redirects (302) like a stale hash.
 
 | Path                 | Auth | Response                                                          | Errors                                  |
 | -------------------- | ---- | ----------------------------------------------------------------- | --------------------------------------- |

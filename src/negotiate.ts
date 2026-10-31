@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import type { ZodError } from 'zod'
 import type { Markdown } from './templates/markdown.ts'
 import { renderErrorPage } from './templates/layout.ts'
+import { pictureMode, pictureReplacer } from './picture-json.ts'
 
 // One path per resource; the Accept header picks the representation. HTML comes first so
 // browsers and `*/*` (fetch's default) get the page. See docs/routes.md.
@@ -11,8 +12,16 @@ const representations = ['html', 'json', 'text/markdown', 'text/plain']
 // the second lock.
 const sensitiveKeys = new Set(['passwordHash', 'password', 'embedding'])
 
-export function toJson(data: unknown): string {
-  return JSON.stringify(data, (key, value) => (sensitiveKeys.has(key) ? undefined : value))
+export function toJson(
+  data: unknown,
+  replace?: (holder: unknown, key: string, value: unknown) => unknown,
+): string {
+  return JSON.stringify(data, function (this: unknown, key: string, value: unknown) {
+    if (sensitiveKeys.has(key)) {
+      return undefined
+    }
+    return replace ? replace(this, key, value) : value
+  })
 }
 
 export type Views<T> = {
@@ -21,14 +30,15 @@ export type Views<T> = {
 }
 
 // Sends the data a route fetched once, rendered as the client asked: HTML, the data
-// itself as JSON, or Markdown (for text/markdown and text/plain).
-export function represent<T>(
+// itself as JSON, or Markdown (for text/markdown and text/plain). In JSON, blurts' pictures
+// come with their drawing as base64 (see src/picture-json.ts, and `?pictures=`).
+export async function represent<T>(
   request: Request,
   response: Response,
   data: T,
   views: Views<T>,
   status = 200,
-): void {
+): Promise<void> {
   response.vary('Accept').status(status)
   const representation = request.accepts(representations)
   if (representation === 'html') {
@@ -38,7 +48,7 @@ export function represent<T>(
     }
     response.type('html').send(views.html(data))
   } else if (representation === 'json') {
-    response.type('json').send(toJson(data))
+    response.type('json').send(toJson(data, await pictureReplacer(data, pictureMode(request))))
   } else if (representation) {
     response.type(representation).send(`${views.markdown(data)}\n`)
   } else {

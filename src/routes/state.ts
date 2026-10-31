@@ -1578,3 +1578,17 @@ export async function getPictureShapes(blurtId: number): Promise<Buffer | undefi
   )
   return rows[0]?.shapes
 }
+
+// The stored shapes of the pictures of these blurts, by blurt id; none for deleted blurts.
+export async function getPicturesShapes(blurtIds: number[]): Promise<Map<number, Buffer>> {
+  if (blurtIds.length === 0) {
+    return new Map()
+  }
+  const { rows } = await dbRead().query<{ id: string; shapes: Buffer }>(
+    `SELECT pic.blurt_id AS id, pic.shapes FROM blurt_pictures pic
+     JOIN blurts b ON b.id = pic.blurt_id
+     WHERE pic.blurt_id = ANY($1::bigint[]) AND b.deleted_at IS NULL`,
+    [blurtIds],
+  )
+  return new Map(rows.map((row) => [Number(row.id), row.shapes]))
+}

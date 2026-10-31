@@ -97,7 +97,7 @@ profilesRouter.get('/:username/', async (request, response) => {
     listBlurtsByUserId(profile.userId, before),
   ])
   await markViewerFlags(viewer?.id ?? null, blurts)
-  represent(
+  await represent(
     request,
     response,
     { viewer, profile, invitedBy, inviteCodes, follows, blurts, next },
@@ -119,7 +119,7 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
     return
   }
 
-  represent(
+  await represent(
     request,
     response,
     {

@@ -117,7 +117,7 @@ async function sendFeed(request: Request, response: Response, path: '/' | '/ever
     sendError(request, response, 400, 'Invalid cursor', 'before')
     return
   }
-  represent(request, response, await getFeedData(request, before, path), {
+  await represent(request, response, await getFeedData(request, before, path), {
     html: renderFeedPage,
     markdown: feedMarkdown,
   })
