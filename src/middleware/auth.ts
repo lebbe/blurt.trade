@@ -3,6 +3,7 @@ import { jwtVerify, SignJWT, type JWTPayload } from 'jose'
 import type { CookieOptions, NextFunction, Request, RequestHandler, Response } from 'express'
 import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
+import { isSpeculative, refuseSpeculation } from '../speculation.ts'
 import { isAdmin } from '../routes/state.ts'
 import { defaultTheme, isTheme, type ThemeId } from '../themes.ts'
 import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
@@ -320,11 +321,19 @@ async function refreshSession(claims: RefreshClaims): Promise<
   return undefined
 }
 
-async function resolveSession(request: Request, response: Response): Promise<Session | undefined> {
+// 'refused': a prefetch that would have to rotate the tokens. It isn't served, so the
+// rotation happens on the real navigation (see src/speculation.ts).
+async function resolveSession(
+  request: Request,
+  response: Response,
+): Promise<Session | undefined | 'refused'> {
   const cookies = (request.cookies ?? {}) as Record<string, unknown>
   const session = await verifyAccessToken(cookies[accessTokenCookie])
   if (session || cookies[refreshTokenCookie] === undefined) {
     return session
+  }
+  if (isSpeculative(request)) {
+    return 'refused'
   }
 
   const claims = await verifyRefreshToken(cookies[refreshTokenCookie])
@@ -350,6 +359,10 @@ export const authenticate: RequestHandler = (
 ) => {
   resolveSession(request, response)
     .then((session) => {
+      if (session === 'refused') {
+        refuseSpeculation(response)
+        return
+      }
       if (session) {
         sessions.set(request, session)
       }

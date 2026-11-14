@@ -3,6 +3,7 @@ import type { ZodError } from 'zod'
 import type { Markdown } from './templates/markdown.ts'
 import { renderErrorPage } from './templates/layout.ts'
 import { pictureMode, pictureReplacer } from './picture-json.ts'
+import { setSpeculationRules } from './speculation.ts'
 
 // One path per resource; the Accept header picks the representation. HTML comes first so
 // browsers and `*/*` (fetch's default) get the page. See docs/routes.md.
@@ -46,6 +47,7 @@ export async function represent<T>(
     if (!/[<>"\s]/.test(request.originalUrl)) {
       response.set('Link', `<${request.originalUrl}>; rel="alternate"; type="text/markdown"`)
     }
+    setSpeculationRules(response)
     response.type('html').send(views.html(data))
   } else if (representation === 'json') {
     response.type('json').send(toJson(data, await pictureReplacer(data, pictureMode(request))))
@@ -75,6 +77,7 @@ export function sendError(
     (request.method === 'GET' || request.method === 'HEAD') &&
     request.accepts(['html', 'text/plain', 'text/markdown']) === 'html'
   ) {
+    setSpeculationRules(response)
     response.type('html').send(renderErrorPage({ status, message }))
   } else {
     response.type('text').send(message)

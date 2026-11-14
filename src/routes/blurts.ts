@@ -4,6 +4,7 @@ import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { embedPendingBlurts } from '../embeddings.ts'
 import { pageContext } from '../page-context.ts'
+import { isSpeculative, refuseSpeculation } from '../speculation.ts'
 import { markRecentWrite } from '../middleware/replica.ts'
 import { blurtMaxLength, blurtMaxNewlines, reportReasonMaxLength, text } from '../limits.ts'
 import { sanitizeBlurtLinks } from '../templates/blurt-text.ts'
@@ -107,6 +108,11 @@ blurtsRouter.get('/:username/:id', async (request, response, next) => {
   const viewer = getViewer(request)
   const context = pageContext()
   if (viewer && context.unreadNotifications > 0) {
+    // Not on a hover prefetch, which may never be shown: the click loads it for real.
+    if (isSpeculative(request)) {
+      refuseSpeculation(response)
+      return
+    }
     const unread = await markNotificationsReadForBlurt(viewer.id, blurt.id)
     if (unread !== undefined) {
       context.unreadNotifications = unread
