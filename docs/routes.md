@@ -666,9 +666,11 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
   after 24 hours unused (`temporarySessionIdleSeconds`). The choice is stored on the
   session (`sessions.persistent`) and kept through refreshes. Sessions from before the
   option existed are persistent.
-- A refresh token used again more than 20 seconds after it was rotated means a stolen
-  copy: the session is revoked for everyone holding it. Within those 20 seconds it is a
-  second tab racing the first, and gets a new access token only.
+- A refresh token used again more than 60 seconds after it was rotated means a stolen
+  copy: the session is revoked for everyone holding it. Within those 60 seconds it is a
+  second tab or parallel request racing the first, or a client that never got the
+  response that rotated it. It gets a new access token and a refresh token for the
+  current generation, without rotating again.
 - Logging out revokes the session. `/api/logout-everywhere` revokes all of the user's
   sessions. Other devices notice at their next refresh, within 5 minutes.
 - Production refuses to start without a `JWT_SECRET` of at least 32 characters.

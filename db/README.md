@@ -203,7 +203,8 @@ migrations run as the normal app user.
 | `retired_usernames` | usernames of deleted accounts, lower case, nothing else           |
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
-`sessions` is `UNLOGGED`: a crash empties it, which only logs everyone out. The server
+`sessions` is an ordinary (logged) table, so logins survive a crash and reach the
+replica. It was `UNLOGGED` until migration `1791850000000_sessions-logged`. The server
 deletes revoked and expired rows at startup and every hour.
 
 `signup_counter` starts at 1000 (soft) and 10000 (hard). Raise them without a deploy:

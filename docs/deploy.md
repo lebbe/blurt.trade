@@ -313,5 +313,5 @@ sudo -u postgres pg_restore --exit-on-error -d blurt <dump>   # keeps the owners
 systemctl restart pgbouncer && systemctl start blurt
 ```
 
-Everyone stays logged in only if their session survived: `sessions` is `UNLOGGED` and is
-in the dump, so sessions from before the dump work and later ones don't.
+Everyone stays logged in only if their session survived: `sessions` is in the dump, so
+sessions from before the dump work and later ones don't.
