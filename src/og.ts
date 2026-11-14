@@ -5,6 +5,7 @@ import {
   createCanvas,
   GlobalFonts,
   loadImage,
+  type Canvas,
   type Image,
   type SKRSContext2D,
 } from '@napi-rs/canvas'
@@ -13,7 +14,7 @@ import { renderToString } from 'preact-render-to-string'
 import { blurtMaxLength } from './limits.ts'
 import { cardColorOf, type CardColorId } from './card-colors.ts'
 import { photoOverlap, type Avatar } from './avatar.ts'
-import { AvatarSvg } from './templates/avatar.ts'
+import { AvatarSvg } from './ui/avatar.ts'
 import { pictureSvg } from './picture.ts'
 
 export const OG_TEMPLATE_VERSION = 2
@@ -388,7 +389,7 @@ async function canvasFor(
   debug = false,
   picture?: Uint8Array,
   photo?: Uint8Array,
-): Promise<ReturnType<typeof createCanvas>> {
+): Promise<Canvas> {
   const special = input.style === 'blurt'
   const font = fitOgText(input.text)
   const avatar = input.avatar ?? avatarFallback

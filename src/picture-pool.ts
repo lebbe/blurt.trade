@@ -53,7 +53,7 @@ function startSlot(): Slot {
     }
     next(slot)
   })
-  slot.worker.on('error', (error) => replace(slot, error))
+  slot.worker.on('error', (error) => replace(slot, error as Error)) // a worker emits Errors
   slot.worker.on('exit', () => replace(slot, new Error('picture worker exited')))
   return slot
 }

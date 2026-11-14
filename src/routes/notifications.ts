@@ -19,7 +19,7 @@ export const notificationsRouter = Router()
 // ?read=1 the ones already read. `before` pages through either (a cursor, like the feeds).
 notificationsRouter.get('/:username/notifications/', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
-  if (request.params.username.toLowerCase() !== viewer.username.toLowerCase()) {
+  if ((request.params.username as string).toLowerCase() !== viewer.username.toLowerCase()) {
     sendError(request, response, 403, 'Forbidden')
     return
   }

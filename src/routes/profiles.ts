@@ -74,7 +74,7 @@ function submittedFields(body: unknown): Partial<z.infer<typeof profileSchema>> 
 }
 
 profilesRouter.get('/:username/', async (request, response) => {
-  const profile = await getUserProfileByUsername(request.params.username)
+  const profile = await getUserProfileByUsername(request.params.username as string)
 
   if (!profile) {
     sendError(request, response, 404, 'User not found')
@@ -107,7 +107,7 @@ profilesRouter.get('/:username/', async (request, response) => {
 
 profilesRouter.get('/:username/edit', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
-  const profile = await getUserProfileByUsername(request.params.username)
+  const profile = await getUserProfileByUsername(request.params.username as string)
 
   if (!profile) {
     sendError(request, response, 404, 'User not found')
@@ -138,7 +138,7 @@ profilesRouter.post(
   rateLimit('profileEdit', accountKey),
   async (request, response) => {
     const viewer = response.locals.authenticatedUser
-    const profile = await getUserProfileByUsername(request.params.username)
+    const profile = await getUserProfileByUsername(request.params.username as string)
 
     if (!profile) {
       sendError(request, response, 404, 'User not found')
