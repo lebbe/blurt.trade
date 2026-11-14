@@ -155,7 +155,7 @@ test('new users get invite codes that only they can see', async () => {
   const privacy = await request('GET', '/privacy')
   assert.match(privacy.body, /Your invite codes, and who signed up with them/)
 
-  for (const headers of [{ cookie: adaCookie }, {}]) {
+  for (const headers of [{ cookie: adaCookie }, {}] as Record<string, string>[]) {
     const other = await request('GET', '/Lars/', '', headers)
     assert.doesNotMatch(other.body, /invite codes|signup\?invite|Invite your friends/)
     const data = JSON.parse((await request('GET', '/Lars/', '', { ...json, ...headers })).body)

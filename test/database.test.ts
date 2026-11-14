@@ -45,7 +45,11 @@ function useReadPool(
   const queries: string[] = []
   const query = pool.query.bind(pool)
   pool.query = ((...args: Parameters<typeof query>) => {
-    queries.push(String(typeof args[0] === 'string' ? args[0] : args[0]?.text))
+    queries.push(
+      String(
+        typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text,
+      ),
+    )
     return query(...args)
   }) as typeof pool.query
   return queries

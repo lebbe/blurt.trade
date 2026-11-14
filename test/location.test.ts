@@ -89,7 +89,7 @@ test('locations are snapped to the grid, validated, and shown only to their owne
   // The owner sees it on the edit page; nobody sees it on the profile, not even the owner.
   const edit = JSON.parse((await request('GET', '/Lars/edit', '', { ...json, cookie })).body)
   assert.deepEqual(edit.location, { lat: 89.5, lon: -179.5 })
-  for (const headers of [{ cookie }, { cookie: adaCookie }, {}]) {
+  for (const headers of [{ cookie }, { cookie: adaCookie }, {}] as Record<string, string>[]) {
     const profile = await request('GET', '/Lars/', '', { ...json, ...headers })
     assert.doesNotMatch(profile.body, /location|"lat"|"lon"|89\.5/)
   }

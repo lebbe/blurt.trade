@@ -40,7 +40,9 @@ test('HTML pages name the speculation rules, served with their own type and unde
   assert.doesNotMatch(contentSecurityPolicy, /script-src|inline-speculation-rules/)
   assert.deepEqual(
     JSON.parse(rules.body),
-    JSON.parse(readFileSync(join(import.meta.dirname, '..', 'public', 'speculation-rules.json'))),
+    JSON.parse(
+      readFileSync(join(import.meta.dirname, '..', 'public', 'speculation-rules.json'), 'utf8'),
+    ),
   )
 })
 
