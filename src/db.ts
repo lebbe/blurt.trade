@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import pg from 'pg'
-import { defaultDatabaseUrl } from '../db/migrate.ts'
+import { defaultDatabaseUrl, defaultMigrationDatabaseUrl } from '../db/migrate.ts'
 
 // bigint ids come back as strings by default; ours stay far below 2^53.
 pg.types.setTypeParser(pg.types.builtins.INT8, Number)
@@ -51,7 +51,35 @@ export function readFromPrimary<T>(callback: () => T): T {
   return primaryReads.run(true, callback)
 }
 
+// LISTEN needs a session of its own that stays open, which PgBouncer's transaction pooling
+// can't give (a LISTEN would land on a server connection that serves others next). So the
+// live-update listener (src/events.ts) connects straight to the primary PostgreSQL, one
+// connection per app process: LISTEN_DATABASE_URL, else MIGRATION_DATABASE_URL (also
+// direct), else DATABASE_URL (direct when there is no PgBouncer, as in docker-compose),
+// else the local PostgreSQL. Never a replica: NOTIFY isn't replicated. It must be the same
+// database DATABASE_URL reaches, since NOTIFY only reaches listeners there.
+export function listenDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
+  return (
+    env.LISTEN_DATABASE_URL ||
+    env.MIGRATION_DATABASE_URL ||
+    env.DATABASE_URL ||
+    defaultMigrationDatabaseUrl
+  )
+}
+
+// What else closeDb() closes: the listener's connection and anything waiting on the
+// database in the background (pushes, src/push.ts). Registered by those modules on first
+// use, so a process that never used them has nothing extra to close.
+const closers = new Set<() => Promise<void>>()
+
+export function onCloseDb(close: () => Promise<void>): void {
+  closers.add(close)
+}
+
 export async function closeDb(): Promise<void> {
+  const closing = [...closers]
+  closers.clear()
+  await Promise.all(closing.map((close) => close()))
   await Promise.all([pool?.end(), readPool?.end()])
   pool = undefined
   readPool = undefined

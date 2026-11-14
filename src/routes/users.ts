@@ -58,6 +58,8 @@ export const reservedUsernames = new Set([
   'healthz',
   'llms.txt',
   'login',
+  'manifest.webmanifest', // the web app manifest
+  'notifications', // /notifications/, redirects to the viewer's own
   'near',
   'og', // /og/:file, the share card images
   'people', // everyone, A to Z
@@ -71,6 +73,7 @@ export const reservedUsernames = new Set([
   'signup',
   'sitemap.xml',
   'static',
+  'sw.js', // the service worker, for push notifications
   'terms',
   // likely future pages
   'account',

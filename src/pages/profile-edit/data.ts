@@ -15,4 +15,15 @@ export type ProfileEditData = {
   location: GeoPoint | null
   // Which notifications they want; private, like the location.
   notifications: NotificationSettings
+  // Push notifications (src/push.ts); missing when this server doesn't send them.
+  push?: PushSettings
+}
+
+// `publicKey` is the server's VAPID key, which a browser subscribes with. `thisDevice` are
+// the endpoints this login has (src/client/push.ts compares the browser's with them), and
+// `devices` how many of the user's browsers get pushes in all.
+export type PushSettings = {
+  publicKey: string
+  thisDevice: string[]
+  devices: number
 }

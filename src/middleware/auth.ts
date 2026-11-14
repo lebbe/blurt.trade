@@ -408,6 +408,16 @@ export function getViewer(request: Request): AuthenticatedUser | null {
   return sessions.get(request)?.user ?? null
 }
 
+// The id of the login the request belongs to (sessions.id), for what lives and dies with
+// it: a device's push subscription (src/routes/push.ts). Never sent to the browser.
+export function getSessionId(request: Request): string | null {
+  return sessions.get(request)?.sessionId ?? null
+}
+
+// How long an access token lasts; also how long a live-update stream stays open before
+// the browser reconnects with fresh tokens (src/events.ts).
+export const accessTokenLifetimeMs = accessTokenSeconds * 1000
+
 export const requireAuth: RequestHandler = (
   request: Request,
   response: Response,

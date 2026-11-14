@@ -199,6 +199,12 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
           Only you see them.
         </li>
         <li>
+          Only if you turn on notifications on a device (on your edit page): that browser's push
+          address, an address at the push service of whoever made the browser (Google, Mozilla,
+          Apple or Microsoft), with the keys that come with it, tied to that login. It goes when you
+          turn them off there, log out there, or delete your account.
+        </li>
+        <li>
           Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
           who liked it.
         </li>
@@ -264,7 +270,16 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
           href=${javascriptSettingPath(viewer !== null)}
           >you can turn it off</a
         >), comes only from blurt.trade, and stores nothing in your browser: no local storage, no
-        other cookies.
+        other cookies. While a page is open, it keeps a connection to blurt.trade for the unread
+        count and new blurts.
+      </p>
+      <p>
+        Only if you turn on notifications on a device does the browser keep something of ours: a
+        service worker, a small script it runs to show the notifications. It caches nothing, and
+        it's removed when you turn notifications off there. The push that wakes it passes through
+        your browser maker's push service, but carries nothing: no text, no names, not even what
+        kind of notification it is. It only tells your browser to ask blurt.trade what's new, which
+        it then fetches straight from us.
       </p>
       <table>
         <thead>

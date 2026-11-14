@@ -122,6 +122,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
     - If you upload one, your profile picture: likewise only a rough drawing, and where you clicked for its mouth. It's public, like the avatar. With JavaScript on, both kinds of picture are first drawn as a preview in your browser: the picture doesn't leave your device until you post the blurt or upload it, and what is sent then is scaled down (a profile picture also cropped as you chose).
     - Who you follow.
     - Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt from someone you follow, with who did it, which blurt and when, and whether you've read it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile. Only you see them.
+    - Only if you turn on notifications on a device (on your edit page): that browser's push address, an address at the push service of whoever made the browser (Google, Mozilla, Apple or Microsoft), with the keys that come with it, tied to that login. It goes when you turn them off there, log out there, or delete your account.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.
     - Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.
     ${
@@ -149,7 +150,9 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
 
     Up to four, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none, unless they turn JavaScript off. All four are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade.
 
-    The site works fully without JavaScript. Its JavaScript is optional (${link('you can turn it off', javascriptSettingPath(pageContext().viewer !== null))}), comes only from blurt.trade, and stores nothing in your browser: no local storage, no other cookies.
+    The site works fully without JavaScript. Its JavaScript is optional (${link('you can turn it off', javascriptSettingPath(pageContext().viewer !== null))}), comes only from blurt.trade, and stores nothing in your browser: no local storage, no other cookies. While a page is open, it keeps a connection to blurt.trade for the unread count and new blurts.
+
+    Only if you turn on notifications on a device does the browser keep something of ours: a service worker, a small script it runs to show the notifications. It caches nothing, and it's removed when you turn notifications off there. The push that wakes it passes through your browser maker's push service, but carries nothing: no text, no names, not even what kind of notification it is. It only tells your browser to ask blurt.trade what's new, which it then fetches straight from us.
 
     | Cookie | What it's for | Lasts |
     | --- | --- | --- |

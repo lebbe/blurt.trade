@@ -2,6 +2,8 @@ import { cardColors } from '../../card-colors.ts'
 import { profileCardPath } from '../profile/profile.html.ts'
 import { ButtonLink, LocationMap } from '../shared/components.ts'
 import type { NotificationSettings } from '../../routes/state/notifications.ts'
+import type { PushSettings } from './data.ts'
+import { plural } from '../../ui/text.ts'
 import type { UserProfile } from '../../routes/state/profiles.ts'
 import {
   type Avatar,
@@ -193,7 +195,13 @@ function TimeZoneForm() {
 
 // One checkbox per kind of notification, saved with a plain POST. An unticked box sends
 // nothing, so what is left out is off.
-export function NotificationsForm({ settings }: { settings: NotificationSettings }) {
+export function NotificationsForm({
+  settings,
+  push,
+}: {
+  settings: NotificationSettings
+  push?: PushSettings
+}) {
   return html`
     <section class="panel" aria-label="Notifications" id="notifications">
       <h2>Notifications</h2>
@@ -224,7 +232,44 @@ export function NotificationsForm({ settings }: { settings: NotificationSettings
           <${SubmitButton} icon="save" label="Save notification settings" />
         </div>
       </form>
+      ${push && html`<${PushForms} push=${push} />`}
     </section>
+  `
+}
+
+// Push notifications on this device: a button only JavaScript can make work (the browser's
+// permission, a service worker), so it is hidden until src/client/push.ts shows it. And,
+// while any device gets them, a plain form that stops them everywhere, which works
+// without JavaScript too.
+function PushForms({ push }: { push: PushSettings }) {
+  return html`
+    <h3>On your devices</h3>
+    <div
+      class="push-device"
+      data-enhance="push"
+      data-vapid-key=${push.publicKey}
+      data-endpoints=${JSON.stringify(push.thisDevice)}
+      hidden
+    >
+      <p class="tiny" data-push-status></p>
+      <div class="actions"><button type="button" class="secondary"></button></div>
+    </div>
+    ${
+      push.devices > 0 &&
+      html`<form method="post" action="/api/push/subscriptions/delete" class="push-all">
+        <p class="tiny">
+          Push notifications are on for ${plural(push.devices, 'device', 'devices')}. They also stop
+          when you log out there.
+        </p>
+        <div class="actions">
+          <${SubmitButton}
+            icon="bell"
+            label="Stop push notifications on all devices"
+            kind="secondary"
+          />
+        </div>
+      </form>`
+    }
   `
 }
 

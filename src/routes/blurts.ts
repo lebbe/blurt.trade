@@ -37,6 +37,7 @@ import { addReport, hasReported } from './state/moderation.ts'
 import { markNotificationsReadForBlurt } from './state/notifications.ts'
 import { getCardColor } from './state/profiles.ts'
 import { setLike, setReblurt } from './state/reactions.ts'
+import { pushNotifications } from '../push.ts'
 import { renderBlurtPage } from '../pages/blurt/blurt.html.ts'
 import type { BlurtPageData } from '../pages/blurt/data.ts'
 import { renderFeedPage } from '../pages/feed/feed.html.ts'
@@ -187,6 +188,7 @@ blurtsRouter.post(
       parentId: parent?.id,
       reblurtOfId: quoted?.id,
       picture,
+      onNotified: pushNotifications,
     })
     const blurt = id === undefined ? undefined : await getBlurt(id)
     if (!blurt) {
@@ -279,7 +281,7 @@ blurtsRouter.post(
   '/api/reblurt',
   requireAuth,
   rateLimit('reblurt', accountKey),
-  toggleAction((userId, blurtId) => setReblurt(userId, blurtId, true)),
+  toggleAction((userId, blurtId) => setReblurt(userId, blurtId, true, pushNotifications)),
 )
 blurtsRouter.post(
   '/api/unreblurt',

@@ -227,7 +227,8 @@ export function enhance(form: HTMLFormElement, context: EnhancerContext): void {
     )
     card.dataset.posted = ''
     list.querySelector(':scope > p.empty')?.remove()
-    const heading = list.querySelector(':scope > h2')
+    // Under the "N new blurts" banner (./new-blurts.ts) if there is one, else the heading.
+    const heading = list.querySelector(':scope > .new-blurts') ?? list.querySelector(':scope > h2')
     if (reply) {
       list.append(card)
     } else if (heading) {

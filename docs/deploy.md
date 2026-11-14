@@ -57,6 +57,9 @@ file without starting anything: `node --env-file=/etc/blurt/blurt.env src/config
 | `JWT_SECRET`               | dev-only value                | Signs session tokens. Required in production, 32+ characters: `openssl rand -base64 48`. Changing it logs everyone out.                                         |
 | `DATABASE_URL`             | `localhost:6433/blurt`        | The app's database, through PgBouncer. Required in production.                                                                                                  |
 | `MIGRATION_DATABASE_URL`   | `DATABASE_URL`                | Migrations, straight to PostgreSQL (they hold a session advisory lock PgBouncer can't keep). Warned about in production if missing.                             |
+| `LISTEN_DATABASE_URL`      | `MIGRATION_DATABASE_URL`, else `DATABASE_URL` | One connection per app process for live updates (`LISTEN`), straight to the primary PostgreSQL, never PgBouncer or a replica (db/README.md). Warned about in production when neither it nor `MIGRATION_DATABASE_URL` is set. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | unset: no push notifications | The key pair that signs push notifications. Make it once with `npm run vapid-keys` and keep it: a new pair silently ends every device's subscription. The private key is a secret. Both or neither; a mismatched pair stops the start. |
+| `VAPID_SUBJECT`            | `mailto:CONTACT_EMAIL`, else `PUBLIC_URL` | How push services reach the site's owner about its pushes: `mailto:` or `https://`. |
 | `DATABASE_READ_URL`        | unset: the primary            | A read replica for feeds, related blurts and discovery (db/README.md, Read replica).                                                                            |
 | `DB_POOL_SIZE`             | `20`                          | Connections per pool (primary, and replica). At or below PgBouncer's `default_pool_size`, split between app processes.                                          |
 | `READ_YOUR_WRITES_SECONDS` | `10`                          | How long after a write a browser reads from the primary. Must outlast replica lag.                                                                              |
@@ -193,6 +196,45 @@ them new URLs and browsers never mix old modules with a new page. A page loaded 
 the deploy that imports a module afterwards gets a 404 and carries on without that
 enhancer. Proxies in front must pass `Content-Type` and `Cache-Control` through
 unchanged; compressing `text/javascript` there helps (the nginx config does).
+
+A restart also ends every open live-update stream (`/api/events`); browsers reconnect by
+themselves within seconds. The service worker (`/sw.js`, only in browsers that turned on
+push notifications) is checked for changes by the browser on navigation and takes over at
+once when it changed; it caches nothing, so a deploy never leaves anyone on old pages.
+
+## Live updates and push notifications
+
+Both are optional extras for pages with JavaScript (docs/routes.md, Live updates and Push
+notifications). Without them configured, everything else works as before.
+
+- **Live updates** need one direct PostgreSQL connection per app process:
+  `LISTEN_DATABASE_URL` (or `MIGRATION_DATABASE_URL`, which already points at PostgreSQL on
+  5432 in `deploy/blurt.env.example`). PgBouncer's transaction pooling can't hold a
+  `LISTEN`. Count it in `max_connections`. With a read replica, it must still be the
+  primary.
+- **Proxies.** Each open tab holds one long request to `/api/events` (an event stream,
+  a comment every 25 seconds). Caddy: `deploy/Caddyfile` leaves it out of `encode` (a
+  compressor holds small events back); `reverse_proxy` flushes event streams by itself.
+  nginx: `docker/nginx-blurt.trade.conf` has a `location = /api/events` with
+  `proxy_buffering off`, no gzip and a long `proxy_read_timeout`; the app also sends
+  `X-Accel-Buffering: no` and `Cache-Control: no-transform`. Another proxy or CDN in front
+  must not buffer or compress `text/event-stream`, and must allow requests that last
+  5 minutes.
+- **Push notifications** need a VAPID key pair, made once and kept:
+
+  ```bash
+  npm run vapid-keys        # prints VAPID_PUBLIC_KEY=… and VAPID_PRIVATE_KEY=…
+  ```
+
+  Put both lines in `/etc/blurt/blurt.env` (or `docker/.env`), and optionally
+  `VAPID_SUBJECT=mailto:<an address>` (default: `CONTACT_EMAIL`, else `PUBLIC_URL`; Apple
+  wants a real `mailto:` or `https:` it can use). The server then shows "Notify me on this
+  device" on the edit page and sends pushes to the browser makers' push services
+  (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.push.apple.com`,
+  `*.notify.windows.com`): the server needs outbound HTTPS to them. Changing or losing the
+  pair ends every device's subscription without telling anyone (users turn it on again).
+- **Home Screen.** iPhones and iPads get push only for a site added to the Home Screen
+  (iOS 16.4+), which uses `/manifest.webmanifest` and `public/icons/`.
 
 ## Logs and monitoring
 

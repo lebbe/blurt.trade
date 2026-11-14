@@ -88,6 +88,21 @@ while it runs, which transaction pooling can't keep. `migrate()` connects to
 `MIGRATION_DATABASE_URL`, else `DATABASE_URL`, else `localhost:5433`. When `DATABASE_URL`
 points at PgBouncer, always set `MIGRATION_DATABASE_URL` to PostgreSQL itself.
 
+**So does the live-update listener.** Each app process keeps one connection that
+`LISTEN`s on the channel `blurt_events` (`src/events.ts`), from `LISTEN_DATABASE_URL`, else
+`MIGRATION_DATABASE_URL`, else `DATABASE_URL`, else `localhost:5433`. It must reach the
+primary's database itself: not PgBouncer (a LISTEN would sit on a server connection that
+serves others next) and not a replica (NOTIFY isn't replicated). It counts against
+PostgreSQL's `max_connections` (one per app process), not PgBouncer's pool. `NOTIFY` itself
+works through PgBouncer: it is part of the writing transaction.
+
+Triggers (migration `1791870000000_live-events-and-push`) send it: `notifications_changed`
+and `notifications_read` on `notifications` (`{"t":"n","u":<user>}`: that user's unread
+count may have changed) and `blurt_posted` on top-level `blurts` inserts
+(`{"t":"b","id":…,"u":<author>,"o":<original of a plain reblurt or null>}`). NOTIFY is
+delivered at commit, never for a rolled-back transaction, and identical payloads in one
+transaction are delivered once. See docs/routes.md, Live updates.
+
 ## Read replica
 
 One primary takes every write; one streaming replica takes the heavy reads: the feeds
@@ -197,6 +212,7 @@ migrations run as the normal app user.
 | `follows`           | `user_id` follows `followed_user_id`                                                                                |
 | `likes`             | `user_id` likes `blurt_id` (`blurt_stats.like_count` is the count)                                                  |
 | `sessions`          | one row per login: refresh token generation, last use, revoked                                                      |
+| `push_subscriptions` | one row per browser with push notifications on: `endpoint` (unique), `user_id`, `session_id`, `p256dh`, `auth`, `pushed_at` |
 | `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`                                                        |
 | `waitlist`          | usernames that asked to be let in while sign-up was full                                                            |
 | `invite_codes`      | single-use sign-up codes: owner `user_id`, `used_by_user_id`                                                        |
@@ -206,6 +222,11 @@ migrations run as the normal app user.
 `sessions` is an ordinary (logged) table, so logins survive a crash and reach the
 replica. It was `UNLOGGED` until migration `1791850000000_sessions-logged`. The server
 deletes revoked and expired rows at startup and every hour.
+
+`push_subscriptions` rows belong to a login: no pushes once its session is revoked, and
+the row goes with the session (`ON DELETE CASCADE`) at that cleanup, or with the account.
+A push service answering 404 or 410 deletes it too. `pushed_at` spaces pushes to a
+device a minute apart (docs/routes.md, Push notifications).
 
 `signup_counter` starts at 1000 (soft) and 10000 (hard). Raise them without a deploy:
 

@@ -268,7 +268,8 @@ export const liveUser = 'SELECT id FROM users WHERE id = $1 AND deleted_at IS NU
 // or quote to a blurt deleted at the same moment can still land; reads show it under the
 // placeholder, or with "Content is deleted". In the same statement it notifies, if they
 // have that kind switched on: the author replied to or quoted, and for a top-level blurt
-// the followers (never the author themselves).
+// the followers (never the author themselves). `onNotified` gets the ids of the users it
+// notified, once the blurt is saved (the route pushes to their devices, src/push.ts).
 export async function addBlurt(
   userId: number,
   text: string,
@@ -276,14 +277,16 @@ export async function addBlurt(
     parentId = null,
     reblurtOfId = null,
     picture,
+    onNotified,
   }: {
     parentId?: number | null
     reblurtOfId?: number | null
     picture?: { width: number; height: number; shapes: Buffer }
+    onNotified?: (userIds: number[]) => void
   } = {},
 ): Promise<number | undefined> {
   // One statement, so the blurt and its picture are saved together or not at all.
-  const { rows } = await db().query<{ id: number }>(
+  const { rows } = await db().query<{ id: number; notified: number[] | null }>(
     `WITH blurt AS (
        INSERT INTO blurts (user_id, text, parent_id, reblurt_of_id, reblurt_of_user_id)
        SELECT u.id, $2, $3, $4::bigint, (SELECT user_id FROM blurts WHERE id = $4::bigint)
@@ -314,8 +317,9 @@ export async function addBlurt(
        ) n
        WHERE n.user_id <> blurt.user_id
        ON CONFLICT DO NOTHING
+       RETURNING user_id
      )
-     SELECT id FROM blurt`,
+     SELECT id, (SELECT array_agg(user_id) FROM notify) AS notified FROM blurt`,
     [
       userId,
       text,
@@ -326,6 +330,10 @@ export async function addBlurt(
       picture?.shapes ?? null,
     ],
   )
+  if (rows[0]?.notified) {
+    // bigint[] comes back as strings (only single bigints are parsed, src/db.ts).
+    onNotified?.(rows[0].notified.map(Number))
+  }
   return rows[0]?.id
 }
 

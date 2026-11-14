@@ -1,6 +1,6 @@
-import { Router, type RequestHandler } from 'express'
+import { Router, type Request, type RequestHandler } from 'express'
 import { z } from 'zod'
-import { clearSessionCookies, getViewer, requireAuth } from '../middleware/auth.ts'
+import { clearSessionCookies, getSessionId, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import {
   fieldErrors,
@@ -13,6 +13,9 @@ import {
 import { listBlurtsByUserId, markViewerFlags, parseCursor } from './state/blurts.ts'
 import { follow, getFollowStats, unfollow } from './state/follows.ts'
 import { getNotificationSettings } from './state/notifications.ts'
+import { countPushDevices, listSessionPushEndpoints } from './state/push.ts'
+import { vapidKeys } from '../push.ts'
+import type { PushSettings } from '../pages/profile-edit/data.ts'
 import { getLocation, getUserProfileByUsername, updateUserProfile } from './state/profiles.ts'
 import { getInvitedBy, isInviteOnly, listInviteCodes } from './state/signup.ts'
 import { cardColors } from '../card-colors.ts'
@@ -97,6 +100,23 @@ profilesRouter.get('/:username/', async (request, response) => {
   )
 })
 
+// The push part of the edit page, when this server sends pushes (VAPID keys set).
+async function getPushSettings(
+  request: Request,
+  userId: number,
+): Promise<PushSettings | undefined> {
+  const keys = vapidKeys()
+  const sessionId = getSessionId(request)
+  if (!keys || !sessionId) {
+    return undefined
+  }
+  const [thisDevice, devices] = await Promise.all([
+    listSessionPushEndpoints(sessionId),
+    countPushDevices(userId),
+  ])
+  return { publicKey: keys.publicKey, thisDevice, devices }
+}
+
 profilesRouter.get('/:username/edit', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
   const profile = await getUserProfileByUsername(request.params.username as string)
@@ -119,6 +139,7 @@ profilesRouter.get('/:username/edit', requireAuth, async (request, response) => 
       profile,
       location: await getLocation(profile.userId),
       notifications: await getNotificationSettings(profile.userId),
+      push: await getPushSettings(request, profile.userId),
     },
     { html: renderProfileEditPage, markdown: profileEditMarkdown },
   )

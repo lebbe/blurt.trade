@@ -7,6 +7,7 @@ import { eyeTypes, hairTypes, headWidths, toothTypes } from '../../shared/avatar
 import { formatLocation, gridDescription } from '../../shared/geo.ts'
 import { themes } from '../../shared/themes.ts'
 import { notificationsPath } from '../../ui/urls.ts'
+import { plural } from '../../ui/text.ts'
 
 // The edit page (/:username/edit) as Markdown: the same data as the HTML, for text/markdown
 // and text/plain clients (curl, LLMs, terminals). Forms are described instead of rendered.
@@ -15,10 +16,18 @@ export function profileEditMarkdown({
   profile,
   location,
   notifications,
+  push,
 }: ProfileEditData): Markdown {
   const fields = profileFields.map(
     ([key, label]) => md`- ${code(key)} (${label}): ${profileValue(String(profile[key]))}`,
   )
+  const pushNote = push
+    ? md`
+    Push notifications are on for ${plural(push.devices, 'device', 'devices')}. With JavaScript, the
+    HTML page has a button to turn them on for the device you use. Send
+    ${code('POST /api/push/subscriptions/delete')} to stop them on all devices.
+    `
+    : ''
   // With a profile picture the cartoon is never shown, so its settings aren't either.
   const cartoon = profile.avatar.photo
     ? ''
@@ -71,6 +80,8 @@ export function profileEditMarkdown({
     Send ${code('POST /api/notifications/settings')} with ${code('replies')}, ${code('reblurts')}
     and ${code('followedBlurts')} (${code('1')}, ${code('on')} or ${code('true')} for on, JSON
     ${code('true')}). Kinds left out are switched off. A quote counts as a reblurt here.
+
+    ${pushNote}
 
     ## Theme
 

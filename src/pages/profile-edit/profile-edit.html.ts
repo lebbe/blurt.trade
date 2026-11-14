@@ -24,6 +24,7 @@ function ProfileEditForm({
   profile,
   location,
   notifications,
+  push,
   validationError,
   locationError,
   avatarError,
@@ -118,7 +119,7 @@ ${profile.bio}</textarea>
       <${ProfilePictureForm} avatar=${profile.avatar} error=${pictureError} />
       <${LocationForms} location=${location} error=${locationError} />
       <${ThemeForm} />
-      <${NotificationsForm} settings=${notifications} />
+      <${NotificationsForm} settings=${notifications} push=${push} />
     <//>
   `
 }

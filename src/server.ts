@@ -49,6 +49,9 @@ import { timeZoneRouter } from './routes/timezone.ts'
 import { usersRouter } from './routes/users.ts'
 import { crawlRouter } from './routes/crawl.ts'
 import { ogRouter } from './routes/og.ts'
+import { eventsRouter } from './routes/events.ts'
+import { appFilesRouter, pushRouter } from './routes/push.ts'
+import { closeEventStreams } from './events.ts'
 
 const publicDir = join(import.meta.dirname, '..', 'public')
 
@@ -65,6 +68,8 @@ app.use(sameOriginWrites)
 // Before cookies and auth: the uptime check needs neither.
 app.use(healthRouter)
 app.use(crawlRouter)
+// /sw.js and /manifest.webmanifest, the same for everyone (src/routes/push.ts).
+app.use(appFilesRouter)
 // The browser's Preact bundle, at a versioned URL with a year-long immutable cache
 // (src/vendor.ts). Other versions are not found anywhere and 404.
 serveVendorFiles(app)
@@ -126,6 +131,8 @@ app.use((request, response, next) => {
     .catch(next)
 })
 app.use(homeRouter)
+app.use(eventsRouter)
+app.use(pushRouter) // before profilesRouter, whose /:username/ would match /notifications/
 app.use(infoRouter)
 app.use(picturesRouter)
 app.use(profilePictureRouter)
@@ -222,6 +229,8 @@ async function start(): Promise<void> {
       log('error', 'shutdown timed out, exiting')
       process.exit(1)
     }, shutdownTimeoutMs).unref()
+    // Live-update streams never end by themselves, and server.close() waits for them.
+    closeEventStreams()
     server.close(() => {
       Promise.all([closePicturePool(), closeDb()]).then(
         () => {

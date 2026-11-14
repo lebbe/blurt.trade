@@ -38,6 +38,11 @@ const defaults = {
   javascript: '60/10m',
   // The notification settings, and marking notifications as read.
   notifications: '60/10m',
+  // Turning push notifications on or off on a device (src/routes/push.ts).
+  push: '30/10m',
+  // Opening the live-update stream (src/routes/events.ts), per account. Each open tab
+  // reconnects about every 5 minutes, and after every page load.
+  events: '600/10m',
   report: '20/1h',
   deleteBlurt: '60/10m',
   mintInvites: '20/1h',

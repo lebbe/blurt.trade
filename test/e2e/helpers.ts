@@ -10,6 +10,7 @@ import {
   type Page,
 } from 'playwright'
 import { app } from '../../src/server.ts'
+import { closeEventStreams } from '../../src/events.ts'
 // The test database, migrated once and emptied before each test, as for the other tests.
 import '../helpers.ts'
 
@@ -30,6 +31,8 @@ test.before(async () => {
 
 test.after(async () => {
   await browser?.close()
+  // Live-update streams still open would keep close() waiting.
+  closeEventStreams()
   await new Promise((resolve) => server?.close(resolve))
 })
 
@@ -71,6 +74,12 @@ export async function openTab(
   page.on('requestfinished', (request) => requests.push(new URL(request.url()).pathname))
   page.on('requestfailed', (request) => {
     const error = request.failure()?.errorText
+    // The live-update stream (src/client/live.ts) never finishes: leaving the page, or
+    // closing it on pagehide, aborts it, as it should.
+    const liveStream = new URL(request.url()).pathname === '/api/events'
+    if (liveStream && error === 'net::ERR_ABORTED') {
+      return
+    }
     if (!(error === 'csp' && !javaScriptEnabled)) {
       problems.push(`failed: ${request.url()} ${error}`)
     }

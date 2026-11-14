@@ -28,6 +28,9 @@ process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://blurt:blurt@localhost:6433/blurt_test'
 export const testMigrationDatabaseUrl =
   process.env.TEST_MIGRATION_DATABASE_URL ?? 'postgres://blurt:blurt@localhost:5433/blurt_test'
+// The live-update listener (src/events.ts) LISTENs straight to PostgreSQL too, on the
+// test database: NOTIFY only reaches listeners on the same database.
+process.env.LISTEN_DATABASE_URL = testMigrationDatabaseUrl
 
 export function request(
   method: string,
