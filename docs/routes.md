@@ -712,7 +712,9 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
   apply, because that needs no new server logic: the server's middle-square crop of a
   square is the whole of it. The answer `{ avatar }` re-renders the panel
   (`ProfilePictureForm`, now in `src/ui/profile-picture.ts`) and the viewer's other
-  avatars; Remove also goes without a page load. A file the browser can't decode gets no
+  avatars, and hides or brings back the cartoon's form (`AvatarForm`, in
+  `src/ui/avatar-form.ts` for this) and its "On this page" link, as a reload would show
+  them; Remove also goes without a page load. A file the browser can't decode gets no
   editor, and the form is sent as it is.
 - In JSON the avatar gets `photo: { user, version, cut }` while there is a picture.
 - The edit page then hides the cartoon's settings (they would change nothing that shows):

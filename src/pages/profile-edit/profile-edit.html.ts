@@ -1,12 +1,13 @@
 import { h } from 'preact'
 import type { ProfileEditData } from './data.ts'
-import { AvatarForm, CardForm, LocationForms, NotificationsForm, ThemeForm } from './forms.ts'
+import { CardForm, LocationForms, NotificationsForm, ThemeForm } from './forms.ts'
 import { socialFields } from '../profile/profile.html.ts'
 import { ButtonLink, LinkPanel } from '../shared/components.ts'
 import { Page, renderDocument } from '../shared/layout.ts'
 import { bioMaxLength, linkMaxLength } from '../../shared/limits.ts'
 import { SubmitButton } from '../../ui/forms.ts'
 import { ProfilePictureForm } from '../../ui/profile-picture.ts'
+import { AvatarForm } from '../../ui/avatar-form.ts'
 import { html } from '../../ui/html.ts'
 
 // The edit page: the profile form, then the forms in forms.ts. With JavaScript,

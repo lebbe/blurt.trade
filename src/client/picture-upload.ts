@@ -1,6 +1,7 @@
 import { type Avatar, defaultPictureCut, maxPictureCut, minPictureCut } from '../shared/avatar.ts'
 import { photoPartSvg } from '../shared/picture/svg.ts'
 import { AvatarView, cutHint } from '../ui/avatar.ts'
+import { AvatarForm } from '../ui/avatar-form.ts'
 import { ValidationError } from '../ui/forms.ts'
 import { html } from '../ui/html.ts'
 import { ProfilePictureForm } from '../ui/profile-picture.ts'
@@ -460,6 +461,7 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
       editor = undefined
       const fresh = renderElement(html`<${ProfilePictureForm} avatar=${avatar} />`, context.page)
       section!.replaceWith(fresh)
+      showCartoonForm(!avatar.photo, avatar, context)
       showOwnAvatars(avatar, context.page)
       void context.enhance(fresh)
       fresh.tabIndex = -1
@@ -474,6 +476,33 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
         : 'Not saved: no answer from the server. Try again.'
     form.prepend(...renderNodes(html`<${ValidationError} message=${message} />`, context.page))
     input!.focus()
+  }
+}
+
+// The cartoon's form, as the page would be drawn now: only while there is no profile
+// picture (with one, the cartoon is never shown, so neither are its settings, and an
+// <span id="avatar"> stands in for it, see src/pages/profile-edit/profile-edit.html.ts).
+// Left in place after an upload, its fields would still draw a cartoon over the new
+// picture's previews as they changed, though the picture is what is stored.
+function showCartoonForm(shown: boolean, avatar: Avatar, context: EnhancerContext): void {
+  const current = document.getElementById('avatar')
+  if (!current || (current.localName === 'section') === shown) {
+    return
+  }
+  const replacement = shown
+    ? renderElement(html`<${AvatarForm} avatar=${avatar} />`, context.page)
+    : renderElement(html`<span id="avatar"></span>`, context.page)
+  current.replaceWith(replacement)
+  if (shown) {
+    void context.enhance(replacement)
+  }
+  // The "On this page" link to it.
+  const link = document.querySelector('aside a[href="#avatar"]')?.closest('li')
+  const picture = document.querySelector('aside a[href="#picture"]')?.closest('li')
+  if (!shown) {
+    link?.remove()
+  } else if (!link && picture) {
+    picture.before(renderElement(html`<li><a href="#avatar">Avatar</a></li>`, context.page))
   }
 }
 
