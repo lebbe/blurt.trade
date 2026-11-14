@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeDb, dbRead } from '../src/db.ts'
 import { configProblems } from '../src/config.ts'
@@ -282,4 +283,17 @@ test('log lines are single-line JSON, with errors expanded', (t) => {
   log('error', 'something', { error: new Error('two\nlines') })
   assert.equal(logs.length, 1)
   assert.equal((logs[0].error as { message: string }).message, 'two\nlines')
+})
+
+test('Docker Compose passes every push setting from docker/.env into the app container', () => {
+  // docs/deploy.md says to put them in docker/.env, but Compose only hands the container
+  // what its environment: block names.
+  const root = join(import.meta.dirname, '..')
+  const compose = readFileSync(join(root, 'docker', 'docker-compose.yml'), 'utf8')
+  const push = readFileSync(join(root, 'src', 'push.ts'), 'utf8')
+  const names = [...new Set(push.match(/\bVAPID_[A-Z_]+/g))]
+  assert.deepEqual(names.toSorted(), ['VAPID_PRIVATE_KEY', 'VAPID_PUBLIC_KEY', 'VAPID_SUBJECT'])
+  for (const name of names) {
+    assert.match(compose, new RegExp(`^\\s+${name}: \\$\\{${name}:-\\}$`, 'm'), name)
+  }
 })
