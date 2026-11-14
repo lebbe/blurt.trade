@@ -256,6 +256,7 @@ const anonymous: PageContext = {
   locale: 'en-GB',
   pickedLocale: null,
   javascript: true,
+  origin: 'https://blurt.example',
 }
 
 const loggedIn: PageContext = {
@@ -268,6 +269,7 @@ const loggedIn: PageContext = {
   locale: 'nb-NO',
   pickedLocale: 'nb-NO',
   javascript: true,
+  origin: 'https://blurt.example',
 }
 
 const quiet: PageContext = {

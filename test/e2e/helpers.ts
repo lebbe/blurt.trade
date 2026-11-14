@@ -2,7 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+} from 'playwright'
 import { app } from '../../src/server.ts'
 // The test database, migrated once and emptied before each test, as for the other tests.
 import '../helpers.ts'
@@ -33,15 +39,18 @@ export type Problems = string[]
 export type Tab = { page: Page; context: BrowserContext; problems: Problems; requests: string[] }
 
 // A new browser profile (no cookies) with its JavaScript on or off, and one page in it.
+// `options` for more of the profile: a phone's touch screen, permissions.
 export async function openTab(
   t: { after: (fn: () => Promise<void>) => void },
   javaScriptEnabled: boolean,
+  options: BrowserContextOptions = {},
 ): Promise<Tab> {
   assert.ok(browser, 'the browser is running')
   // Reduced motion turns the cross-document view transitions off (public/style.css):
   // during one the old page's snapshot takes the clicks, and with scripting disabled
   // Chromium was seen holding it for about a second, which makes clicks flaky.
   const context = await browser.newContext({
+    ...options,
     baseURL: baseUrl,
     javaScriptEnabled,
     reducedMotion: 'reduce',

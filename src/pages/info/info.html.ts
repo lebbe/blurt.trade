@@ -146,6 +146,11 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
         blurt.trade collects as little as it can. No email address, no real name, no phone number.
         No analytics, no ads, no tracking, and nothing loaded from other sites.
       </p>
+      <p>
+        With JavaScript on, Share also offers plain links to other services, such as Bluesky or
+        LinkedIn. Nothing is shared, and nothing is sent to any of them, until you click one: that
+        link takes you to the service you picked, where its own privacy terms apply.
+      </p>
       <h2>Who is responsible</h2>
       <p>
         Lars-Erik Bruce is responsible for the site and its data (the controller under the GDPR). To

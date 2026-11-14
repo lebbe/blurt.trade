@@ -1645,3 +1645,84 @@ dialog.confirm p {
 dialog.confirm .actions {
   justify-content: flex-end;
 }
+
+/* The Share popup (share.ts, ShareDialog in src/ui/share.ts). No padding on the dialog
+   itself: a click on it, outside .share-box, is a click on the backdrop and closes it. */
+dialog.share {
+  width: min(30rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: var(--panel-border) solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--panel-shadow);
+}
+
+dialog.share::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.share-box {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.share-box h2 {
+  margin: 0;
+}
+
+.share-title {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.share-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-targets a {
+  display: block;
+  padding: 8px 10px;
+  border: 2px solid var(--line-soft);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.share-targets a:hover {
+  border-color: var(--line);
+}
+
+.share-copy {
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.share-copy-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-copy-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-status {
+  min-height: 1.4em;
+  margin: 0;
+  font-weight: 700;
+}
+
+dialog.share .actions {
+  justify-content: flex-end;
+}

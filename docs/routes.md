@@ -1068,7 +1068,8 @@ With JavaScript on, `src/pages/shared/layout.ts` puts this in every page's `<hea
    in parallel.
 3. `<script type="module" src="/static/js/<build>/client/main.ts">`.
 4. `<script type="application/json" id="page-context">` with the page context (viewer,
-   path, theme, time zone, locale, unread count, `javascript`), `<` escaped as `<`.
+   path, theme, time zone, locale, unread count, `javascript`, and `origin`, the
+   `PUBLIC_URL` that Share makes addresses absolute with), `<` escaped as `<`.
    `readPageContext()` in `src/client/page-context.ts` reads it, and
    `PageContextProvider` wraps what an island renders so shared components can call
    `usePageContext()` as they do on the server.
@@ -1118,6 +1119,7 @@ multipart only where a file is uploaded). `followLink(link)` does the same for a
 | `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
 | `more`     | the next-page link of every paged list | `src/client/more.ts`    |
 | `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
+| `share`    | Share on every blurt card and on profiles | `src/client/share.ts` |
 
 Autosave (`<form data-enhance="autosave">`) sends the whole form as its button would
 (fields tied to it with the `form` attribute too) with `submitForm`: a select, radio,
@@ -1199,6 +1201,25 @@ happened.
   form becomes "You reported this blurt.", or shows the error.
 - **Follow** (`follow`): the button changes at once, then the form and the profile's
   follower count are rendered from `{ followerCount, followingCount, viewerFollows }`.
+- **Share** (`share`, for everyone, logged in or not). Without JavaScript Share is a link:
+  to the blurt's page in lists, to its share card image on the blurt's own page, and to
+  the profile's card image on a profile. With it, every Share shares the page itself
+  (`data-share-url`, made absolute with `origin` from the page context) with a short title
+  (`data-share-title`: the blurt's text cut to 70 characters, or "name on blurt.trade").
+  On a touch-first device (`(pointer: coarse)`) with `navigator.share`, the browser's own
+  share sheet opens; cancelling it does nothing, any other failure opens the popup.
+  Elsewhere (desktop Safari and Chrome on Windows have `navigator.share` too) a modal
+  `<dialog>` (`ShareDialog`, `src/ui/share.ts`) lists plain links to each service's share
+  page (`shareTargets()` in `src/shared/share.ts`: LinkedIn, Facebook, X, email, Reddit,
+  Bluesky, Threads, Mastodon through mastodonshare.com, WhatsApp, Telegram, and Pinterest
+  for blurts with a picture, with the share card image as `media` on the blurt's page),
+  each opening in a new tab with `rel="noopener noreferrer"` (email in the same one, to
+  leave no empty tab). Nothing is loaded from those services: no scripts, frames or
+  widgets, and the CSP is unchanged. Copy link uses `navigator.clipboard.writeText` and
+  says "Copied!" in a `role=status` line; without a clipboard it selects the link in its
+  field to copy by hand. Escape, Close or a click outside closes it, and the focus goes
+  back to Share. A modifier-click or middle click is left to the browser. Cards put in
+  the page later (posted, or the next page of a list) get it through `context.enhance`.
 
 ### Turning it off
 
@@ -1233,7 +1254,11 @@ happened with JavaScript, by a mark on `window`) and by keyboard, and the feed p
 counter and Ctrl+Enter, endless scrolling (three pages, the click, the address bar,
 reload and Back), "More replies", like and reblurt (optimistic, and refused), follow,
 delete with its dialog, report, and every list rendered in the browser compared with the
-server's HTML for the same URL. Contexts use reduced motion, which
+server's HTML for the same URL, and Share (`share.test.ts`): the links without
+JavaScript, the popup's links and how it closes, Copy link with and without a clipboard,
+a phone (touch emulated, `navigator.share` stubbed) sharing, cancelling and failing, a
+computer with `navigator.share`, Pinterest with the card image, cards added later, a
+profile, and a narrow screen. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates

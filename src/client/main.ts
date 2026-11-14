@@ -19,6 +19,7 @@ const enhancers: Registry = {
   map: () => import('./map.ts'),
   more: () => import('./more.ts'),
   mouth: () => import('./mouth.ts'),
+  share: () => import('./share.ts'),
 }
 
 // Set only once this script actually runs: CSS that hides a fallback (a save button that
