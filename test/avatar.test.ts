@@ -13,7 +13,7 @@ import {
   randomAvatar,
   toothTypes,
 } from '../src/avatar.ts'
-import { AvatarSvg } from '../src/templates/avatar.ts'
+import { AvatarSvg } from '../src/ui/avatar.ts'
 import { createSession, json, request, sendJson, stylesheet } from './helpers.ts'
 
 const avatarForm = {

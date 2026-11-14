@@ -1,7 +1,4 @@
-import { h } from 'preact'
-import htm from 'htm'
-
-const html = htm.bind(h)
+import { html } from './html.ts'
 
 // Small line icons as inline SVG, drawn in the text colour (currentColor). Inline because
 // the Content-Security-Policy allows no fonts or third-party files (an icon font would be

@@ -14,12 +14,8 @@ import {
   type Cursor,
   type FeedItem,
 } from './state.ts'
-import {
-  renderFeedPage,
-  type DiscoveryKind,
-  type DiscoverySection,
-  type FeedData,
-} from '../templates/index.ts'
+import { renderFeedPage, type FeedData } from '../templates/index.ts'
+import type { DiscoveryKind, DiscoverySection } from '../ui/discovery.ts'
 import { feedMarkdown } from '../templates/pages.md.ts'
 
 export const homeRouter = Router()

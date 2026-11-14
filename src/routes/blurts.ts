@@ -7,7 +7,7 @@ import { pageContext } from '../page-context.ts'
 import { isSpeculative, refuseSpeculation } from '../speculation.ts'
 import { markRecentWrite } from '../middleware/replica.ts'
 import { blurtMaxLength, blurtMaxNewlines, reportReasonMaxLength, text } from '../limits.ts'
-import { sanitizeBlurtLinks } from '../templates/blurt-text.ts'
+import { sanitizeBlurtLinks } from '../ui/blurt-text.ts'
 import type { DrawnPicture } from '../picture-pool.ts'
 import { drawUpload, uploadPicture } from './picture-upload.ts'
 import {
@@ -38,13 +38,8 @@ import {
   type Blurt,
   type Cursor,
 } from './state.ts'
-import {
-  blurtAnchor,
-  blurtUrl,
-  renderBlurtPage,
-  renderFeedPage,
-  type BlurtPageData,
-} from '../templates/index.ts'
+import { renderBlurtPage, renderFeedPage, type BlurtPageData } from '../templates/index.ts'
+import { blurtAnchor, blurtUrl } from '../ui/urls.ts'
 import { blurtPageMarkdown } from '../templates/pages.md.ts'
 
 export const blurtsRouter = Router()

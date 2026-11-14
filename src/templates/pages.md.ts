@@ -13,33 +13,33 @@ import {
 import { blurtMaxLength, normalizedWebUrl } from '../limits.ts'
 import { themes } from '../themes.ts'
 import { pageContext } from '../page-context.ts'
+import { blurtActions, reblurtAction } from '../ui/blurt-card.ts'
+import { discoveryAfter, discoveryTitles, type DiscoverySection } from '../ui/discovery.ts'
+import { notificationVerbs } from '../ui/notifications.ts'
+import { plural } from '../ui/text.ts'
 import {
-  accountDeletionEffects,
-  blurtActions,
   blurtUrl,
   deleteBlurtPath,
-  discoveryAfter,
-  discoveryTitles,
+  moreRepliesUrl,
+  nearPageUrl,
+  notificationsPath,
+  olderBlurtsUrl,
+  parentUrl,
+  peoplePageUrl,
+  searchUrl,
+} from '../ui/urls.ts'
+import type { Viewer } from '../ui/context.ts'
+import {
+  accountDeletionEffects,
   feedPath,
   forgotPassword,
   formatLocation,
   gridDescription,
-  moreRepliesUrl,
-  notificationsPath,
-  notificationVerbs,
-  nearPageUrl,
-  peoplePageUrl,
   noPasswordReset,
-  olderBlurtsUrl,
-  parentUrl,
-  plural,
-  reblurtAction,
-  searchUrl,
   type AdminReportsData,
   type AdminToolsData,
   type BlurtPageData,
   type DeleteAccountData,
-  type DiscoverySection,
   type FeedData,
   type FormPageData,
   type InfoPageData,
@@ -51,7 +51,6 @@ import {
   type SearchData,
   type SettingsData,
   type SignupPageData,
-  type Viewer,
   type WaitlistData,
 } from './index.ts'
 import { code, join, link, md, raw, type Markdown, type MarkdownValue } from './markdown.ts'

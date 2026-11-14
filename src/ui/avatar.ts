@@ -1,5 +1,4 @@
-import { h } from 'preact'
-import htm from 'htm'
+import { html } from './html.ts'
 import {
   maxPictureCut,
   minPictureCut,
@@ -13,9 +12,7 @@ import {
   type Avatar,
   type AvatarPhoto,
   type HeadWidth,
-} from '../avatar.ts'
-
-const html = htm.bind(h)
+} from '../shared/avatar.ts'
 
 // The avatar as inline SVG, in a 100 x 100 box: a wide cartoon head cut in two along the
 // mouth. Only built from the avatar's fields, never from stored markup, and every value is

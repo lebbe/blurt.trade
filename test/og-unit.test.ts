@@ -22,7 +22,7 @@ import {
 import { encodeShapes, pictureFromUpload } from '../src/picture.ts'
 import { createCanvas } from '@napi-rs/canvas'
 import { renderBlurtPage } from '../src/templates/index.ts'
-import { AvatarSvg } from '../src/templates/avatar.ts'
+import { AvatarSvg } from '../src/ui/avatar.ts'
 import type { Blurt } from '../src/routes/state.ts'
 
 const avatar = {
