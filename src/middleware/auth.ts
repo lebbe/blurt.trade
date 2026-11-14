@@ -17,11 +17,17 @@ import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 //
 // An older generation showing up means two copies of the session exist, so one of them is
 // stolen. There's no telling which, so the whole session is revoked and both sides have to
-// log in again. The exception is the generation just before the current one, within a few
-// seconds of the rotation: that is tabs racing each other in the same browser. It gets a
-// new access token but no refresh token. The browser already has the new refresh token
-// from the request that won, and a thief racing in that window gets 5 minutes, not the
-// session.
+// log in again. The exception is the generation just before the current one, within a
+// minute of the rotation (raceWindowSeconds). That is tabs or parallel requests racing
+// each other in the same browser, or a client that never got the response that rotated:
+// the rotation is saved before the response goes out, and a navigation away, a dropped
+// mobile connection or a proxy timeout loses it. Both get a new access token and a
+// refresh token for the current generation, so the client holds a valid token either way.
+// Without the refresh token, a lost response would turn into a revoked session five
+// minutes later, when the access token runs out and the old refresh token comes back.
+// A thief racing in that window gets a copy of the current generation. Then there are two
+// copies again, and as soon as one side rotates and the other comes back more than a
+// minute later, the session is revoked.
 //
 // Sessions never expire while they're used: every refresh restarts a 400-day clock, the
 // longest a browser keeps a cookie. That is for logins that ticked "Keep me logged in".
@@ -61,8 +67,10 @@ const temporarySessionIdleSeconds = 24 * 60 * 60
 // The casts matter: in a CASE the parameters would otherwise be typed text.
 const idleLimit = (persistent: number, temporary: number) =>
   `(CASE WHEN s.persistent THEN $${persistent}::int ELSE $${temporary}::int END) * interval '1 second'`
-// How long after a rotation the previous refresh token still counts as a racing tab.
-const raceWindowSeconds = 20
+// How long after a rotation the previous refresh token still counts as a racing tab or a
+// lost response. Counted from the rotation, so it also has to cover the rest of that
+// request and the network: a slow page on a slow connection.
+const raceWindowSeconds = 60
 
 // The refresh cookie goes with every request, not just to a refresh path: a form POST or a
 // page load with an expired access token must refresh in place, without JS or a redirect.
@@ -219,12 +227,12 @@ export function clearSessionCookies(response: Response): void {
 }
 
 // Trades a refresh token for its session and the generation of the next refresh token
-// (undefined for a racing tab, which gets none) and whether the session is persistent.
-// Undefined altogether means log out.
+// (the current one again for a racing tab or a lost response) and whether the session is
+// persistent. Undefined means log out.
 async function refreshSession(claims: RefreshClaims): Promise<
   | {
       session: Session
-      generation: number | undefined
+      generation: number
       persistent: boolean
     }
   | undefined
@@ -289,6 +297,9 @@ async function refreshSession(claims: RefreshClaims): Promise<
   if (!row?.active) {
     return undefined // logged out, revoked, idle for too long, or the user is gone
   }
+  // Racing or a lost response: the current generation again, without rotating it. The
+  // window stays where the rotation put it (last_used_at is left alone), so presenting the
+  // previous token over and over doesn't keep it open.
   if (generation === row.current - 1 && row.racing) {
     return {
       session: {
@@ -298,7 +309,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
         timeZone: timeZoneOrDefault(row.timezone),
         locale: isLocale(row.locale) ? row.locale : null,
       },
-      generation: undefined,
+      generation: row.current,
       persistent: row.persistent,
     }
   }
@@ -322,13 +333,10 @@ async function resolveSession(request: Request, response: Response): Promise<Ses
     clearSessionCookies(response)
     return undefined
   }
-  await setSessionCookies(
-    response,
-    refreshed.session,
-    refreshed.generation === undefined
-      ? undefined
-      : { generation: refreshed.generation, persistent: refreshed.persistent },
-  )
+  await setSessionCookies(response, refreshed.session, {
+    generation: refreshed.generation,
+    persistent: refreshed.persistent,
+  })
   return refreshed.session
 }
 

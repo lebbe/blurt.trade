@@ -12,6 +12,11 @@ import {
   viewerName,
 } from './helpers.ts'
 
+// The generation a refresh token names (its payload is checked by the server, not here).
+function generationOf(token: string): number {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).gen
+}
+
 async function sessionRows(): Promise<
   { generation: number; revoked: boolean; persistent: boolean }[]
 > {
@@ -65,7 +70,7 @@ test('replaying an old refresh token revokes the session for everyone holding it
   assert.equal(viewerName(rotated), 'Lars')
   const current = cookiesSet(rotated)
   // Past the window in which a second tab may still present the previous token.
-  await db().query(`UPDATE sessions SET last_used_at = now() - interval '1 minute'`)
+  await db().query(`UPDATE sessions SET last_used_at = now() - interval '2 minutes'`)
 
   const replay = await feedWithRefreshToken(stolen)
 
@@ -91,15 +96,55 @@ test('two tabs refreshing with the same token at once both stay logged in', asyn
   assert.deepEqual(tabs.map(viewerName), ['Lars', 'Lars'])
   const issued = tabs.map(cookiesSet)
   assert.ok(issued.every((cookies) => cookies.access_token))
-  // Only the tab that won the race gets the next refresh token. The browser shares it.
-  const refreshTokens = issued.map((cookies) => cookies.refresh_token).filter(Boolean)
-  assert.equal(refreshTokens.length, 1)
+  // The session rotates once. Both tabs get a refresh token for that one new generation,
+  // so the browser holds a valid one whichever response it keeps.
+  const refreshTokens = issued.map((cookies) => cookies.refresh_token)
+  assert.deepEqual(refreshTokens.map(generationOf), [1, 1])
   assert.deepEqual(await sessionRows(), [{ generation: 1, revoked: false, persistent: false }])
 
   // A third tab a moment later is still within the window.
   assert.equal(viewerName(await feedWithRefreshToken(shared)), 'Lars')
   assert.equal(viewerName(await feedWithRefreshToken(refreshTokens[0])), 'Lars')
   assert.deepEqual(await sessionRows(), [{ generation: 2, revoked: false, persistent: false }])
+})
+
+test('a lost response that rotated the refresh token does not log the browser out', async () => {
+  const kept = (await signUp()).refresh_token
+  // This request rotates the session, but its response never reaches the browser (a
+  // navigation away, a dropped connection), so the browser still holds `kept`.
+  await feedWithRefreshToken(kept)
+  assert.deepEqual(await sessionRows(), [{ generation: 1, revoked: false, persistent: false }])
+
+  const retry = await feedWithRefreshToken(kept)
+
+  assert.equal(viewerName(retry), 'Lars')
+  const redelivered = cookiesSet(retry).refresh_token
+  assert.equal(generationOf(redelivered), 1)
+  // No second rotation: the retry gets the current generation again.
+  assert.deepEqual(await sessionRows(), [{ generation: 1, revoked: false, persistent: false }])
+
+  // Long after the window, the redelivered token is the current one and refreshes normally.
+  await db().query(`UPDATE sessions SET last_used_at = now() - interval '10 minutes'`)
+  assert.equal(viewerName(await feedWithRefreshToken(redelivered)), 'Lars')
+  assert.deepEqual(await sessionRows(), [{ generation: 2, revoked: false, persistent: false }])
+})
+
+test('presenting the previous refresh token again does not keep the window open', async () => {
+  const kept = (await signUp()).refresh_token
+  await feedWithRefreshToken(kept)
+  await db().query(`UPDATE sessions SET last_used_at = now() - interval '50 seconds'`)
+  assert.equal(viewerName(await feedWithRefreshToken(kept)), 'Lars')
+  await db().query(`UPDATE sessions SET last_used_at = last_used_at - interval '20 seconds'`)
+
+  assert.equal(viewerName(await feedWithRefreshToken(kept)), null)
+  assert.deepEqual(await sessionRows(), [{ generation: 1, revoked: true, persistent: false }])
+})
+
+test('sessions are a logged table, so a crash or a failover keeps everyone logged in', async () => {
+  const { rows } = await db().query(
+    `SELECT relpersistence FROM pg_class WHERE oid = 'sessions'::regclass`,
+  )
+  assert.equal(rows[0].relpersistence, 'p')
 })
 
 test('a refresh token two generations old is a replay, even right away', async () => {

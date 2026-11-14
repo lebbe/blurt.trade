@@ -59,7 +59,7 @@ test('reblurts and un-reblurts from the feed, a profile and a blurt page without
 
   // Anonymous visitors see the count, no button; the author can't reblurt their own blurt.
   const anonymous = await request('GET', '/')
-  assert.match(anonymous.body, /0 reblurts/)
+  assert.match(anonymous.body, /0 <span class="count-label">reblurts<\/span>/)
   assert.doesNotMatch(anonymous.body, /api\/(un)?reblurt|#quote/)
   const own = await request('GET', '/', '', { cookie: larsCookie })
   assert.doesNotMatch(own.body, reblurtForm)
@@ -76,7 +76,7 @@ test('reblurts and un-reblurts from the feed, a profile and a blurt page without
     assert.equal(reblurted.location, `${page}#blurt-${id}`)
     const after = await request('GET', page, '', { cookie: adaCookie })
     assert.match(after.body, undoForm, page)
-    assert.match(after.body, /1 reblurt</, page)
+    assert.match(after.body, /1 <span class="count-label">reblurt<\/span>/, page)
     // Reblurting twice does nothing.
     await request('POST', '/api/reblurt', `blurtId=${id}`, { cookie: adaCookie })
     assert.equal((await stats(id)).reblurt_count, 1)
@@ -89,7 +89,9 @@ test('reblurts and un-reblurts from the feed, a profile and a blurt page without
     assert.equal((await stats(id)).reblurt_count, 0)
     // Un-reblurting removes the row, so nothing piles up.
     assert.deepEqual(await plainReblurtRows(), [])
-    assert.match((await request('GET', page, '', { cookie: adaCookie })).body, reblurtForm, page)
+    const afterUndo = await request('GET', page, '', { cookie: adaCookie })
+    assert.match(afterUndo.body, reblurtForm, page)
+    assert.match(afterUndo.body, /0 <span class="count-label">reblurts<\/span>/, page)
   }
 })
 
