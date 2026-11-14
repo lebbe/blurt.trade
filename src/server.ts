@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
 import { migrate } from '../db/migrate.ts'
-import { checkConfig } from './config.ts'
+import { checkConfig, publicUrl } from './config.ts'
 import { closeDb } from './db.ts'
 import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
 import {
@@ -118,6 +118,7 @@ app.use((request, response, next) => {
           locale: getLocale(request) ?? localeFrom(request.acceptsLanguages()),
           pickedLocale: getLocale(request),
           javascript,
+          origin: publicUrl(),
         },
         next,
       )

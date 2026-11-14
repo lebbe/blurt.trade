@@ -52,8 +52,9 @@ export type PageMeta = {
   }
 }
 
-// The longest title a share preview gets (user text is trimmed with preview()).
-export const shareTitleMax = 70
+// The longest title a share preview gets (user text is trimmed with preview()); the Share
+// popup uses the same (src/shared/share.ts).
+export { shareTitleMax } from '../../shared/share.ts'
 
 function Head({ meta }: { meta: PageMeta }) {
   const origin = publicUrl()

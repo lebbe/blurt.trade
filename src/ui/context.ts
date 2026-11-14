@@ -24,6 +24,9 @@ export type PageContext = {
   pickedLocale: string | null // the one picked on the edit page, if any
   // The "Use JavaScript" setting (src/javascript.ts): off, the page has no <script> at all.
   javascript: boolean
+  // The site's public origin (PUBLIC_URL, src/config.ts), for the absolute address Share
+  // hands on (src/client/share.ts). Empty outside a request: the browser's own origin then.
+  origin: string
 }
 
 // Outside a request (or before the middleware ran, e.g. a malformed body): anonymous, the
@@ -39,6 +42,7 @@ export const outsidePageContext: PageContext = {
   locale: 'en-GB',
   pickedLocale: null,
   javascript: false,
+  origin: '',
 }
 
 // The page context also goes into every page with JavaScript on, as JSON in

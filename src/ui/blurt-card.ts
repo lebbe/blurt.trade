@@ -5,9 +5,10 @@ import { usePageContext } from './context.ts'
 import { ValidationError } from './forms.ts'
 import { html } from './html.ts'
 import { Icon, type IconName } from './icons.ts'
-import { plural } from './text.ts'
+import { plural, preview } from './text.ts'
 import { blurtAnchor, blurtUrl, deleteBlurtPath, parentUrl, quoteUrl } from './urls.ts'
 import { reportReasonMaxLength } from '../shared/limits.ts'
+import { shareTitleMax } from '../shared/share.ts'
 import { formatTimestamp } from '../shared/time-zones.ts'
 import type { Blurt, QuotedBlurt } from '../routes/state/blurts.ts'
 
@@ -172,6 +173,26 @@ export function ReportedNote() {
   return html`<span class="empty">You reported this blurt.</span>`
 }
 
+// Share. Without JavaScript a link: to the blurt's page, or on that page to its share card
+// image. With it (src/client/share.ts) the browser's own share sheet on phones, else a
+// popup of share links (src/ui/share.ts), for the blurt's page with its text as the
+// title. The card image goes along for Pinterest, where it is known.
+function ShareAction({ blurt, sharePath }: { blurt: Blurt; sharePath?: string }) {
+  const title = preview(blurt.text ?? '', shareTitleMax) || `${blurt.username} blurted`
+  return html`<a
+    href=${sharePath ?? blurtUrl(blurt)}
+    class="action"
+    aria-label="Share"
+    title="Share"
+    data-enhance="share"
+    data-share-url=${blurtUrl(blurt)}
+    data-share-title=${title}
+    data-share-picture=${blurt.picture ? '' : undefined}
+    data-share-media=${blurt.picture && sharePath ? sharePath : undefined}
+    ><${Icon} name="share" /><span>Share</span></a
+  >`
+}
+
 // `replies` are shown inline (the feed); the link below covers the rest of the thread.
 // `viewer` decides the Delete / Report actions; `reported` says the viewer already did.
 // `inThread`: shown under (or as) the blurt it replies to, so "Replying to" is left out.
@@ -303,9 +324,7 @@ export function BlurtCard({
           }
           <${Likes} blurt=${blurt} viewer=${viewer} />
           <${Reblurts} blurt=${blurt} viewer=${viewer} />
-          <a href=${sharePath ?? blurtUrl(blurt)} class="action" aria-label="Share" title="Share"
-            ><${Icon} name="share" /><span>Share</span></a
-          >
+          <${ShareAction} blurt=${blurt} sharePath=${sharePath} />
           ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
           ${
             action === 'report' &&

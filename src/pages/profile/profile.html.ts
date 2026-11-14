@@ -10,13 +10,22 @@ import { AvatarView } from '../../ui/avatar.ts'
 import { BlurtCard } from '../../ui/blurt-card.ts'
 import { FollowForm, followTagline } from '../../ui/follow.ts'
 import { html } from '../../ui/html.ts'
+import { Icon } from '../../ui/icons.ts'
 import { preview } from '../../ui/text.ts'
 import { olderBlurtsUrl } from '../../ui/urls.ts'
 
-// Today a plain link to the share card image, which works without JavaScript. With
-// JavaScript it can become the share button of the browser or a social network.
-function ShareLink({ href }: { href: string }) {
-  return html`<${ButtonLink} href=${href} icon="share" label="Share" />`
+// Without JavaScript a plain link to the share card image. With it (src/client/share.ts)
+// the browser's own share sheet on phones, else a popup of share links, for the profile's
+// page; like a blurt's Share (ShareAction in src/ui/blurt-card.ts).
+function ShareLink({ href, username }: { href: string; username: string }) {
+  return html`<a
+    class="button secondary"
+    href=${href}
+    data-enhance="share"
+    data-share-url="/${username}/"
+    data-share-title=${preview(`${username} on blurt.trade`, shareTitleMax)}
+    ><${Icon} name="share" /><span>Share</span></a
+  >`
 }
 
 function renderSocial(value: string): unknown {
@@ -110,7 +119,7 @@ function ProfilePage({
   const actions =
     cardPath || own || viewer
       ? html`
-          ${cardPath && html`<${ShareLink} href=${cardPath} />`}
+          ${cardPath && html`<${ShareLink} href=${cardPath} username=${profile.username} />`}
           ${
             own
               ? html`<${ButtonLink}
