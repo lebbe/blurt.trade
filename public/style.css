@@ -26,6 +26,15 @@
   --panel-shadow: 6px 6px 0 var(--line-soft);
 }
 
+/* A cross-fade between pages on ordinary navigation (cross-document View Transitions).
+   Pure CSS; browsers without support just load the next page as before. Not for anyone
+   who asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

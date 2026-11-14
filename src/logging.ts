@@ -126,13 +126,15 @@ export function requestLogger(request: Request, response: Response, next: NextFu
   response.on('finish', () => {
     const path = request.originalUrl.split('?', 1)[0].slice(0, maxPathLength)
     const status = response.statusCode
-    if (status >= 500) {
+    // A refused prefetch (src/speculation.ts) is a 503 by design, not a fault.
+    const fault = status >= 500 && !response.locals.speculationRefused
+    if (fault) {
       countServerError()
     }
     if (status < 400 && quietPaths.has(path)) {
       return
     }
-    log(status >= 500 ? 'error' : 'info', 'request', {
+    log(fault ? 'error' : 'info', 'request', {
       id,
       method: request.method,
       path,

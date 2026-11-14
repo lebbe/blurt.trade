@@ -15,6 +15,14 @@ import { criticalCssHashes } from '../themes.ts'
 // connect-src 'self' is there for tools that fetch from the page's context, like
 // Lighthouse reading /robots.txt, which default-src 'none' blocks. Without any script
 // there is nothing on the page that can use it.
+//
+// Speculation rules (src/speculation.ts) need nothing here. They come from the
+// Speculation-Rules response header, fetched with the "speculationrules" destination,
+// which no CSP fetch directive governs, so default-src 'none' doesn't block it (checked in
+// Chromium). Only inline <script type="speculationrules"> would need script-src (with
+// 'inline-speculation-rules' or a hash), and the header exists to avoid that. The
+// prefetches themselves are navigation requests, outside connect-src and default-src.
+// Cross-document View Transitions are plain CSS.
 export const contentSecurityPolicy = [
   "default-src 'none'",
   "connect-src 'self'",

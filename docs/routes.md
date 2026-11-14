@@ -819,6 +819,42 @@ responses.
   with the `__Host-` prefix (no `Domain`). A test starts the app in production mode to
   check them and HSTS.
 
+## Smoother navigation without JavaScript
+
+Three browser features make moving between pages feel quicker, with no script on the
+page. Browsers without them ignore them and navigate as before.
+
+- **View Transitions.** `public/style.css` has `@view-transition { navigation: auto; }`,
+  so Chromium cross-fades from one page to the next. Only under
+  `prefers-reduced-motion: no-preference`.
+- **Speculation Rules.** Every HTML page (`represent()` and the error pages) sends
+  `Speculation-Rules: "/static/speculation-rules.json"`. The file
+  (`public/speculation-rules.json`, served as `application/speculationrules+json`) asks
+  for a **prefetch** of a same-origin link when the pointer rests on it (eagerness
+  `moderate`; on touch screens, at the tap or by Chromium's own viewport heuristics),
+  except `/api/*`, `/logout`, `/search`, `/near`, `/admin` and non-page files. No prerender: these pages are light, and prerendering also
+  loads their stylesheets and images. The CSP needs no change: rules fetched from the
+  header are not governed by any CSP directive (only inline rules would need
+  `script-src`), see `src/middleware/security-headers.ts`.
+- **bfcache.** Pages send no `Cache-Control`, so Back and Forward can restore them from
+  the back/forward cache. Only responses that set or clear the session cookies (log in,
+  log out, a token refresh) are `no-store`, so that no shared cache keeps someone's
+  tokens; that stays. Health checks, the OG debug pages and the 500 page are `no-store`
+  too.
+
+A prefetch arrives with `Sec-Purpose: prefetch` and may never be shown, so a GET that
+changes something refuses it with `503` (`Cache-Control: no-store`, logged as info, not
+counted as a server error). The browser drops the prefetch and the click loads the page
+normally. That is the case for:
+
+- a blurt page while the viewer has unread notifications, since visiting it reads the
+  ones about that blurt;
+- any request whose access token has run out, since answering it rotates the refresh
+  token, and a prefetch cut off on the way would lose the new one.
+
+Code: `src/speculation.ts`. A link that should never be prefetched goes in the rules
+file's exclude list.
+
 ## Rules for new routes
 
 - Every top-level path segment is a reserved username (`reservedUsernames` in

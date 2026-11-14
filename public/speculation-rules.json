@@ -1,0 +1,29 @@
+{
+  "prefetch": [
+    {
+      "source": "document",
+      "where": {
+        "and": [
+          { "href_matches": "/*" },
+          {
+            "not": {
+              "href_matches": [
+                "/api/*",
+                "/logout{/*}?",
+                "/search{/*}?",
+                "/near{/*}?",
+                "/admin{/*}?",
+                "/debug/*",
+                "/og/*",
+                "/static/*",
+                "/pictures/*",
+                "/profile-pictures/*"
+              ]
+            }
+          }
+        ]
+      },
+      "eagerness": "moderate"
+    }
+  ]
+}

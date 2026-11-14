@@ -20,6 +20,7 @@ import { trustProxySetting } from './middleware/rate-limit.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
+import { speculationRulesType } from './speculation.ts'
 import { runWithPageContext } from './page-context.ts'
 import { countUnreadNotifications, isAdmin, pruneNotifications } from './routes/state.ts'
 import { adminRouter } from './routes/admin.ts'
@@ -58,7 +59,20 @@ app.use(healthRouter)
 app.use(crawlRouter)
 // Public files from public/ (css, images, map), before auth: they are the same for everyone.
 // ETag handles revalidation; keep max-age at 0 so clients check before reuse.
-app.use('/static', express.static(publicDir, { etag: true, immutable: false, maxAge: 0 }))
+app.use(
+  '/static',
+  express.static(publicDir, {
+    etag: true,
+    immutable: false,
+    maxAge: 0,
+    // Browsers only use speculation rules served with their own type (src/speculation.ts).
+    setHeaders: (response, path) => {
+      if (path.endsWith('speculation-rules.json')) {
+        response.setHeader('Content-Type', speculationRulesType)
+      }
+    },
+  }),
+)
 app.use(express.urlencoded({ extended: false, limit: bodyLimit }))
 app.use(express.json({ limit: bodyLimit }))
 app.use(cookieParser())
