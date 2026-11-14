@@ -21,6 +21,7 @@ import { securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { speculationRulesType } from './speculation.ts'
+import { serveVendorFiles } from './vendor.ts'
 import { runWithPageContext } from './page-context.ts'
 import { countUnreadNotifications, isAdmin, pruneNotifications } from './routes/state.ts'
 import { adminRouter } from './routes/admin.ts'
@@ -57,6 +58,9 @@ app.use(securityHeaders)
 // Before cookies and auth: the uptime check needs neither.
 app.use(healthRouter)
 app.use(crawlRouter)
+// The browser's Preact bundle, at a versioned URL with a year-long immutable cache
+// (src/vendor.ts). Other versions are not found anywhere and 404.
+serveVendorFiles(app)
 // Public files from public/ (css, images, map), before auth: they are the same for everyone.
 // ETag handles revalidation; keep max-age at 0 so clients check before reuse.
 app.use(

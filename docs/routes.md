@@ -814,7 +814,9 @@ responses.
   there and the hashes follow; any other inline style is still blocked. A test checks the
   line limit, the hashes, and that the colours match the theme stylesheets.
 - Public files under `/static` are served by one `express.static` handler in
-  `src/server.ts`, with ETag and conditional GET support.
+  `src/server.ts`, with ETag and conditional GET support. The exception is the Preact
+  bundle under `/static/vendor/` (see Preact in the browser), which is versioned and
+  cached as immutable.
 - Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
   is in the stylesheet. The world map is an image from `/static`, so `img-src 'self'`.
 - User text is escaped by the templates (Preact for HTML, `md` for Markdown); a test
@@ -891,6 +893,31 @@ comes in through the page context (`usePageContext()`) or the data; what needs t
 server is worked out before rendering (the share card URL, for example, is made by the
 blurt page in `src/templates/index.ts`). oxlint's `no-restricted-imports`
 (`.oxlintrc.json`) and `test/isomorphic.test.ts` (which walks the import graph) enforce it.
+
+### Preact in the browser
+
+The browser gets Preact from `preact-hook-signal-htm-bundle` (a runtime dependency): one
+self-contained ES module with Preact, `preact/hooks`, `@preact/signals` and `html` (htm
+bound to its `h`). We serve it ourselves, never from a CDN (the CSP is `'self'` and the
+privacy page promises no third parties), at a URL that carries the installed version:
+
+| Path                                       | Served from                                               | Headers |
+| ------------------------------------------ | --------------------------------------------------------- | ------- |
+| `/static/vendor/preact-bundle@<version>.js` | `node_modules/preact-hook-signal-htm-bundle/dist/preact-bundle.js` | `text/javascript; charset=utf-8`, `Cache-Control: public, max-age=31536000, immutable` |
+
+`<version>` is read from the package's `package.json` at startup (`preactBundleUrl` in
+`src/vendor.ts`), so upgrading the package changes the URL and the year-long cache never
+serves an old file. Any other version, or none, is a 404.
+
+- **One Preact.** The bundle compiles in its own copy of Preact, so in the browser it is
+  Preact. Every specifier the shared modules use (`preact`, `preact/hooks`, `htm`,
+  `@preact/signals`, and `src/ui/html.ts`) has to resolve to this one file through the
+  import map; a second copy of Preact on the page breaks hooks and context.
+- **Same major.** The server renders with `node_modules/preact` and the browser hydrates
+  with the bundle's, so their majors must match. `test/vendor.test.ts` compares the
+  versions the bundle was built with (its `devDependencies`) against our `package.json`
+  and `node_modules`, for Preact, htm and signals. Upgrade both together.
+- No page loads it yet: the CSP still has no `script-src`.
 
 ## Markdown templates
 
