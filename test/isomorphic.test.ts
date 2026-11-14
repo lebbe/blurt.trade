@@ -15,6 +15,8 @@ import { isWebUrl, normalizedWebUrl } from '../src/shared/limits.ts'
 
 const root = join(import.meta.dirname, '..')
 const sharedDirs = ['src/ui', 'src/shared'].map((dir) => join(root, dir))
+// In the browser the import map points all four at preact-hook-signal-htm-bundle (one
+// Preact instance, src/vendor.ts), so shared code imports them, not the bundle by name.
 const allowedPackages = new Set(['preact', 'preact/hooks', 'htm', '@preact/signals'])
 
 function filesIn(dir: string): string[] {
