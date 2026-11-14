@@ -20,6 +20,10 @@ export type ComposerProps = {
 }
 
 // A blurt form in its own panel: the first thing on the pages people read blurts on.
+//
+// With JavaScript (src/client/composer.ts) it counts characters, sends on Ctrl/Cmd+Enter,
+// shows the chosen picture, and posts without a page load: the new blurt is put into the
+// list on the page (the element marked data-new-blurts). Quotes still go to their page.
 export function Composer({
   text = '',
   validationError,
@@ -34,7 +38,12 @@ export function Composer({
   return html`
     <section class="panel composer" id=${id}>
       <h2>${heading}</h2>
-      <form method="post" action="/api/blurts" enctype="multipart/form-data">
+      <form
+        method="post"
+        action="/api/blurts"
+        enctype="multipart/form-data"
+        data-enhance="composer"
+      >
         ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
         ${parentId !== undefined && html`<input type="hidden" name="parentId" value=${parentId} />`}
         ${
@@ -49,7 +58,7 @@ export function Composer({
           placeholder=${placeholder}
         >
 ${text}</textarea>
-        <span class="tiny">${blurtMaxLength} characters max · public</span>
+        <span class="tiny composer-hint">${blurtMaxLength} characters max · public</span>
         <div class="row">
           <input
             type="file"

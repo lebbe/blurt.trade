@@ -24,6 +24,7 @@ import { isAdmin } from './state/accounts.ts'
 import {
   type Blurt,
   type Cursor,
+  type FeedItem,
   addBlurt,
   deleteBlurts,
   getBlurt,
@@ -200,11 +201,15 @@ blurtsRouter.post(
     }
 
     void embedPendingBlurts()
-    // Forms go back to the thread replied to, to the new quote's page, or to the feed; JSON
-    // callers get the new blurt.
+    // Forms go back to the thread replied to, to the new quote's page, or to the feed. JSON
+    // callers get the new blurt as a feed item (no replies yet, the viewer's flags set), the
+    // same shape as the items of the page's own list, so a script can show it with the same
+    // card (src/client/composer.ts).
+    await markViewerFlags(response.locals.authenticatedUser.id, [blurt])
+    const item: FeedItem = { ...blurt, replies: [] }
     sendFormSuccess(request, response, {
       redirect: parent ? blurtUrl(parent) : quoted ? blurtUrl(blurt) : '/',
-      data: blurt,
+      data: item,
       status: 201,
       location: blurtUrl(blurt),
     })

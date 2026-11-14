@@ -186,7 +186,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
 | `/login`                     | —             | `username`, `password`, `remember`   | 303 → `/`                   | 200 `{ id, username }`                         |
 | `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file) | 303 → feed/parent/quote     | 201 the new `Blurt`, Location `/:username/:id` |
+| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file) | 303 → feed/parent/quote     | 201 the new blurt as a `FeedItem` (`replies: []`, the viewer's flags), Location `/:username/:id` |
 | `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
 | `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
 | `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
@@ -350,7 +350,8 @@ Plain forms, so all of it works without JS. Code in `src/routes/blurts.ts`,
 `src/routes/admin.ts` and `deleteBlurts` in `src/routes/state/blurts.ts`.
 
 - Your own blurts have a "Delete" `<details>` on them, which opens a "Delete" button:
-  two clicks, no JS. `POST /api/blurts/:id/delete` deletes it. Anyone else's blurt is a
+  two clicks, no JS (with JavaScript, a `<dialog>` asks instead; see JavaScript in the
+  browser). `POST /api/blurts/:id/delete` deletes it. Anyone else's blurt is a
   403 (unless you're an admin), an unknown or already deleted one a 404. Forms go back
   to the page they came from (its `Referer`, same host only), unless that was the
   deleted blurt's own page: then to the thread it replied to, or `/`.
@@ -855,7 +856,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map) when the page has JavaScript |
+| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map) and `blob:` in `img-src` when the page has JavaScript |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `no-referrer`                                            |
@@ -898,6 +899,8 @@ responses.
   cached as immutable.
 - Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
   is in the stylesheet. The world map is an image from `/static`, so `img-src 'self'`.
+  With JavaScript also `blob:`, for the composer's preview of a picture before it is
+  uploaded (`URL.createObjectURL`): only a script on the page can make such a URL.
 - User text is escaped by the templates (Preact for HTML, `md` for Markdown); a test
   posts markup and a `javascript:` link and checks both views.
 - Session cookies are `HttpOnly`, `SameSite=Lax`, `Path=/`, and in production `Secure`
@@ -972,7 +975,9 @@ file's exclude list.
 The components that more than one page uses, and that a browser could run as they are,
 live in `src/ui/`: the blurt card (`blurt-card.ts`: likes, reblurts, timestamps, quoted
 blurts, delete and report forms), avatars, icons, blurt text with its links, discovery
-sections, notification items, the unread badge and the URL helpers (`urls.ts`). Pages
+sections, notification items, the unread badge, a row of `/people` (`people.ts`), the
+follow form (`follow.ts`), the paged lists and how each item is shown (`lists.ts`) and
+the URL helpers (`urls.ts`). Pages
 stay in `src/pages/`. Everything is written with htm (`html` from `src/ui/html.ts`,
 `htm.bind(h)`), so it needs no build step.
 
@@ -1085,7 +1090,8 @@ that, never on `@media (scripting: enabled)` alone), then hands every element wi
   nothing away (`preventDefault`, hidden buttons) until it is ready to replace it.
   Elements that worked get `data-enhanced="<name>"`.
 - `enhanceAll(root, …)` can run again on new content (the next page of a feed); no
-  element is enhanced twice.
+  element is enhanced twice. Enhancers get it as `context.enhance(root)`, for what they
+  put into the page.
 
 `src/client/requests.ts` sends forms and follows links with `fetch()` and
 `Accept: application/json`, the same request the browser would make:
@@ -1106,7 +1112,11 @@ multipart only where a file is uploaded). `followLink(link)` does the same for a
 | Name       | On                                     | Module                  |
 | ---------- | -------------------------------------- | ----------------------- |
 | `autosave` | the edit page's settings forms: profile and links (with the share card colour), avatar, time zone and language, theme, notifications | `src/client/autosave.ts` |
+| `blurt-actions` | every blurt card, for logged-in viewers | `src/client/blurt-actions.ts` |
+| `composer` | the blurt form (feed, `/near`, thread, quote) | `src/client/composer.ts` |
+| `follow`   | Follow / Unfollow on a profile         | `src/client/follow.ts`  |
 | `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
+| `more`     | the next-page link of every paged list | `src/client/more.ts`    |
 | `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
 
 Autosave (`<form data-enhance="autosave">`) sends the whole form as its button would
@@ -1140,6 +1150,56 @@ What is not updated in place: the share card link under the colours, and its "Wr
 to get a profile card" note, stay as the page was loaded (an old card link redirects to
 the current card).
 
+### Posting, scrolling and the card's buttons
+
+The pages people read blurts on, without a page load. Everything is rendered in the
+browser with the same components as on the server (`BlurtCard`, `Likes`, `Reblurts`,
+`ReportForm`, `PersonItem`, `NotificationItem`, `FollowForm`, through `ListItem` in
+`src/ui/lists.ts` and `src/client/render.ts`), from the same JSON a page has, so the
+markup is the server's (`test/e2e/feed.test.ts` renders every list both ways and compares).
+What the cards need beyond their data comes from the page context, as on the server: the
+viewer (their buttons), the time zone and locale (the times). The viewer's flags
+(`viewerLikes`, `viewerReblurted`) are already in every list's JSON. What only a blurt's
+own page shows (its share card link, "You reported this blurt") is never rendered in the
+browser. JSON dates arrive as strings; `withDates` (`src/client/json.ts`) turns every
+`…At` field back into a `Date`. One live region (`src/client/announce.ts`) says what
+happened.
+
+- **Posting** (`composer`). The form is sent as it is (multipart, with the picture). The
+  answer of `POST /api/blurts` is a `FeedItem`, the same shape as the feed's items, and
+  the new card goes into the element marked `data-new-blurts`: the top of the feed and of
+  `/near` (`start`), the end of a thread's replies (`end`). The text box empties, the
+  focus moves to the card, and the live region says "Your blurt is posted." While the
+  request is out the form says "Posting…", or "Drawing your picture…" with a picture
+  (the server draws it before it answers). `{ errors }` show at the top of the form, as
+  the server's re-rendered page does. A quote still goes to its new page. The hint under
+  the text box counts down (code points, as the server counts) and warns about line
+  breaks, Ctrl/Cmd+Enter sends, and a picture picked shows as a thumbnail (a `blob:`
+  URL) with a button to take it away. The picture is not scaled down in the browser.
+- **Endless lists** (`more`, on `NextPageLink` with `list` set: `/`, `/everyone`,
+  `/:username/`, `/near`, `/search`, `/people`, notifications, and "More replies" on a
+  thread). When the link comes within 800 px of the screen, its URL is fetched as JSON
+  (`?pictures=none`: the cards only link to the picture), the items are rendered above
+  it (into `ul.people`, or before replies posted from the page), and the link points at
+  the page after. After three pages it stops, so the footer can be reached; a click on
+  the link loads the next page in place (and the focus moves to its first item) and lets
+  scrolling load three more. The list is `aria-busy` meanwhile, and the live region says
+  "100 older blurts loaded". The address bar follows the page being read
+  (`history.replaceState` with its cursor), so a reload, or Back without the
+  back/forward cache, starts at that page. A failed load stops scrolling; the link is an
+  ordinary link again.
+- **Card buttons** (`blurt-actions`, on each card for logged-in viewers). Like and
+  Reblurt change at once on every card of that blurt on the page, then again from the
+  server's answer (only the latest click counts); a refusal (a 429, say) puts them back
+  and is announced, and an unreachable server puts them back and submits the form for
+  real. Delete opens a `<dialog>` ("Delete this blurt for good?", Cancel by default)
+  instead of its `<details>`; deleted, every card of the blurt leaves the page (a reply
+  in a thread too, though the next load shows its placeholder when it has replies), and
+  on the blurt's own page it is the ordinary submission. Report sends its reason and the
+  form becomes "You reported this blurt.", or shows the error.
+- **Follow** (`follow`): the button changes at once, then the form and the profile's
+  follower count are rendered from `{ followerCount, followingCount, viewerFollows }`.
+
 ### Turning it off
 
 "Use JavaScript" is on by default. Off, the server sends no `<script>`, import map or
@@ -1156,7 +1216,7 @@ module preload at all (not code that switches itself off), and the response's CS
 
 ### Tests in a browser
 
-`npm run e2e` (part of `npm run qa`, about 20 seconds) runs `test/e2e/*.test.ts`: the app
+`npm run e2e` (part of `npm run qa`, about a minute) runs `test/e2e/*.test.ts`: the app
 on a random port with the test database, driven by Chromium through Playwright (a dev
 dependency pinned to the version whose browser is installed; after changing it, run
 `npx playwright install chromium`). `bothModes()` in `test/e2e/helpers.ts` runs each flow
@@ -1168,7 +1228,12 @@ enhancer failures, the `requests.ts` contract, and the edit page (`settings.test
 autosave of a select, a checkbox, a text field and the avatar, field errors, the theme
 switch, the avatar and theme shown before the save answers (the request held with
 `page.route`), Random, going back after a failed save, the map and the picture by click (both modes, checking that no page load
-happened with JavaScript, by a mark on `window`) and by keyboard. Contexts use reduced motion, which
+happened with JavaScript, by a mark on `window`) and by keyboard, and the feed pages
+(`feed.test.ts`): posting into the feed and into a thread, with a picture, errors, the
+counter and Ctrl+Enter, endless scrolling (three pages, the click, the address bar,
+reload and Back), "More replies", like and reblurt (optimistic, and refused), follow,
+delete with its dialog, report, and every list rendered in the browser compared with the
+server's HTML for the same URL. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates

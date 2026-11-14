@@ -65,7 +65,7 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                   <${SubmitButton} icon="pin" label="Show" kind="secondary" />
                 </form>
               </section>
-              <section aria-label="Blurts" class="panel">
+              <section aria-label="Blurts" class="panel" data-new-blurts="start">
                 <h2>Nearby blurts</h2>
                 ${
                   blurts.length > 0
@@ -81,7 +81,11 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
                 }
                 ${
                   next &&
-                  html`<${NextPageLink} href=${nearPageUrl(radius, next)} label="Older blurts" />`
+                  html`<${NextPageLink}
+                    href=${nearPageUrl(radius, next)}
+                    label="Older blurts"
+                    list="feed"
+                  />`
                 }
               </section>
             `

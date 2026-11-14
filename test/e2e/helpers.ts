@@ -74,6 +74,29 @@ export async function scriptRan(page: Page): Promise<boolean> {
   return (await page.getAttribute('html', 'data-js')) === 'on'
 }
 
+// With JavaScript on, waits until every enhancer on the page is ready (a click before that
+// is an ordinary form or link, as it should be, but not what a test of the enhancer tests).
+export async function enhancersReady(page: Page): Promise<void> {
+  if (await scriptRan(page)) {
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll<HTMLElement>('[data-enhance]')].every(
+        (element) => element.dataset.enhanced === element.dataset.enhance,
+      ),
+    )
+  }
+}
+
+// A mark on the window: it survives anything but a page load.
+export async function markWindow(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    ;(window as unknown as { stillHere: boolean }).stillHere = true
+  })
+}
+
+export async function samePage(page: Page): Promise<boolean> {
+  return page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere === true)
+}
+
 export async function signUp(page: Page, username: string): Promise<void> {
   await page.goto('/signup')
   await page.fill('input[name=username]', username)
@@ -95,4 +118,47 @@ export function bothModes(
       assert.deepEqual(tab.problems, [])
     })
   }
+}
+
+// Holds every request to `path` until release() (then it goes on to the server), so a test
+// can see what the page does before the answer comes. `answer` instead gives that status
+// with an error body, as a failed save.
+export async function holdRequests(
+  page: Page,
+  path: string,
+  answer?: number,
+): Promise<{
+  release: () => void
+  sent: () => number
+  sentAtLeast: (count: number) => Promise<number>
+}> {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let sent = 0
+  await page.route(
+    (url) => url.pathname === path,
+    async (route) => {
+      sent++
+      await released
+      if (answer) {
+        await route.fulfill({
+          status: answer,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Something broke' }),
+        })
+      } else {
+        await route.continue()
+      }
+    },
+  )
+  // The status line can say "Saving…" a moment before the request reaches the route.
+  const sentAtLeast = async (count: number) => {
+    for (let i = 0; i < 100 && sent < count; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    return sent
+  }
+  return { release, sent: () => sent, sentAtLeast }
 }

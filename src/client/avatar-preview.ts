@@ -1,9 +1,8 @@
-import { render } from 'preact'
 import type { Avatar } from '../shared/avatar.ts'
 import { AvatarSvg, AvatarView } from '../ui/avatar.ts'
 import { html } from '../ui/html.ts'
 import type { PageContext } from '../ui/context.ts'
-import { PageContextProvider } from './page-context.ts'
+import { renderElement } from './render.ts'
 
 // The viewer's own avatar drawn again in the browser when it changes without a page load
 // (the cartoon's fields, src/client/avatar-live.ts; the picture's mouth, mouth.ts), with the
@@ -11,15 +10,10 @@ import { PageContextProvider } from './page-context.ts'
 // now show. The new SVG has the same classes as the old one, so it talks on hover the same
 // way (public/style.css).
 
-// Renders `vnode` and puts what it made in place of `old` (server markup, not Preact's,
-// so it can't be rendered into directly).
+// Puts what `vnode` renders in place of `old` (server markup, not Preact's, so it can't be
+// rendered into directly).
 function replaceWith(old: Element, vnode: unknown, page: PageContext): void {
-  const holder = document.createElement('div')
-  render(html`<${PageContextProvider} value=${page}>${vnode}<//>`, holder)
-  const fresh = holder.firstElementChild
-  if (fresh) {
-    old.replaceWith(fresh)
-  }
+  old.replaceWith(renderElement<Element>(vnode, page))
 }
 
 // Every place on the page that shows the viewer's avatar, each drawn as the server draws

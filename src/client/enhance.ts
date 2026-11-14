@@ -3,6 +3,9 @@ import type { PageContext } from '../ui/context.ts'
 // What every enhancer gets besides its element.
 export type EnhancerContext = {
   page: PageContext // the page context the server rendered the page with
+  // Enhances new content an enhancer put into the page (the next page of a feed, a new
+  // blurt), with the same registry, so its own [data-enhance] elements work too.
+  enhance(root: ParentNode): Promise<EnhanceOutcome[]>
 }
 
 // The module an enhancer name loads. enhance() may be async; once it resolves, the
@@ -48,8 +51,12 @@ function load(registry: Registry, name: string): Promise<Enhancer> {
 export async function enhanceAll(
   root: ParentNode,
   registry: Registry,
-  context: EnhancerContext,
+  { page }: Pick<EnhancerContext, 'page'>,
 ): Promise<EnhanceOutcome[]> {
+  const context: EnhancerContext = {
+    page,
+    enhance: (content) => enhanceAll(content, registry, { page }),
+  }
   const elements = [...root.querySelectorAll<HTMLElement>('[data-enhance]')]
   if (root instanceof HTMLElement && root.matches('[data-enhance]')) {
     elements.unshift(root)

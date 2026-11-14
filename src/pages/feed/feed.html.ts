@@ -95,7 +95,7 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
           ${cards(followedBlurts)}
         </section>`
       }
-      <section aria-label="Blurts" class="panel">
+      <section aria-label="Blurts" class="panel" data-new-blurts="start">
         <h2>${feed === 'following' ? 'Following' : 'Everyone'}</h2>
         ${
           blurts.length > 0
@@ -114,6 +114,7 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
           html`<${NextPageLink}
             href=${olderBlurtsUrl(feedPath(data), next)}
             label="Older blurts"
+            list="feed"
           />`
         }
       </section>
