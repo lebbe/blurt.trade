@@ -154,13 +154,14 @@ bothModes('the theme switches', async ({ page }, javaScriptEnabled) => {
       assert.equal(context.theme, theme)
       assert.ok(await samePage(page), 'no page load')
       assert.equal(
-        await page.locator('link[href^="/static/themes/"]').count(),
+        await page.locator('link[href^="/static/themes/"]:not([data-warm])').count(),
         theme === 'cobalt-quietude' ? 0 : 1,
       )
     } else {
       await page.click('form[action="/api/theme"] button[type=submit]')
       await page.waitForURL(/\/Lars\/edit#theme$/)
       assert.equal(await rootBackground(page), background)
+      assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), background)
     }
   }
   await page.check('input[name=theme][value=tarnished-teal]')
@@ -295,38 +296,260 @@ test('the picture from the keyboard: arrows move the line, Enter saves it', asyn
   )
 })
 
-test('the avatar saves as it changes, and Random fills in the fields', async (t) => {
-  const { page, problems } = await openTab(t, true)
-  await signUp(page, 'Lars')
-  await openEditPage(page)
-  await markWindow(page)
-  const form = 'form[action="/api/avatar"]'
-  const preview = () => page.innerHTML(`${form} .avatar-preview`)
-  const answer = () =>
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/avatar')
-  const before = await preview()
-  const hair = (await page.inputValue(`${form} select[name=hairType]`)) === 'afro' ? 'bald' : 'afro'
-  const changed = answer()
-  await page.selectOption(`${form} select[name=hairType]`, hair)
-  await changed
-  await saved(page, form)
-  assert.notEqual(await preview(), before, 'the preview is drawn again')
+// Holds every request to `path` until release() (then it goes on to the server), so a test
+// can see what the page does before the answer comes. `answer` instead gives that status
+// with an error body, as a failed save.
+async function holdRequests(
+  page: Page,
+  path: string,
+  answer?: number,
+): Promise<{ release: () => void; sent: () => number }> {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let sent = 0
+  await page.route(
+    (url) => url.pathname === path,
+    async (route) => {
+      sent++
+      await released
+      if (answer) {
+        await route.fulfill({
+          status: answer,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Something broke' }),
+        })
+      } else {
+        await route.continue()
+      }
+    },
+  )
+  return { release, sent: () => sent }
+}
 
-  // Random is still a button; the server picks, and the fields show what it picked.
-  const random = answer()
-  await page.click(`${form} button[name=random]`)
-  await random
-  await saved(page, form)
-  const fields = await page.evaluate((form) => {
+const avatarForm = 'form[action="/api/avatar"]'
+const avatarPreview = `${avatarForm} .avatar-preview > svg.avatar`
+
+// Waits until the cartoon preview is no longer `html` (drawn on the next frame).
+async function redrawn(page: Page, html: string): Promise<void> {
+  await page.waitForFunction(
+    ([form, html]) => document.querySelector(`${form} .avatar-preview`)?.innerHTML !== html,
+    [avatarForm, html],
+  )
+}
+
+async function avatarFields(page: Page): Promise<Record<string, string>> {
+  return page.evaluate((form) => {
     const element = document.querySelector<HTMLFormElement>(form)!
     return Object.fromEntries(
       [...new FormData(element)].map(([name, value]) => [name, String(value)]),
     )
-  }, form)
-  assert.ok(await samePage(page))
-  await openEditPage(page)
-  for (const [name, value] of Object.entries(fields)) {
-    assert.equal(await page.inputValue(`${form} [name=${name}]`), value, name)
+  }, avatarForm)
+}
+
+// Sets a colour as dragging in the picker does: `input` events only, no `change` yet.
+async function dragColour(page: Page, name: string, value: string): Promise<void> {
+  await page.evaluate(
+    ([form, name, value]) => {
+      const field = document.querySelector<HTMLInputElement>(`${form} input[name=${name}]`)!
+      field.value = value
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    },
+    [avatarForm, name, value],
+  )
+}
+
+bothModes('the avatar is drawn as it is changed', async ({ page }, javaScriptEnabled) => {
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#avatar')
+  const before = await page.innerHTML(`${avatarForm} .avatar-preview`)
+  const hair =
+    (await page.inputValue(`${avatarForm} select[name=hairType]`)) === 'afro' ? 'bald' : 'afro'
+  if (!javaScriptEnabled) {
+    // Without JavaScript: pick, save, and the page that comes back shows it.
+    await page.selectOption(`${avatarForm} select[name=hairType]`, hair)
+    await page.fill(`${avatarForm} input[name=skin]`, '#123456')
+    await page.click(`${avatarForm} button[type=submit]:not([name])`)
+    await page.waitForURL(/\/Lars\/edit/)
+    assert.equal(await page.inputValue(`${avatarForm} select[name=hairType]`), hair)
+    assert.notEqual(await page.innerHTML(`${avatarForm} .avatar-preview`), before)
+    assert.match(await page.innerHTML(`${avatarForm} .avatar-preview`), /fill="#123456"/)
+    return
   }
+  await markWindow(page)
+  const held = await holdRequests(page, '/api/avatar')
+
+  // Dragging a colour: drawn at once, nothing sent until the picker closes (`change`).
+  await dragColour(page, 'skin', '#123456')
+  await page.waitForFunction(
+    (preview) => document.querySelector(preview)?.innerHTML.includes('fill="#123456"'),
+    avatarPreview,
+  )
+  assert.equal(held.sent(), 0)
+  const dragged = await page.innerHTML(`${avatarForm} .avatar-preview`)
+
+  // A select: drawn before the server has answered.
+  await page.selectOption(`${avatarForm} select[name=hairType]`, hair)
+  await page.waitForFunction(() => document.querySelector('.autosave-status[data-state=saving]'))
+  assert.equal(held.sent(), 1)
+  await redrawn(page, dragged)
+  const drawn = await page.innerHTML(`${avatarForm} .avatar-preview`)
+  assert.match(drawn, /fill="#123456"/)
+  held.release()
+  await saved(page, avatarForm)
+  assert.equal(await page.innerHTML(`${avatarForm} .avatar-preview`), drawn)
+
+  // The new drawing talks on hover like the old one (motion allowed for this).
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.hover(avatarPreview)
+  assert.equal(
+    await page.$eval(`${avatarPreview} .avatar-top`, (top) => getComputedStyle(top).animationName),
+    'avatar-talk',
+  )
+  assert.ok(await samePage(page), 'no page load')
+
+  // What was saved is what the server draws.
+  await openEditPage(page, '#avatar')
+  assert.equal(await page.inputValue(`${avatarForm} select[name=hairType]`), hair)
+  assert.equal(await page.inputValue(`${avatarForm} input[name=skin]`), '#123456')
+})
+
+test('Random draws a new avatar at once and saves it', async (t) => {
+  const { page, problems } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#avatar')
+  await markWindow(page)
+  const before = await avatarFields(page)
+  const preview = await page.innerHTML(`${avatarForm} .avatar-preview`)
+  const held = await holdRequests(page, '/api/avatar')
+  // Random can give the same avatar again, if rarely: press until it doesn't.
+  let fields = before
+  for (let tries = 0; tries < 5 && JSON.stringify(fields) === JSON.stringify(before); tries++) {
+    await page.click(`${avatarForm} button[name=random]`)
+    fields = await avatarFields(page)
+  }
+  assert.notDeepEqual(fields, before)
+  assert.notEqual(await page.innerHTML(`${avatarForm} .avatar-preview`), preview)
+  assert.ok(held.sent() >= 1, 'saving')
+  held.release()
+  await saved(page, avatarForm)
+  fields = await avatarFields(page)
+  assert.ok(await samePage(page))
+  await openEditPage(page, '#avatar')
+  assert.deepEqual(await avatarFields(page), fields)
   assert.deepEqual(problems, [])
+})
+
+test('a failed avatar save goes back to the saved avatar', async (t) => {
+  const { page, problems } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#avatar')
+  const before = await avatarFields(page)
+  const preview = await page.innerHTML(`${avatarForm} .avatar-preview`)
+  const held = await holdRequests(page, '/api/avatar', 500)
+  const hair = before.hairType === 'afro' ? 'bald' : 'afro'
+  await page.selectOption(`${avatarForm} select[name=hairType]`, hair)
+  await page.waitForFunction(() => document.querySelector('.autosave-status[data-state=saving]'))
+  await redrawn(page, preview)
+  held.release()
+  await page.locator(`${avatarForm} .autosave-status[role=status][data-state=error]`).waitFor()
+  assert.match(
+    (await page.textContent(`${avatarForm} .autosave-status[role=status]`)) ?? '',
+    /Not saved/,
+  )
+  assert.deepEqual(await avatarFields(page), before)
+  assert.equal(await page.innerHTML(`${avatarForm} .avatar-preview`), preview)
+  assert.deepEqual(
+    problems.filter((problem) => !/status of 500/.test(problem)),
+    [],
+  )
+})
+
+test("the viewer's own avatars elsewhere on the page are drawn again too", async (t) => {
+  const { page, problems } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#avatar')
+  // Two blurt cards as the server draws them (src/ui/blurt-card.ts), one by Lars.
+  await page.evaluate(() => {
+    const card = (username: string) => `<article class="blurt"><div class="blurt-main">
+      <svg class="avatar avatar-small" data-old="${username}"></svg>
+      <div class="blurt-body"><div class="blurt-meta"><strong><a href="/${username}/">${username}</a></strong></div></div>
+    </div></article>`
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', card('Lars') + card('Kari'))
+  })
+  await dragColour(page, 'skin', '#654321')
+  await page.waitForFunction(() => !document.querySelector('svg[data-old=Lars]'))
+  const own = page
+    .locator('.blurt-meta a[href="/Lars/"]')
+    .locator('xpath=ancestor::div[@class="blurt-main"]/*[1]')
+  assert.match((await own.evaluate((svg) => svg.outerHTML)) ?? '', /fill="#654321"/)
+  assert.equal(await page.locator('svg[data-old=Kari]').count(), 1)
+  assert.deepEqual(problems, [])
+})
+
+const themeForm = 'form[action="/api/theme"]'
+
+async function themeShown(page: Page, background: string): Promise<void> {
+  await page.waitForFunction(
+    (background) =>
+      getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === background,
+    background,
+  )
+}
+
+test('a picked theme shows before it is saved', async (t) => {
+  const { page, problems, requests } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#theme')
+  await markWindow(page)
+  // The other themes' stylesheets are fetched ahead, never applied.
+  await page.waitForFunction(
+    () => document.querySelectorAll('link[data-warm][media="not all"]').length === 4,
+  )
+  await themeShown(page, '#0a1323')
+  const held = await holdRequests(page, '/api/theme')
+  await page.check(`${themeForm} input[value=plum-steel]`)
+  await themeShown(page, '#17121f')
+  assert.equal(held.sent(), 1)
+  assert.equal(
+    await page.locator(`${themeForm} .autosave-status[role=status]`).getAttribute('data-state'),
+    'saving',
+  )
+  assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), '#17121f')
+  const context = JSON.parse((await page.textContent('#page-context')) ?? '{}')
+  assert.equal(context.theme, 'plum-steel')
+  assert.equal(await page.locator('link[href^="/static/themes/"]:not([data-warm])').count(), 1)
+  held.release()
+  await saved(page, themeForm)
+  assert.ok(await samePage(page), 'no page load')
+  assert.equal(
+    requests.filter((path) => path === '/static/themes/plum-steel.css').length >= 1,
+    true,
+  )
+  await page.goto('/')
+  await themeShown(page, '#17121f')
+  assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), '#17121f')
+  assert.deepEqual(problems, [])
+})
+
+test('a failed theme save goes back to the saved theme', async (t) => {
+  const { page, problems } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  await openEditPage(page, '#theme')
+  const held = await holdRequests(page, '/api/theme', 500)
+  await page.check(`${themeForm} input[value=forest-alloy]`)
+  await themeShown(page, '#121a17')
+  held.release()
+  await page.locator(`${themeForm} .autosave-status[role=status][data-state=error]`).waitFor()
+  await themeShown(page, '#0a1323')
+  assert.ok(await page.isChecked(`${themeForm} input[value=cobalt-quietude]`))
+  assert.equal(await page.getAttribute('meta[name=theme-color]', 'content'), '#0a1323')
+  const context = JSON.parse((await page.textContent('#page-context')) ?? '{}')
+  assert.equal(context.theme, 'cobalt-quietude')
+  assert.equal(await page.locator('link[href^="/static/themes/"]:not([data-warm])').count(), 0)
+  assert.deepEqual(
+    problems.filter((problem) => !/status of 500/.test(problem)),
+    [],
+  )
 })

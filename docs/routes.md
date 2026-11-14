@@ -541,7 +541,7 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
 
 Every profile has a cartoon face instead of a profile picture, in the style of Terrance
 and Phillip: the whole top of the head flaps up and down when it talks. Code in
-`src/shared/avatar.ts` (the data and palettes), `src/avatar.ts` (validation, random avatars) and `src/ui/avatar.ts` (the SVG).
+`src/shared/avatar.ts` (the data, palettes and random avatars), `src/avatar.ts` (validation, and `randomAvatar` with `node:crypto`) and `src/ui/avatar.ts` (the SVG).
 
 - `avatar` is `{ headWidth, skin, hairType, hairColor, eyeType, eyeColor, pupilColor,
   toothType, toothColor }`, stored as JSON in `user_profiles.avatar`. Colours are lower-case
@@ -555,7 +555,10 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
 - The edit page has an avatar form: `<input type="color">` for the colours, `<select>` for
   the types, a live preview, and two submit buttons. "Save avatar" sends every field;
   "Random" (`name="random"`) makes the server pick a new random avatar and save it, so it
-  works without JS. `POST /api/avatar` takes all nine fields, or `random` (any non-empty
+  works without JS. With JavaScript the preview (and every other drawing of the viewer's
+  avatar on the page) follows the fields as they change, before anything is saved, and
+  "Random" is picked in the browser from the same palettes (`randomAvatarWith`) and saved
+  like a hand-made change (see JavaScript in the browser). `POST /api/avatar` takes all nine fields, or `random` (any non-empty
   value, or JSON `{ "random": true }`). A missing or invalid field is a 400 on that field;
   forms get the edit page again with the error.
 - Nobody uploads SVG. The server draws it from these fields only, as inline SVG with no
@@ -641,10 +644,18 @@ preview.
   stylesheet links need nothing from the route. `renderDocument` hands it to the
   components through a Preact context (`src/ui/context.ts`, read with `usePageContext()`);
   only the Markdown views read `pageContext()` directly.
+- Every page has `<meta name="theme-color">` with the theme's background (`themeColor`),
+  so phones colour their address bar to match; a shared blurt keeps its own.
 - With JavaScript the theme form saves itself (autosave, see JavaScript in the browser)
-  and `src/client/theme.ts` switches the page without loading it again: it links the new
-  theme's stylesheet after `style.css` and removes the old one once the new one has
-  loaded (no flash of the default), and updates the page context JSON. The critical
+  and `src/client/theme.ts` switches the page as soon as a theme is picked, before the
+  save has answered, without loading it again: it links the new theme's stylesheet after
+  `style.css` and removes the old one once the new one has loaded (no flash of the
+  default; a newer pick drops a link still loading), and updates `theme-color` and the
+  page context JSON. If the save fails, the saved theme comes back. The edit page fetches
+  the other themes' stylesheets ahead (`<link rel="stylesheet" media="not all"
+  data-warm>`: downloaded, never applied, allowed by `style-src 'self'`; not
+  `rel=prefetch`, which the CSP governs by `default-src 'none'` in browsers that follow the
+  spec, though Chromium lets it through), so the switch is instant. The critical
   `<style>` stays the old theme's (its text is allowed by hash, and only the first paint
   needs it): nothing of it shows, since the stylesheets set everything it does, the
   root's background and colour too (`:root { background: var(--bg); color: var(--text) }`
@@ -1109,12 +1120,20 @@ status line in their place (`role=status`: "Saving…", "Saved"); they come back
 (`data-retry`) when a save fails. `{ errors }` are shown at their fields
 (`aria-describedby`, `aria-invalid`), others in the status line; 401, 5xx and network
 errors say so there. Pressing a button (or Enter) is still a real submission if
-`fetch()` fails. Named buttons (the avatar's "Random") save with that button, and the
-fields then show what the server picked. After a save: the theme is switched in place
-(Themes), the times are rewritten (`src/client/times.ts`, with the shared
-`formatTimestamp`, so they read as the server writes them) and the avatar preview is
-drawn again with `AvatarSvg` (`src/client/avatar-preview.ts`). The page context JSON is
-kept up to date (`updatePageContext`). The JavaScript setting on `/settings` stays an
+`fetch()` fails. Other named buttons save with that button. After a save the times are
+rewritten (`src/client/times.ts`, with the shared `formatTimestamp`, so they read as the
+server writes them). The page context JSON is kept up to date (`updatePageContext`).
+
+Two forms show their change before it is saved (`LiveForm` in autosave.ts: `show` on
+every `input` and `change`, `saved`, `revert`, `submit`). The theme is switched at once
+(`src/client/theme.ts`, see Themes). The avatar is drawn again from the fields with the
+shared `AvatarSvg`, at most once a frame, while a colour is dragged or a select stepped
+through (`src/client/avatar-live.ts`), everywhere the viewer's avatar is on the page:
+the edit page's previews and their own blurt cards, found by the author link
+(`showOwnAvatars` in `src/client/avatar-preview.ts`; the new SVG keeps its classes, so it
+talks on hover). "Random" picks in the browser and saves the fields as they then are.
+When a save fails and no newer change is waiting, the fields and the page go back to what
+was saved last, and the status line says why. The JavaScript setting on `/settings` stays an
 ordinary form: turning scripts off or on needs a page load anyway.
 
 What is not updated in place: the share card link under the colours, and its "Write a bio
@@ -1147,7 +1166,8 @@ turning JavaScript off and on (anonymous and logged in), importing every client 
 in the page, rendering a shared component with the page context on the bundle's Preact,
 enhancer failures, the `requests.ts` contract, and the edit page (`settings.test.ts`):
 autosave of a select, a checkbox, a text field and the avatar, field errors, the theme
-switch, the map and the picture by click (both modes, checking that no page load
+switch, the avatar and theme shown before the save answers (the request held with
+`page.route`), Random, going back after a failed save, the map and the picture by click (both modes, checking that no page load
 happened with JavaScript, by a mark on `window`) and by keyboard. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 

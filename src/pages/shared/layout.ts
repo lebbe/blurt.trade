@@ -3,7 +3,7 @@ import { renderToString } from 'preact-render-to-string'
 import { publicUrl } from '../../config.ts'
 import { pageContext } from '../../page-context.ts'
 import { searchQueryMaxLength } from '../../shared/limits.ts'
-import { criticalCss, themeStylesheetUrl } from '../../shared/themes.ts'
+import { criticalCss, themeColor, themeStylesheetUrl } from '../../shared/themes.ts'
 import { importMapJson, mainModulePreloads, mainModuleUrl } from '../../client-modules.ts'
 import {
   pageContextElementId,
@@ -66,6 +66,11 @@ function Head({ meta }: { meta: PageMeta }) {
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
+      ${
+        // A shared blurt asks for its own (BLURT red); every other page has the theme's,
+        // which src/client/theme.ts changes along with the theme.
+        html`<meta name="theme-color" content=${share?.themeColor ?? themeColor(theme)} />`
+      }
       <title>${title}</title>
       <meta name="description" content=${meta.description ?? siteDescription} />
       ${meta.author && html`<meta name="author" content=${meta.author} />`}
@@ -103,7 +108,6 @@ function Head({ meta }: { meta: PageMeta }) {
           <meta name="twitter:title" content=${share.title} />
           <meta name="twitter:description" content=${share.description} />
           <meta name="twitter:image" content=${`${origin}${share.image ?? previewImagePath}`} />
-          ${share.themeColor && html`<meta name="theme-color" content=${share.themeColor} />`}
         `
       }
     </head>

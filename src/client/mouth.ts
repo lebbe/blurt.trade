@@ -7,7 +7,7 @@ import {
   type AvatarPhoto,
 } from '../shared/avatar.ts'
 import { cutHint } from '../ui/avatar.ts'
-import { showProfilePicture } from './avatar-preview.ts'
+import { showOwnAvatars } from './avatar-preview.ts'
 import type { EnhancerContext } from './enhance.ts'
 import { submitForm, type Outcome } from './requests.ts'
 
@@ -78,7 +78,7 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
       pending = photo.cut
       showCut(photo.cut)
       hint.textContent = cutHint(photo.cut)
-      showProfilePicture(form.closest('.picture-editor') ?? document, avatar, context.page)
+      showOwnAvatars(avatar, context.page)
       say('Saved.')
     } else if (outcome.kind === 'errors') {
       showCut(photo.cut)

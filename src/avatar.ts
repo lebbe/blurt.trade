@@ -1,11 +1,11 @@
 import { randomInt } from 'node:crypto'
 import { z } from 'zod'
 import {
-  avatarPalettes,
   colorPattern,
   eyeTypes,
   hairTypes,
   headWidths,
+  randomAvatarWith,
   toothTypes,
   type Avatar,
 } from './shared/avatar.ts'
@@ -15,23 +15,8 @@ import {
 // profiles (node:crypto) and the zod schema the edit form is checked with.
 export * from './shared/avatar.ts'
 
-function pick<T>(values: readonly T[]): T {
-  return values[randomInt(values.length)]
-}
-
 export function randomAvatar(): Avatar {
-  return {
-    headWidth: pick(headWidths),
-    skin: pick(avatarPalettes.skin),
-    hairType: pick(hairTypes),
-    hairColor: pick(avatarPalettes.hairColor),
-    eyeType: pick(eyeTypes),
-    eyeColor: pick(avatarPalettes.eyeColor),
-    pupilColor: pick(avatarPalettes.pupilColor),
-    // Mostly some teeth: a toothless mouth just looks closed.
-    toothType: pick(toothTypes.filter((type) => type !== 'none')),
-    toothColor: pick(avatarPalettes.toothColor),
-  }
+  return randomAvatarWith(randomInt)
 }
 
 // What <input type="color"> sends: #rrggbb, always lower case (upper case is accepted too).

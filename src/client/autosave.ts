@@ -1,9 +1,8 @@
-import type { Avatar } from '../shared/avatar.ts'
-import { showAvatar } from './avatar-preview.ts'
+import { liveAvatarForm } from './avatar-live.ts'
 import type { EnhancerContext } from './enhance.ts'
 import { updatePageContext } from './page-context.ts'
 import { submitForm, type FieldError, type Outcome } from './requests.ts'
-import { applyTheme } from './theme.ts'
+import { liveThemeForm } from './theme.ts'
 import { applyTimeSettings } from './times.ts'
 
 // <form data-enhance="autosave">: the form saves itself, with no page load and no button.
@@ -25,7 +24,9 @@ import { applyTimeSettings } from './times.ts'
 //     are shown at the fields they are about (else in the status line). A 429 says how
 //     long to wait. Pressing a button (or Enter in a field) is an ordinary submission
 //     again if fetch() fails, as without JavaScript (requests.ts, 'fallback').
-//   - Buttons with a name (the avatar's "Random") still work, as a save with that button.
+//   - Buttons with a name still work, as a save with that button.
+//   - Some forms show their change on the page at once, before it is saved, and take it
+//     back if saving fails (LiveForm): the theme (theme.ts) and the avatar (avatar-live.ts).
 
 const typingPause = 800
 
@@ -39,31 +40,41 @@ function isTyped(element: EventTarget | null): element is HTMLInputElement | HTM
   )
 }
 
-type Data = Record<string, unknown> | null
+export type Data = Record<string, unknown> | null
 
-// What a save changes on the page besides the form, by the form's action.
-function afterSave(form: HTMLFormElement, data: Data, { page }: EnhancerContext): void {
+// A form whose changes show on the page as they are made, before they are saved (on
+// `input` as well as `change`, so while a colour is dragged, say).
+export type LiveForm = {
+  show(): void // the fields changed: show what they say now
+  saved(data: Data): void // the server saved the form and answered this
+  // Saving failed (and nothing newer is waiting to be sent): put the fields and the page
+  // back as they were saved last. The error is shown by autosave.
+  revert(): void
+  // A button was pressed: the submitter to send it as (null: the form's plain save), after
+  // doing in the page what the server would have done for that button.
+  submit?(submitter: HTMLElement | null): HTMLElement | null
+}
+
+function liveForm(form: HTMLFormElement, { page }: EnhancerContext): LiveForm | null {
   const path = new URL(form.action).pathname
   if (path === '/api/theme') {
-    applyTheme(data?.theme, page)
-  } else if (path === '/api/timezone') {
+    return liveThemeForm(form, page)
+  }
+  if (path === '/api/avatar') {
+    return liveAvatarForm(form, page)
+  }
+  return null
+}
+
+// What a save changes on the page besides the form, by the form's action, for the forms
+// that only show their change once it is saved.
+function afterSave(form: HTMLFormElement, data: Data, { page }: EnhancerContext): void {
+  const path = new URL(form.action).pathname
+  if (path === '/api/timezone') {
     if (data && 'locale' in data) {
       updatePageContext(page, { pickedLocale: (data.locale as string | null) ?? null })
     }
     applyTimeSettings(data?.display as { timeZone?: unknown; locale?: unknown }, page)
-  } else if (path === '/api/avatar' && data?.avatar) {
-    const avatar = data.avatar as Avatar
-    // "Random" picked new values on the server: show them in the fields too.
-    for (const [name, value] of Object.entries(avatar)) {
-      const field = form.elements.namedItem(name)
-      if (
-        typeof value === 'string' &&
-        (field instanceof HTMLInputElement || field instanceof HTMLSelectElement)
-      ) {
-        field.value = value
-      }
-    }
-    showAvatar(form, avatar, page)
   }
 }
 
@@ -140,6 +151,7 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
   }
   const form = element
   const buttons = saveButtons(form)
+  const live = liveForm(form, context)
 
   // One status line in each save button's place (the share card has its own button,
   // outside the profile form), only the first one announced, so it's said once.
@@ -210,15 +222,22 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
     }
     if (outcome.kind === 'success') {
       clearFieldErrors(form)
+      live?.saved(outcome.data)
       afterSave(form, outcome.data, context)
-      // After "Random" the fields hold the new avatar: that is what is saved now.
-      lastSaved = serialize(form)
+      lastSaved = body
       show('Saved', 'saved')
-    } else if (outcome.kind === 'errors') {
-      const general = showFieldErrors(form, outcome.errors)
-      show(general.length > 0 ? general.join(' ') : 'Not saved: see the message above.', 'error')
     } else {
-      show(failure(outcome), 'error')
+      // A change made meanwhile is sent next and decides what the page shows; otherwise
+      // the page goes back to what is saved.
+      if (!queued) {
+        live?.revert()
+      }
+      if (outcome.kind === 'errors') {
+        const general = showFieldErrors(form, outcome.errors)
+        show(general.length > 0 ? general.join(' ') : 'Not saved: see the message above.', 'error')
+      } else {
+        show(failure(outcome), 'error')
+      }
     }
     const next = queued
     queued = null
@@ -233,19 +252,25 @@ export function enhance(element: HTMLElement, context: EnhancerContext): void {
     target instanceof HTMLElement && (target as HTMLInputElement).form === form
 
   document.addEventListener('input', (event) => {
-    if (belongs(event.target) && isTyped(event.target)) {
+    if (!belongs(event.target)) {
+      return
+    }
+    live?.show()
+    if (isTyped(event.target)) {
       clearTimeout(timer)
       timer = setTimeout(() => void save(), typingPause)
     }
   })
   document.addEventListener('change', (event) => {
     if (belongs(event.target)) {
+      live?.show()
       void save()
     }
   })
   form.addEventListener('submit', (event) => {
     event.preventDefault()
-    void save(event.submitter, true)
+    const submitter = live?.submit ? live.submit(event.submitter) : event.submitter
+    void save(submitter, true)
   })
   // Leaving the page within the typing pause (or while a save is on its way): send what
   // is unsaved anyway, as a beacon, which outlives the page. Its answer is a redirect
