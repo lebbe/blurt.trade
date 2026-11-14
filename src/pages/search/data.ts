@@ -1,4 +1,5 @@
-import type { Blurt, UserMatch } from '../../routes/state.ts'
+import type { Blurt } from '../../routes/state/blurts.ts'
+import type { UserMatch } from '../../routes/state/profiles.ts'
 import type { Viewer } from '../../ui/context.ts'
 
 // Search (/search): the data the pages are rendered from. The route fetches it once; it

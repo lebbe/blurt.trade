@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getViewer } from '../middleware/auth.ts'
 import { represent, sendError } from '../negotiate.ts'
-import { listPeople, parsePeopleCursor } from './state.ts'
+import { listPeople, parsePeopleCursor } from './state/profiles.ts'
 import { renderPeoplePage } from '../pages/people/people.html.ts'
 import { peopleMarkdown } from '../pages/people/people.md.ts'
 

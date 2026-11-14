@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from '../../middleware/auth.ts'
-import type { FeedItem } from '../../routes/state.ts'
+import type { FeedItem } from '../../routes/state/blurts.ts'
 import type { GeoPoint } from '../../shared/geo.ts'
 
 // Blurts near you (/near): the data the pages are rendered from. The route fetches it once;

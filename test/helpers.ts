@@ -8,7 +8,7 @@ import { migrate } from '../db/migrate.ts'
 import { closeDb, db } from '../src/db.ts'
 import { embedPendingBlurts, setEmbedder } from '../src/embeddings.ts'
 import { closePicturePool } from '../src/picture-pool.ts'
-import { listInviteCodes } from '../src/routes/state.ts'
+import { listInviteCodes } from '../src/routes/state/signup.ts'
 import { app } from '../src/server.ts'
 import {
   resetRateLimits,

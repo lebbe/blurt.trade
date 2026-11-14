@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
-import { getUserByUsername } from '../src/routes/state.ts'
+import { getUserByUsername } from '../src/routes/state/accounts.ts'
 import {
   createSession,
   inviteCodes,

@@ -2,18 +2,20 @@ import { Router, type Request, type Response } from 'express'
 import { getViewer } from '../middleware/auth.ts'
 import { represent, sendError } from '../negotiate.ts'
 import {
-  countFollowing,
+  type Blurt,
+  type Cursor,
+  type FeedItem,
+  markViewerFlags,
+  parseCursor,
+} from './state/blurts.ts'
+import {
   followingFeedThreshold,
   listFeed,
   listFollowedHighlights,
   listNearbyForUser,
   listSimilarToUser,
-  markViewerFlags,
-  parseCursor,
-  type Blurt,
-  type Cursor,
-  type FeedItem,
-} from './state.ts'
+} from './state/feeds.ts'
+import { countFollowing } from './state/follows.ts'
 import type { FeedData } from '../pages/feed/data.ts'
 import { renderFeedPage } from '../pages/feed/feed.html.ts'
 import type { DiscoveryKind, DiscoverySection } from '../ui/discovery.ts'

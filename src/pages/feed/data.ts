@@ -1,4 +1,4 @@
-import type { FeedItem } from '../../routes/state.ts'
+import type { FeedItem } from '../../routes/state/blurts.ts'
 import type { Viewer } from '../../ui/context.ts'
 import type { DiscoverySection } from '../../ui/discovery.ts'
 

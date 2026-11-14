@@ -1,4 +1,4 @@
-import type { Blurt } from '../routes/state.ts'
+import type { Blurt } from '../routes/state/blurts.ts'
 
 // Where things live. Plain links and form actions, so everything works without JS.
 

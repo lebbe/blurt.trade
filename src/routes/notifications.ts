@@ -2,14 +2,14 @@ import { Router } from 'express'
 import { clearSessionCookies, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError, sendFormSuccess, wantsJson } from '../negotiate.ts'
+import { parseCursor } from './state/blurts.ts'
 import {
+  type NotificationSettings,
   countUnreadNotifications,
   listNotifications,
   markNotificationsRead,
-  parseCursor,
   setNotificationSettings,
-  type NotificationSettings,
-} from './state.ts'
+} from './state/notifications.ts'
 import { renderNotificationsPage } from '../pages/notifications/notifications.html.ts'
 import { notificationsMarkdown } from '../pages/notifications/notifications.md.ts'
 

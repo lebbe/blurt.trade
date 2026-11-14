@@ -1,7 +1,7 @@
 import type { BlurtPageData } from './data.ts'
 import { blurtList, blurtMarkdown, home } from '../shared/blurts.md.ts'
 import { code, link, type Markdown, md } from '../shared/markdown.ts'
-import type { Blurt } from '../../routes/state.ts'
+import type { Blurt } from '../../routes/state/blurts.ts'
 import { blurtActions, reblurtAction } from '../../ui/blurt-card.ts'
 import type { Viewer } from '../../ui/context.ts'
 import { deleteBlurtPath, moreRepliesUrl } from '../../ui/urls.ts'

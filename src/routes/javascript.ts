@@ -4,7 +4,7 @@ import { rateLimit } from '../middleware/rate-limit.ts'
 import { sendError, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import { setJavaScriptCookie } from '../javascript.ts'
 import { javascriptSettingPath } from '../ui/urls.ts'
-import { setJavaScript } from './state.ts'
+import { setJavaScript } from './state/profiles.ts'
 
 export const javascriptRouter = Router()
 

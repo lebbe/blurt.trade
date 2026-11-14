@@ -6,7 +6,8 @@
 //
 // Uses DATABASE_URL, like the app (PgBouncer on port 6433 by default).
 import { closeDb } from '../src/db.ts'
-import { getUserByUsername, mintInviteCodes } from '../src/routes/state.ts'
+import { getUserByUsername } from '../src/routes/state/accounts.ts'
+import { mintInviteCodes } from '../src/routes/state/signup.ts'
 
 const [username, countArgument, daysArgument] = process.argv.slice(2)
 const count = Number(countArgument)

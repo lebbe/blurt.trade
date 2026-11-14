@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from '../../middleware/auth.ts'
-import type { Notification } from '../../routes/state.ts'
+import type { Notification } from '../../routes/state/notifications.ts'
 
 // The notifications page (/:username/notifications): the data the pages are rendered from.
 // The route fetches it once; it goes out as JSON as is, as HTML through

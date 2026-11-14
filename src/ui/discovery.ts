@@ -1,4 +1,4 @@
-import type { Blurt } from '../routes/state.ts'
+import type { Blurt } from '../routes/state/blurts.ts'
 import { BlurtCard } from './blurt-card.ts'
 import type { Viewer } from './context.ts'
 import { html } from './html.ts'

@@ -9,7 +9,7 @@ import {
 } from '../shared/components.ts'
 import { Composer, type ComposerProps } from '../shared/composer.ts'
 import { Page, type PageMeta, renderDocument, siteDescription } from '../shared/layout.ts'
-import type { FeedItem } from '../../routes/state.ts'
+import type { FeedItem } from '../../routes/state/blurts.ts'
 import { blurtMaxLength } from '../../shared/limits.ts'
 import { BlurtCard } from '../../ui/blurt-card.ts'
 import { usePageContext, type Viewer } from '../../ui/context.ts'

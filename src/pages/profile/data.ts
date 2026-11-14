@@ -1,4 +1,7 @@
-import type { Blurt, FollowStats, InviteCode, UserProfile } from '../../routes/state.ts'
+import type { Blurt } from '../../routes/state/blurts.ts'
+import type { FollowStats } from '../../routes/state/follows.ts'
+import type { UserProfile } from '../../routes/state/profiles.ts'
+import type { InviteCode } from '../../routes/state/signup.ts'
 import type { Viewer } from '../../ui/context.ts'
 
 // A profile page (/:username/): the data the pages are rendered from. The route fetches it

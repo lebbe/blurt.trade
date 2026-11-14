@@ -1,6 +1,6 @@
 import type { Request } from 'express'
 import { pictureSvg } from './picture.ts'
-import { getPicturesShapes } from './routes/state.ts'
+import { getPicturesShapes } from './routes/state/blurts.ts'
 
 // How a blurt's picture is given in JSON, picked with `?pictures=` on any GET:
 //   data (default)  `data`: the stored drawing (src/picture.ts, encodeShapes) as base64

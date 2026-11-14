@@ -10,21 +10,11 @@ import {
   sendFormSuccess,
   wantsJson,
 } from '../negotiate.ts'
-import {
-  follow,
-  getFollowStats,
-  getLocation,
-  getNotificationSettings,
-  getInvitedBy,
-  getUserProfileByUsername,
-  isInviteOnly,
-  listInviteCodes,
-  listBlurtsByUserId,
-  markViewerFlags,
-  parseCursor,
-  unfollow,
-  updateUserProfile,
-} from './state.ts'
+import { listBlurtsByUserId, markViewerFlags, parseCursor } from './state/blurts.ts'
+import { follow, getFollowStats, unfollow } from './state/follows.ts'
+import { getNotificationSettings } from './state/notifications.ts'
+import { getLocation, getUserProfileByUsername, updateUserProfile } from './state/profiles.ts'
+import { getInvitedBy, isInviteOnly, listInviteCodes } from './state/signup.ts'
 import { cardColors } from '../card-colors.ts'
 import { bioMaxLength, isWebUrl, linkMaxLength, normalizedWebUrl, text } from '../limits.ts'
 import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'

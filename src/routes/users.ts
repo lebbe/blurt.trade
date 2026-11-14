@@ -19,19 +19,16 @@ import {
   usernameMaxLength,
 } from '../limits.ts'
 import { fieldErrors, represent, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
+import { addUser, deleteAccount, getUserByUsername, isUsernameRetired } from './state/accounts.ts'
 import {
-  addUser,
+  type SignupState,
   countWaiting,
-  deleteAccount,
   getSignupState,
-  isInviteOnly,
-  getUserByUsername,
   getWaitlistEntry,
-  isUsernameRetired,
+  isInviteOnly,
   joinWaitlist,
   normalizeInviteCode,
-  type SignupState,
-} from './state.ts'
+} from './state/signup.ts'
 import {
   renderCreateUserPage,
   renderLoginPage,

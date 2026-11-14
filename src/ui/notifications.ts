@@ -1,4 +1,4 @@
-import type { Notification, NotificationKind } from '../routes/state.ts'
+import type { Notification, NotificationKind } from '../routes/state/notifications.ts'
 import { AvatarView } from './avatar.ts'
 import { Timestamp } from './blurt-card.ts'
 import { SubmitButton } from './forms.ts'

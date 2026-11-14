@@ -4,7 +4,7 @@ import type { CookieOptions, NextFunction, Request, RequestHandler, Response } f
 import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
 import { isSpeculative, refuseSpeculation } from '../speculation.ts'
-import { isAdmin } from '../routes/state.ts'
+import { isAdmin } from '../routes/state/accounts.ts'
 import { defaultTheme, isTheme, type ThemeId } from '../themes.ts'
 import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 

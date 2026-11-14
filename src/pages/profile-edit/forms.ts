@@ -1,7 +1,8 @@
 import { cardColors } from '../../card-colors.ts'
 import { profileCardPath } from '../profile/profile.html.ts'
 import { ButtonLink, LocationMap } from '../shared/components.ts'
-import type { NotificationSettings, UserProfile } from '../../routes/state.ts'
+import type { NotificationSettings } from '../../routes/state/notifications.ts'
+import type { UserProfile } from '../../routes/state/profiles.ts'
 import {
   type Avatar,
   avatarLabels,
