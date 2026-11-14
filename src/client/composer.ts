@@ -1,5 +1,6 @@
 import type { FeedItem } from '../routes/state/blurts.ts'
 import { blurtMaxLength, blurtMaxNewlines, charLength } from '../shared/limits.ts'
+import { pictureSvg } from '../shared/picture/svg.ts'
 import { ValidationError } from '../ui/forms.ts'
 import { html } from '../ui/html.ts'
 import { ListItem } from '../ui/lists.ts'
@@ -8,6 +9,7 @@ import { announce } from './announce.ts'
 import type { EnhancerContext } from './enhance.ts'
 import { withDates } from './json.ts'
 import { renderElement, renderNodes } from './render.ts'
+import { drawFile, previewNote } from './picture-preview.ts'
 import { submitForm } from './requests.ts'
 
 // <form data-enhance="composer">: the blurt form (Composer, src/pages/shared/composer.ts).
@@ -15,13 +17,15 @@ import { submitForm } from './requests.ts'
 //   - The hint under the text box counts down the characters left (code points, as the
 //     server counts them) and says when there are too many line breaks.
 //   - Ctrl+Enter (Cmd+Enter on a Mac) sends it.
-//   - A picture picked shows as a small preview, with a button to take it away.
+//   - A picture picked shows as the drawing it will become (drawn in the browser, in a
+//     worker), with a button to take it away. The scaled-down picture is sent.
 //   - Sending: the form goes with fetch() as it is (multipart, with the picture), and the
 //     answer, the new blurt as a feed item (POST /api/blurts), is rendered with the same
 //     card the list uses and put into the page's list (the element marked
 //     data-new-blurts: the top of a feed, the end of a thread's replies). The text box is
 //     emptied, the focus moves to the new blurt and the live region says it is posted.
-//     While the server draws the picture (it takes a moment) the form says so.
+//     While the server draws the picture (it takes a moment) the form says so. The
+//     server always draws it itself: the browser's is only a preview.
 //   - Errors (`{ errors }`) show at the top of the form, as the server's page would.
 //     Anything else is the ordinary submission (requests.ts, 'fallback').
 //   - A quote still goes to the new quote's page, as without JavaScript: there is no list
@@ -76,16 +80,22 @@ export function enhance(form: HTMLFormElement, context: EnhancerContext): void {
     }
   })
 
-  // The picture picked, as a thumbnail of the file itself (a blob: URL, allowed by the
-  // scripting CSP only). The drawing the server makes of it is only seen once posted.
+  // The picture picked, drawn as the server will draw it (in a worker, ./picture-preview.ts),
+  // under the text box, with a button to take it away. The drawing also gives the picture
+  // scaled down to the size it is drawn at, which is sent instead when it is smaller: less
+  // to upload, and the server then draws the very pixels the preview was drawn from.
   let preview: HTMLElement | null = null
+  let drawing: Promise<File | undefined> | undefined
+  let picks = 0
   const clearPreview = () => {
     const image = preview?.querySelector('img')
-    if (image) {
+    if (image?.src) {
       URL.revokeObjectURL(image.src)
     }
     preview?.remove()
     preview = null
+    drawing = undefined
+    picks++
   }
   file?.addEventListener('change', () => {
     clearPreview()
@@ -93,19 +103,49 @@ export function enhance(form: HTMLFormElement, context: EnhancerContext): void {
     if (!picked || !picked.type.startsWith('image/')) {
       return
     }
-    preview = renderElement(
+    const pick = picks
+    const shown = renderElement(
       html`<div class="picture-preview">
-        <img src=${URL.createObjectURL(picked)} alt="The picture you picked" />
+        <figure>
+          <img alt="Preview of the drawing of your picture" hidden />
+          <figcaption class="tiny" role="status">Drawing a preview…</figcaption>
+        </figure>
         <button type="button" class="secondary">Remove picture</button>
       </div>`,
       context.page,
     )
-    preview.querySelector('button')?.addEventListener('click', () => {
+    preview = shown
+    shown.querySelector('button')?.addEventListener('click', () => {
       file.value = ''
       clearPreview()
       file.focus()
     })
-    file.closest('.row')?.after(preview)
+    file.closest('.row')?.after(shown)
+    const image = shown.querySelector('img')!
+    const caption = shown.querySelector('figcaption')!
+    drawing = drawFile(picked, { upload: true }).then(
+      (result) => {
+        if (pick !== picks) {
+          return undefined
+        }
+        const svg = new Blob([pictureSvg(result.shapes)], { type: 'image/svg+xml' })
+        image.width = result.width
+        image.height = result.height
+        image.src = URL.createObjectURL(svg)
+        image.hidden = false
+        caption.textContent = previewNote
+        return result.upload && result.upload.size < picked.size
+          ? new File([result.upload], 'picture.png', { type: 'image/png' })
+          : undefined
+      },
+      () => {
+        if (pick === picks) {
+          caption.textContent =
+            'No preview: this browser could not read the picture. It is drawn when you post.'
+        }
+        return undefined
+      },
+    )
   })
 
   if (quote) {
@@ -125,13 +165,16 @@ export function enhance(form: HTMLFormElement, context: EnhancerContext): void {
 
   async function send(submitter: HTMLElement | null): Promise<void> {
     sending = true
-    const drawing = Boolean(file?.files?.length)
-    // The request is made from the form as it is now, before anything below changes it.
-    const pending = submitForm<FeedItem>(form, { submitter })
+    const withPicture = Boolean(file?.files?.length)
     button!.disabled = true
     form.setAttribute('aria-busy', 'true')
-    status.textContent = drawing ? 'Drawing your picture…' : 'Posting…'
-    const outcome = await pending
+    status.textContent = withPicture ? 'Drawing your picture…' : 'Posting…'
+    // The picture scaled down by the preview, if it is ready soon enough to be worth it.
+    const scaled = withPicture && drawing ? await drawing : undefined
+    const outcome = await submitForm<FeedItem>(form, {
+      submitter,
+      ...(scaled && { files: { picture: scaled } }),
+    })
     if (outcome.kind === 'fallback') {
       return // the page is being submitted for real
     }

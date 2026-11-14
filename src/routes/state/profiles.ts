@@ -215,13 +215,19 @@ export async function setTimeSettings(
 
 // Sets the user's profile picture (a drawing from src/picture.ts, encodeShapes), or removes
 // it (null). A new one gets a new version, so its URLs change. False if the user has no
-// profile (e.g. a still-valid token after a database reset).
-export async function setProfilePicture(userId: number, shapes: Buffer | null): Promise<boolean> {
+// profile (e.g. a still-valid token after a database reset). `cut`, when given, sets where
+// its mouth opens in the same update.
+export async function setProfilePicture(
+  userId: number,
+  shapes: Buffer | null,
+  cut?: number,
+): Promise<boolean> {
   const { rowCount } = await db().query(
     `UPDATE user_profiles SET picture = $2::bytea, updated_at = now(),
-       picture_version = picture_version + CASE WHEN $2::bytea IS NULL THEN 0 ELSE 1 END
+       picture_version = picture_version + CASE WHEN $2::bytea IS NULL THEN 0 ELSE 1 END,
+       picture_cut = COALESCE($3::smallint, picture_cut)
      WHERE user_id = $1`,
-    [userId, shapes],
+    [userId, shapes, cut ?? null],
   )
   return rowCount === 1
 }

@@ -48,6 +48,12 @@ const modulePathPattern = /^(?:ui|shared|client)\/(?:[a-z0-9][a-z0-9-]*\/)*[a-z0
 export const clientModulePrefix = '/static/js/'
 const oneYear = 365 * 24 * 60 * 60
 
+// The policy a module is served with. A script's own CSP only matters when it is a
+// worker's script (src/client/picture-worker.ts): a dedicated worker runs under the policy
+// its script came with, per spec (Chromium lets it inherit the page's instead). This lets
+// it import our other modules and nothing else.
+export const moduleContentSecurityPolicy = "default-src 'none'; script-src 'self'"
+
 type ClientModule = {
   code: string // stripped, as sent
   etag: string
@@ -211,6 +217,7 @@ export function serveClientModules(app: Express): void {
       'Content-Type': 'text/javascript; charset=utf-8',
       'Cache-Control': `public, max-age=${oneYear}, immutable`,
       ETag: module.etag,
+      'Content-Security-Policy': moduleContentSecurityPolicy,
     })
     // send() answers 304 itself when If-None-Match matches the ETag.
     response.send(module.code)

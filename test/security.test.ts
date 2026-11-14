@@ -53,11 +53,12 @@ test('sends the security headers on pages, errors and static files', async () =>
   assert.match(contentSecurityPolicy, /connect-src 'self'(;|$)/)
   assert.doesNotMatch(contentSecurityPolicy, /script-src|unsafe-inline|unsafe-eval/)
   // With JavaScript on: the same policy plus our own scripts and the import map by hash,
-  // and blob: images (the composer's preview of a picture before it is uploaded).
+  // blob: images (previews of a picture drawn before it is uploaded) and workers from us
+  // (the worker that draws them, src/client/picture-worker.ts).
   assert.match(contentSecurityPolicy, /img-src 'self';/)
   assert.equal(
     scriptingContentSecurityPolicy,
-    `${contentSecurityPolicy.replace("img-src 'self';", "img-src 'self' blob:;")}; script-src 'self' ${importMapHash}`,
+    `${contentSecurityPolicy.replace("img-src 'self';", "img-src 'self' blob:;")}; script-src 'self' ${importMapHash}; worker-src 'self'`,
   )
   assert.doesNotMatch(scriptingContentSecurityPolicy, /unsafe-inline|unsafe-eval|\*|https?:/)
 

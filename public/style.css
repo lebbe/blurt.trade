@@ -1594,17 +1594,81 @@ td {
   font-size: 0.85rem;
 }
 
+/* The drawing of the picture picked, before posting (composer.ts, drawn in the browser). */
 .picture-preview {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 10px;
 }
 
+.picture-preview figure {
+  margin: 0;
+  max-width: 320px;
+}
+
 .picture-preview img {
-  max-width: 120px;
-  max-height: 90px;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 240px;
   border: 2px solid var(--line-soft);
-  object-fit: cover;
+}
+
+.picture-preview figcaption {
+  margin-top: 4px;
+}
+
+/* The profile picture before it is uploaded (picture-upload.ts): the crop frame on the
+   left, the drawing with its mouth and the talking preview on the right. */
+.picture-crop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 12px 0;
+}
+
+.crop-stage,
+.crop-result {
+  display: grid;
+  gap: 6px;
+  max-width: 324px;
+}
+
+.crop-stage p,
+.crop-result p {
+  margin: 0;
+}
+
+.crop-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 2px solid var(--line-soft);
+  cursor: move;
+  /* The drag is the frame's, not the page's scroll or zoom. */
+  touch-action: none;
+}
+
+.crop-canvas[data-cursor='resize'] {
+  cursor: nwse-resize;
+}
+
+.crop-drawing {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  border: 2px solid var(--line-soft);
+  cursor: crosshair;
+}
+
+.crop-canvas:focus-visible,
+.crop-drawing:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* The next page of a list on its way (more.ts). */

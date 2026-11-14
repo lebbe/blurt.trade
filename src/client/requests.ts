@@ -35,6 +35,10 @@ export type RequestOptions = {
   // Extra fields sent with the form's own, as hidden fields would be: where a click on an
   // <input type="image"> landed (`location.x`), when the enhancer handled the click itself.
   fields?: Record<string, string>
+  // Files sent in place of what the form's file fields hold: a picture the browser has
+  // already scaled or cropped (src/client/picture-upload.ts). The real submission puts them
+  // into the fields first, so the server gets the same either way.
+  files?: Record<string, File>
 }
 
 const jsonType = /^application\/json\b/
@@ -87,6 +91,7 @@ export function submitForReal(
   form: HTMLFormElement,
   submitter?: HTMLElement | null,
   fields: Record<string, string> = {},
+  files: Record<string, File> = {},
 ): void {
   const hidden = (name: string, value: string) => {
     const field = document.createElement('input')
@@ -97,6 +102,14 @@ export function submitForReal(
   }
   for (const [name, value] of Object.entries(fields)) {
     hidden(name, value)
+  }
+  for (const [name, file] of Object.entries(files)) {
+    const input = form.querySelector<HTMLInputElement>(`input[type=file][name="${name}"]`)
+    if (input) {
+      const transfer = new DataTransfer()
+      transfer.items.add(file)
+      input.files = transfer.files
+    }
   }
   if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
     // An image button's name alone is never sent (only name.x and name.y).
@@ -117,6 +130,7 @@ function formRequest(
   form: HTMLFormElement,
   submitter?: HTMLElement | null,
   fields: Record<string, string> = {},
+  files: Record<string, File> = {},
 ) {
   const button =
     submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement
@@ -135,6 +149,9 @@ function formRequest(
   )
   for (const [name, value] of Object.entries(fields)) {
     data.append(name, value)
+  }
+  for (const [name, file] of Object.entries(files)) {
+    data.set(name, file)
   }
   if (method === 'GET') {
     const url = new URL(action)
@@ -157,9 +174,9 @@ function formRequest(
 // Sends `form` as the browser would have, asking for JSON. See the contract above.
 export async function submitForm<T = unknown>(
   form: HTMLFormElement,
-  { submitter, fallback = true, signal, fields }: RequestOptions = {},
+  { submitter, fallback = true, signal, fields, files }: RequestOptions = {},
 ): Promise<Outcome<T>> {
-  const { url, init } = formRequest(form, submitter, fields)
+  const { url, init } = formRequest(form, submitter, fields, files)
   let status: number | undefined
   try {
     const response = await fetch(url, {
@@ -178,13 +195,13 @@ export async function submitForm<T = unknown>(
     if (signal?.aborted || !fallback) {
       return { kind: 'failed', error }
     }
-    submitForReal(form, submitter, fields)
+    submitForReal(form, submitter, fields, files)
     return { kind: 'fallback' }
   }
   if (!fallback) {
     return { kind: 'failed', status }
   }
-  submitForReal(form, submitter, fields)
+  submitForReal(form, submitter, fields, files)
   return { kind: 'fallback' }
 }
 
@@ -192,7 +209,7 @@ export async function submitForm<T = unknown>(
 // to the page for real (location.assign), or with `fallback: false` returns 'failed'.
 export async function followLink<T = unknown>(
   link: HTMLAnchorElement | string,
-  { fallback = true, signal }: Omit<RequestOptions, 'submitter' | 'fields'> = {},
+  { fallback = true, signal }: Omit<RequestOptions, 'submitter' | 'fields' | 'files'> = {},
 ): Promise<Outcome<T>> {
   const href = typeof link === 'string' ? new URL(link, document.baseURI).href : link.href
   let status: number | undefined

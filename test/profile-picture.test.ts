@@ -232,3 +232,39 @@ test('share cards show the profile picture, and change with it', async () => {
   assert.notEqual(recut, photo)
   assert.equal((await request('GET', recut)).statusCode, 200)
 })
+
+test('the mouth can come with the upload, in the same request', async () => {
+  const cookie = await createSession('Lars')
+  const send = (cut: string) => {
+    const { body, headers } = multipart(
+      { cut },
+      { name: 'picture', filename: 'me.png', type: 'image/png', content: samplePng(640, 640) },
+    )
+    return request('POST', '/api/profile-picture', body, {
+      ...headers,
+      cookie,
+      accept: 'application/json',
+    })
+  }
+  const saved = await send('40')
+  assert.equal(saved.statusCode, 200)
+  assert.equal(JSON.parse(saved.body).avatar.photo.cut, 40)
+  const stored = await storedPicture()
+  assert.equal(stored.picture_cut, 40)
+  assert.equal(stored.picture_version, 1)
+
+  // A bad cut refuses the whole upload: nothing changes.
+  for (const cut of ['2', '96', '40.5', 'middle']) {
+    const refused = await send(cut)
+    assert.equal(refused.statusCode, 400, cut)
+    assert.equal(JSON.parse(refused.body).errors[0].field, 'cut')
+  }
+  assert.equal((await storedPicture()).picture_version, 1)
+
+  // Without a cut (as without JavaScript), the cut stays where it was.
+  assert.equal((await uploadAs(cookie)).statusCode, 303)
+  assert.deepEqual(
+    [(await storedPicture()).picture_cut, (await storedPicture()).picture_version],
+    [40, 2],
+  )
+})

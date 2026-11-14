@@ -203,7 +203,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location, timeZone }` (the zone it set, or `null`) |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
-| `/api/profile-picture`       | yes           | multipart `picture`, or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
+| `/api/profile-picture`       | yes           | multipart `picture` (+ optional `cut`), or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
 | `/api/profile-picture/cut`   | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`                   |
 | `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
 | `/api/timezone`              | yes           | `timezone` (IANA name) and/or `locale` (empty: the browser's) | 303 → `/:username/edit#timezone` | 200 `{ timezone?, locale?, display: { timeZone, locale } }`: what was sent, and how pages show times from now on |
@@ -230,6 +230,12 @@ picture is.
 The text is still required. A blurt with a picture has an `<img>` in HTML and
 `![Picture](/pictures/{id}.svg)` in Markdown; quotes don't show it. Deleting the blurt
 deletes the picture.
+
+The drawing itself is shared code (`src/shared/picture/`: `draw.ts` turns RGBA pixels into
+shapes, `shapes.ts` is the stored format, `svg.ts` draws it). Only decoding and scaling,
+with sharp, is the server's own (`decodeUpload` in `src/picture.ts`). The browser runs the
+same code for its previews (see "Pictures drawn in the browser" below); the server still
+draws every upload itself.
 
 In JSON (any GET), a blurt without a picture has `picture: null`, and one with a picture
 `picture: { width, height, url, data }`: `url` is `/pictures/{id}.svg`, and `data` is the
@@ -584,7 +590,10 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
 - `POST /api/profile-picture` (multipart): the image in `picture` (JPEG, PNG or WebP), or
   `remove` (any non-empty value). A file that is no picture, or no file, is a 400 on
   `picture`; forms get the edit page again with the error. Too many pictures being drawn
-  at once is a 503, like a blurt's.
+  at once is a 503, like a blurt's. An optional `cut` (5–95) sets where the mouth opens in
+  the same update (a 400 on `cut` otherwise, and nothing is saved); without it the cut
+  stays as it was. There are no crop fields: the server always crops the middle square,
+  and with JavaScript the browser sends the square the person chose (see below).
 - It talks like the cartoon, with no JS: two empty `<img>`s stacked, the part above the cut
   (`avatar-top`) and the part below (`avatar-jaw`), each an SVG of just that band. Their
   `width`/`height` attributes give each its share of the square, so there is no inline
@@ -601,7 +610,21 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
   preview is drawn again with `AvatarView` from the `{ avatar }` answer, and "now N% from
   the top" follows (`cutHint` in `src/ui/avatar.ts`). From the keyboard, the up and down
   arrows move the line 1% (Shift 5%), shown at once, and Enter or Space saves it (as
-  `cut`). Uploading and removing a picture stay ordinary form posts.
+  `cut`).
+- With JavaScript, uploading is previewed first (`src/client/picture-upload.ts`,
+  `data-enhance="picture-upload"` on the upload form). Once a file is picked, before
+  anything is sent: the picture on a canvas with a square frame (drag it to move it, its
+  corner to resize it, mouse or touch; the arrow keys move it, Shift in bigger steps, + and
+  − resize it; a Size slider), the drawing of that square made in the browser with the
+  mouth's line (a click on it, or the up and down arrows), and the talking avatar it makes
+  (`AvatarView` with `parts`, blob: URLs of the drawing's halves). Upload is one request:
+  the square scaled to 640 × 640 as a PNG in `picture`, and `cut`. **Decision:** the
+  browser crops (canvas), rather than sending `crop.x/crop.y/crop.size` for the server to
+  apply, because that needs no new server logic: the server's middle-square crop of a
+  square is the whole of it. The answer `{ avatar }` re-renders the panel
+  (`ProfilePictureForm`, now in `src/ui/profile-picture.ts`) and the viewer's other
+  avatars; Remove also goes without a page load. A file the browser can't decode gets no
+  editor, and the form is sent as it is.
 - In JSON the avatar gets `photo: { user, version, cut }` while there is a picture.
 - The edit page then hides the cartoon's settings (they would change nothing that shows):
   the picture's panel, with the click for the cut, takes their place, and `#avatar` links
@@ -856,7 +879,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map) and `blob:` in `img-src` when the page has JavaScript |
+| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map), `; worker-src 'self'` and `blob:` in `img-src` when the page has JavaScript. Client modules (`/static/js/…`) carry `default-src 'none'; script-src 'self'`, the policy of a worker started from one |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `no-referrer`                                            |
@@ -878,8 +901,12 @@ responses.
   `script-src`, and such pages carry no script. The page context JSON is a
   `<script type="application/json">` data block, which never runs and needs nothing.
   Inline `<script>` code and `on...=` attributes stay blocked. Fonts, web app manifests
-  (`manifest-src`), service workers (`worker-src`) and anything third-party still need
-  the policy changed first. See JavaScript in the browser.
+  (`manifest-src`), service workers and anything third-party still need the policy
+  changed first. `worker-src 'self'` is there for the dedicated worker that draws
+  pictures (`src/client/picture-worker.ts`); a dedicated worker runs under the CSP its
+  script was served with (per spec; Chromium lets it inherit the page's), so client
+  modules are served with `default-src 'none'; script-src 'self'`: the worker can import
+  our modules and nothing else. See JavaScript in the browser.
 - **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
   at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see
   Themes); icons are inline SVG (`src/ui/icons.ts`), not an icon font. Both are
@@ -899,8 +926,9 @@ responses.
   cached as immutable.
 - Avatars are inline `<svg>` markup, which the CSP doesn't restrict; their CSS animation
   is in the stylesheet. The world map is an image from `/static`, so `img-src 'self'`.
-  With JavaScript also `blob:`, for the composer's preview of a picture before it is
-  uploaded (`URL.createObjectURL`): only a script on the page can make such a URL.
+  With JavaScript also `blob:`, for the previews of a picture drawn before it is uploaded
+  (the composer's and the profile picture's, `URL.createObjectURL` of the drawing's SVG):
+  only a script on the page can make such a URL.
 - User text is escaped by the templates (Preact for HTML, `md` for Markdown); a test
   posts markup and a `javascript:` link and checks both views.
 - Session cookies are `HttpOnly`, `SameSite=Lax`, `Path=/`, and in production `Secure`
@@ -1119,6 +1147,7 @@ multipart only where a file is uploaded). `followLink(link)` does the same for a
 | `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
 | `more`     | the next-page link of every paged list | `src/client/more.ts`    |
 | `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
+| `picture-upload` | the profile picture's upload form | `src/client/picture-upload.ts` |
 | `share`    | Share on every blurt card and on profiles | `src/client/share.ts` |
 
 Autosave (`<form data-enhance="autosave">`) sends the whole form as its button would
@@ -1176,8 +1205,23 @@ happened.
   (the server draws it before it answers). `{ errors }` show at the top of the form, as
   the server's re-rendered page does. A quote still goes to its new page. The hint under
   the text box counts down (code points, as the server counts) and warns about line
-  breaks, Ctrl/Cmd+Enter sends, and a picture picked shows as a thumbnail (a `blob:`
-  URL) with a button to take it away. The picture is not scaled down in the browser.
+  breaks, Ctrl/Cmd+Enter sends, and a picture picked shows as the drawing it will become
+  (made in the browser, see below) with a button to take it away. The picture is sent
+  scaled down to 640 px as a PNG when that is smaller than the file (it nearly always is
+  for a camera photo); otherwise the file as it is.
+- **Pictures drawn in the browser** (`src/client/picture-preview.ts`, which starts
+  `src/client/picture-worker.ts` as a module Web Worker, so the page doesn't freeze). The
+  worker decodes the file with `createImageBitmap` (EXIF orientation applied), scales it
+  on an `OffscreenCanvas` on white to the size the server draws at, and runs the shared
+  drawing code on its `getImageData()` pixels. Canvas scaling is not sharp's, so a preview
+  of the original file is close to the server's drawing but not always identical; that is
+  why it says "Preview" and the server still draws every upload. When the scaled PNG is
+  what is uploaded (nearly always), the server decodes exactly the pixels the preview was
+  drawn from, and its drawing is the preview (tested). Nothing leaves the device before
+  the form is sent (said on the privacy page). The worker imports only relative paths
+  (the import map does not apply inside workers in every browser) and nothing of Preact.
+  Timing (Chromium, this machine): a 4000 × 3000 JPEG takes about 300 ms in all
+  (decode ~45, scale ~15, draw ~150–200 ms); the same drawing in Node takes ~170–300 ms.
 - **Endless lists** (`more`, on `NextPageLink` with `list` set: `/`, `/everyone`,
   `/:username/`, `/near`, `/search`, `/people`, notifications, and "More replies" on a
   thread). When the link comes within 800 px of the screen, its URL is fetched as JSON
@@ -1258,7 +1302,15 @@ server's HTML for the same URL, and Share (`share.test.ts`): the links without
 JavaScript, the popup's links and how it closes, Copy link with and without a clipboard,
 a phone (touch emulated, `navigator.share` stubbed) sharing, cancelling and failing, a
 computer with `navigator.share`, Pinterest with the card image, cards added later, a
-profile, and a narrow screen. Contexts use reduced motion, which
+profile, and a narrow screen, and pictures drawn in the browser (`picture.test.ts`):
+the same RGBA pixels give byte-identical shapes in Node and in the browser's worker,
+the worker's URL, type and CSP, timings (printed as a test diagnostic), the profile
+picture cropped by keyboard, mouse, slider and touch (a finger, through CDP touch
+events), the mouth set by click and keys, the talking preview, nothing sent before
+Upload, one request with the PNG square and `cut`, the stored drawing equal to the
+preview, Remove, and the same without JavaScript; and the composer's preview, Remove,
+the scaled PNG sent, the server's drawing equal to the preview, and without JavaScript
+the file sent as it was. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates

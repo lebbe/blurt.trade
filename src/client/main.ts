@@ -19,6 +19,7 @@ const enhancers: Registry = {
   map: () => import('./map.ts'),
   more: () => import('./more.ts'),
   mouth: () => import('./mouth.ts'),
+  'picture-upload': () => import('./picture-upload.ts'),
   share: () => import('./share.ts'),
 }
 
