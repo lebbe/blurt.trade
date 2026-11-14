@@ -1,5 +1,4 @@
 import { h, type ComponentChildren } from 'preact'
-import htm from 'htm'
 import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import { contact, publicUrl, type Contact } from '../config.ts'
@@ -12,21 +11,10 @@ import {
   type Avatar,
   cutImageSize,
   photoUrl,
-} from '../avatar.ts'
-import { AvatarSvg, AvatarView } from './avatar.ts'
-import { renderBlurtText } from './blurt-text.ts'
-import { Icon, type IconName } from './icons.ts'
-import { pageContext } from '../page-context.ts'
-import { themes } from '../themes.ts'
-import { formatTimestamp, localeLabel, locales, timeZones } from '../timezones.ts'
-import {
-  Page,
-  preview,
-  renderDocument,
-  siteDescription,
-  UnreadBadge,
-  type PageMeta,
-} from './layout.ts'
+} from '../shared/avatar.ts'
+import { localeLabel, locales, timeZones } from '../shared/time-zones.ts'
+import { themes } from '../shared/themes.ts'
+import { Page, renderDocument, siteDescription, type PageMeta } from './layout.ts'
 import { blurtOgInput, ogHash, ogImagePath, ogProfileImagePath, profileCardText } from '../og.ts'
 import { cardColors, type CardColorId } from '../card-colors.ts'
 import {
@@ -37,19 +25,35 @@ import {
   normalizedWebUrl,
   passwordMaxLength,
   passwordMinLength,
-  reportReasonMaxLength,
   searchQueryMaxLength,
   usernameMaxLength,
-} from '../limits.ts'
+} from '../shared/limits.ts'
+import { AvatarSvg, AvatarView } from '../ui/avatar.ts'
+import { BlurtCard, Timestamp } from '../ui/blurt-card.ts'
+import { usePageContext, type Viewer } from '../ui/context.ts'
+import { Discovery, discoveryAfter, type DiscoverySection } from '../ui/discovery.ts'
+import { SubmitButton, ValidationError } from '../ui/forms.ts'
+import { html } from '../ui/html.ts'
+import { Icon, type IconName } from '../ui/icons.ts'
+import { NotificationItem, UnreadBadge } from '../ui/notifications.ts'
+import { plural, preview } from '../ui/text.ts'
+import {
+  blurtUrl,
+  deleteBlurtPath,
+  moreRepliesUrl,
+  nearPageUrl,
+  notificationsPath,
+  olderBlurtsUrl,
+  peoplePageUrl,
+  searchUrl,
+} from '../ui/urls.ts'
 import type {
   Blurt,
   FeedItem,
   FollowStats,
   InviteCode,
   Notification,
-  NotificationKind,
   NotificationSettings,
-  QuotedBlurt,
   ReportedBlurt,
   SignupLimits,
   Person,
@@ -59,28 +63,10 @@ import type {
   WaitlistEntry,
 } from '../routes/state.ts'
 
-const html = htm.bind(h)
-
 // The data each page is rendered from. A route fetches it once; it goes out as JSON as is,
-// and as HTML or Markdown through the templates (see src/negotiate.ts).
-export type Viewer = AuthenticatedUser | null
-
-// Where a discovery section's blurts come from: 'similar' are close in meaning to what the
-// viewer has blurted lately, 'nearby' from people whose location is near theirs.
-export type DiscoveryKind = 'similar' | 'nearby'
-
-export const discoveryTitles: Record<DiscoveryKind, { title: string; description: string }> = {
-  similar: { title: 'You might like', description: "Close to what you've blurted lately." },
-  nearby: { title: 'Near you', description: 'From people near where you are.' },
-}
-
-// Blurts from outside the feed, shown after the first `after` of its `blurts`.
-export type DiscoverySection = { kind: DiscoveryKind; after: number; blurts: Blurt[] }
-
-// The discovery sections that go after the feed's first `count` blurts.
-export function discoveryAfter(discovery: DiscoverySection[], count: number): DiscoverySection[] {
-  return discovery.filter((section) => section.after === count)
-}
+// and as HTML or Markdown through the templates (see src/negotiate.ts). The components
+// pages share with the browser are in src/ui/.
+export type { Viewer } from '../ui/context.ts'
 
 // `feed` says which feed `blurts` is. `hasFollowingFeed` is whether the viewer follows
 // enough accounts to get the following feed at `/` (and tabs between the two).
@@ -149,20 +135,6 @@ export type NotificationsData = {
   next: string | null
 }
 
-// What each kind says, as the actor's action: "Ada replied to your blurt". Reblurts and
-// quotes are separate rows with their own wording, and share one setting.
-export const notificationVerbs: Record<NotificationKind, string> = {
-  followed_blurt: 'blurted',
-  reply: 'replied to your blurt',
-  reblurt: 'reblurted your blurt',
-  quote: 'quoted your blurt',
-}
-
-export function notificationsPath(username: string, { read = false, before = '' } = {}): string {
-  const query = [read && 'read=1', before && `before=${before}`].filter(Boolean).join('&')
-  return `/${username}/notifications/${query ? `?${query}` : ''}`
-}
-
 // "Blurts near you". `location` is the viewer's own (null if not set: then no blurts).
 // `radius` is in km, one of `radii`. `next` is the cursor for older blurts.
 export type NearData = {
@@ -181,10 +153,6 @@ export function formatLocation({ lat, lon }: GeoPoint): string {
 
 export const gridDescription = `a ${gridDegrees}° by ${gridDegrees}° square, about ${Math.round(gridDegrees * 111)} km across`
 
-export function nearPageUrl(radius: number, next?: string): string {
-  return `/near?radius=${radius}${next ? `&before=${next}` : ''}`
-}
-
 // /search: `query` as searched for ('' before a search), matching users (first page only)
 // and blurts, newest first. `next` is the cursor for older matching blurts.
 export type SearchData = {
@@ -195,20 +163,12 @@ export type SearchData = {
   next: string | null
 }
 
-export function searchUrl(query: string, next?: string): string {
-  return `/search?q=${encodeURIComponent(query)}${next ? `&before=${next}` : ''}`
-}
-
 // /people: everyone, alphabetically. `next` is the cursor (the last username, in lower
 // case) for the following page.
 export type PeopleData = {
   viewer: Viewer
   people: Person[]
   next: string | null
-}
-
-export function peoplePageUrl(next?: string): string {
-  return next ? `/people?after=${next}` : '/people'
 }
 
 // Login has no data of its own.
@@ -326,10 +286,6 @@ ${text}</textarea>
   `
 }
 
-function ValidationError({ message }: { message?: string }) {
-  return message ? html`<p class="validation-error" role="alert">${message}</p>` : null
-}
-
 // A link that looks like a button, with an icon. `kind` '' is the main (filled) style.
 function ButtonLink({
   href,
@@ -351,20 +307,6 @@ function ButtonLink({
 // JavaScript it can become the share button of the browser or a social network.
 function ShareLink({ href }: { href: string }) {
   return html`<${ButtonLink} href=${href} icon="share" label="Share" />`
-}
-
-function SubmitButton({
-  icon,
-  label,
-  kind = '',
-}: {
-  icon: IconName
-  label: string
-  kind?: '' | 'secondary' | 'danger'
-}) {
-  return html`<button type="submit" class=${kind || undefined}>
-    <${Icon} name=${icon} /><span>${label}</span>
-  </button>`
 }
 
 // For the asides: a panel with a heading and a list of links.
@@ -734,342 +676,8 @@ function DeleteAccountPage({ viewer, inviteOnly, validationError }: DeleteAccoun
   `
 }
 
-// A deleted placeholder has no author, so it lives at /deleted/:id ('deleted' is a
-// reserved username). Its page also answers under the old author's name.
-export function blurtUrl(blurt: Pick<Blurt, 'id' | 'username'>): string {
-  return `/${blurt.username ?? 'deleted'}/${blurt.id}`
-}
-
-// The blurt a reply replies to. Its author is null when that blurt was deleted.
-export function parentUrl(blurt: Blurt): string | null {
-  return blurt.parentId === null
-    ? null
-    : blurtUrl({ id: blurt.parentId, username: blurt.parentUsername })
-}
-
-// Where the quote form for a blurt is: on its page.
-export function quoteUrl(blurt: Blurt): string {
-  return `${blurtUrl(blurt)}#quote`
-}
-
-// Logged-in viewers can plain-reblurt anyone's blurt but their own (quoting is fine), and
-// undo a reblurt they made. Placeholders take neither.
-export function reblurtAction(viewer: Viewer, blurt: Blurt): 'reblurt' | 'unreblurt' | null {
-  if (!viewer || blurt.deleted) {
-    return null
-  }
-  if (blurt.viewerReblurted) {
-    return 'unreblurt'
-  }
-  return viewer.username === blurt.username ? null : 'reblurt'
-}
-
-export function deleteBlurtPath(blurt: Blurt): string {
-  return `/api/blurts/${blurt.id}/delete`
-}
-
-// Who may do what to a blurt, in every view: its author deletes it, anyone else logged in
-// can report it. Placeholders take neither.
-export function blurtActions(viewer: Viewer, blurt: Blurt): 'delete' | 'report' | null {
-  if (!viewer || blurt.deleted) {
-    return null
-  }
-  return viewer.username === blurt.username ? 'delete' : 'report'
-}
-
-// Where the next page of each list lives. Plain links, so paging works without JS.
-export function olderBlurtsUrl(path: string, next: string): string {
-  return `${path}?before=${next}`
-}
-
-export function moreRepliesUrl(blurt: Blurt, next: string): string {
-  return `${blurtUrl(blurt)}?after=${next}`
-}
-
 function NextPageLink({ href, label }: { href: string; label: string }) {
   return html`<p class="next-page"><a href=${href} rel="next">${label}</a></p>`
-}
-
-export function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`
-}
-
-// The id of a blurt's <article>, so a like form's redirect lands back at the blurt.
-export function blurtAnchor(blurt: Blurt): string {
-  return `blurt-${blurt.id}`
-}
-
-// The count for everyone; logged-in viewers get it as a Like / Unlike button.
-function Likes({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
-  const countLabel = blurt.likeCount === 1 ? 'like' : 'likes'
-  if (!viewer) {
-    return html`<span class="action-count"
-      ><${Icon} name="heart" /><span class="like-count"
-        >${blurt.likeCount} <span class="count-label">${countLabel}</span></span
-      ></span
-    >`
-  }
-  return html`
-    <form method="post" action=${blurt.viewerLikes ? '/api/unlike' : '/api/like'} class="like-form">
-      <input type="hidden" name="blurtId" value=${blurt.id} />
-      <button
-        type="submit"
-        class="action"
-        aria-label=${blurt.viewerLikes ? 'Unlike' : 'Like'}
-        title=${blurt.viewerLikes ? 'Unlike' : 'Like'}
-        aria-pressed=${blurt.viewerLikes ? 'true' : 'false'}
-      >
-        <${Icon} name="heart" /><span>${blurt.viewerLikes ? 'Unlike' : 'Like'}</span>
-      </button>
-      <span class="like-count"
-        >${blurt.likeCount} <span class="count-label">${countLabel}</span></span
-      >
-    </form>
-  `
-}
-
-// The count for everyone; a Reblurt / Undo reblurt button where reblurtAction allows one.
-// Quoting is a link to the quote form on the blurt's page.
-function Reblurts({ blurt, viewer }: { blurt: Blurt; viewer: Viewer }) {
-  const countLabel = blurt.reblurtCount === 1 ? 'reblurt' : 'reblurts'
-  const count = html`<span class="like-count"
-    >${blurt.reblurtCount} <span class="count-label">${countLabel}</span></span
-  >`
-  const action = reblurtAction(viewer, blurt)
-  const quote =
-    viewer &&
-    html`<a href=${quoteUrl(blurt)} class="action" aria-label="Quote" title="Quote"
-      ><${Icon} name="quote" /><span>Quote</span></a
-    >`
-  if (!action) {
-    return html`<span class="action-count"><${Icon} name="reblurt" />${count}</span> ${quote}`
-  }
-  return html`
-    <form method="post" action="/api/${action}" class="like-form">
-      <input type="hidden" name="blurtId" value=${blurt.id} />
-      <button
-        type="submit"
-        class="action"
-        aria-label=${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
-        title=${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}
-        aria-pressed=${action === 'unreblurt' ? 'true' : 'false'}
-      >
-        <${Icon} name="reblurt" /><span
-          >${action === 'unreblurt' ? 'Undo reblurt' : 'Reblurt'}</span
-        >
-      </button>
-      ${count}
-    </form>
-    ${quote}
-  `
-}
-
-// In the viewer's time zone (UTC until they pick one) and the clock their browser's
-// language uses. `datetime` stays UTC.
-function Timestamp({ date }: { date: Date }) {
-  const { timeZone, locale } = pageContext()
-  return html`<time datetime=${date.toISOString()}
-    >${formatTimestamp(date, timeZone, locale)}</time
-  >`
-}
-
-// The blurt a quote quotes, under its text: one level, so a quote in it shows only its own
-// text. A deleted one says so, and nothing else.
-function QuotedCard({ quoted }: { quoted: QuotedBlurt }) {
-  if (quoted.deleted) {
-    return html`<blockquote class="quoted"><p class="empty">Content is deleted.</p></blockquote>`
-  }
-  return html`
-    <blockquote class="quoted">
-      <div class="blurt-meta">
-        <strong><a href="/${quoted.username}/">${quoted.username}</a></strong>
-        <a href=${blurtUrl(quoted)}><${Timestamp} date=${quoted.createdAt} /></a>
-      </div>
-      <p>${renderBlurtText(quoted.text ?? '')}</p>
-    </blockquote>
-  `
-}
-
-function ReplyingTo({ blurt }: { blurt: Blurt }) {
-  const url = parentUrl(blurt)
-  return (
-    url &&
-    html`<p class="replying-to">
-      Replying to <a href=${url}>${blurt.parentUsername ?? 'a deleted blurt'}</a>
-    </p>`
-  )
-}
-
-// Two clicks, no JS: the <details> opens the form, its button deletes for good.
-function DeleteForm({ blurt }: { blurt: Blurt }) {
-  return html`
-    <details class="blurt-action">
-      <summary aria-label="Delete" title="Delete">
-        <${Icon} name="trash" /><span>Delete</span>
-      </summary>
-      <form method="post" action=${deleteBlurtPath(blurt)} class="inline-form">
-        <span>Delete this blurt for good?</span>
-        <button type="submit" class="danger">Delete</button>
-      </form>
-    </details>
-  `
-}
-
-function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
-  return html`
-    <details class="blurt-action" open=${Boolean(error)}>
-      <summary aria-label="Report" title="Report">
-        <${Icon} name="flag" /><span>Report</span>
-      </summary>
-      <form method="post" action="/api/report" class="inline-form">
-        <${ValidationError} message=${error} />
-        <input type="hidden" name="blurtId" value=${blurt.id} />
-        <label>Reason (optional) <input name="reason" maxlength=${reportReasonMaxLength} /></label>
-        <button type="submit" class="danger">Report</button>
-      </form>
-    </details>
-  `
-}
-
-// `replies` are shown inline (the feed); the link below covers the rest of the thread.
-// `viewer` decides the Delete / Report actions; `reported` says the viewer already did.
-// `inThread`: shown under (or as) the blurt it replies to, so "Replying to" is left out.
-// A plain reblurt in a list is its original with "Reblurted by" on top; every button acts
-// on the original.
-function BlurtCard({
-  blurt,
-  viewer = null,
-  replies = [],
-  showActions = true,
-  inThread = false,
-  reported = false,
-  reportError,
-  sharePath,
-}: {
-  blurt: Blurt
-  viewer?: Viewer
-  replies?: Blurt[]
-  showActions?: boolean
-  inThread?: boolean
-  reported?: boolean
-  reportError?: string
-  // What Share opens: the blurt's page, or on the blurt's own page its card image.
-  sharePath?: string
-}) {
-  const hiddenReplies = blurt.replyCount - replies.length
-  const threadLink =
-    hiddenReplies <= 0
-      ? blurt.deleted
-        ? 'Thread'
-        : 'Reply'
-      : replies.length > 0
-        ? plural(hiddenReplies, 'more reply', 'more replies')
-        : plural(hiddenReplies, 'reply', 'replies')
-  const threadIcon: IconName = hiddenReplies <= 0 && !blurt.deleted ? 'reply' : 'thread'
-  const action = blurtActions(viewer, blurt)
-  const replyCards =
-    replies.length > 0 &&
-    html`<div class="replies">
-      ${replies.map((reply) => html`<${BlurtCard} blurt=${reply} viewer=${viewer} inThread />`)}
-    </div>`
-
-  if (blurt.deleted) {
-    return html`
-      <article class="blurt deleted">
-        <div class="blurt-main">
-          <div class="blurt-body">
-            <div class="blurt-meta">
-              <em>Deleted</em>
-              <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
-            </div>
-            <p class="empty">This blurt was deleted.</p>
-          </div>
-        </div>
-        ${
-          (showActions || replyCards) &&
-          html`<div class="blurt-footer">
-            ${
-              showActions &&
-              html`<div class="blurt-actions">
-                <a
-                  href=${blurtUrl(blurt)}
-                  class="action"
-                  aria-label=${threadLink}
-                  title=${threadLink}
-                  ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
-                >
-              </div>`
-            }
-            ${replyCards}
-          </div>`
-        }
-      </article>
-    `
-  }
-
-  // Two boxes. .blurt-main is what was said: avatar, nick, date, text and the picture (which
-  // runs the full width of the card). .blurt-footer is what you can do about it: actions
-  // and replies. The avatar sits on the left of odd blurts and the right of even ones (CSS).
-  return html`
-    <article class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'} id=${blurtAnchor(blurt)}>
-      <div class="blurt-main">
-        <${AvatarView} avatar=${blurt.avatar} />
-        <div class="blurt-body">
-          ${
-            blurt.reblurtedBy &&
-            html`<p class="reblurted-by">
-              Reblurted by <a href="/${blurt.reblurtedBy}/">${blurt.reblurtedBy}</a>
-            </p>`
-          }
-          ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
-          <div class="blurt-meta">
-            <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
-            <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
-          </div>
-          <p>${renderBlurtText(blurt.text ?? '')}</p>
-          ${blurt.quoted && html`<${QuotedCard} quoted=${blurt.quoted} />`}
-        </div>
-        ${
-          blurt.picture &&
-          html`<img
-            class="blurt-picture"
-            src="/pictures/${blurt.id}.svg"
-            width=${blurt.picture.width}
-            height=${blurt.picture.height}
-            alt="Picture"
-            loading="lazy"
-          />`
-        }
-      </div>
-      <div class="blurt-footer">
-        <div class="blurt-actions">
-          ${
-            showActions &&
-            html`<a
-              href=${blurtUrl(blurt)}
-              class="action"
-              aria-label=${threadLink}
-              title=${threadLink}
-              ><${Icon} name=${threadIcon} /><span>${threadLink}</span></a
-            >`
-          }
-          <${Likes} blurt=${blurt} viewer=${viewer} />
-          <${Reblurts} blurt=${blurt} viewer=${viewer} />
-          <a href=${sharePath ?? blurtUrl(blurt)} class="action" aria-label="Share" title="Share"
-            ><${Icon} name="share" /><span>Share</span></a
-          >
-          ${action === 'delete' && html`<${DeleteForm} blurt=${blurt} />`}
-          ${
-            action === 'report' &&
-            (reported
-              ? html`<span class="empty">You reported this blurt.</span>`
-              : html`<${ReportForm} blurt=${blurt} error=${reportError} />`)
-          }
-        </div>
-        ${replyCards}
-      </div>
-    </article>
-  `
 }
 
 // Related blurts, in the thread page's aside: just enough to pick one.
@@ -1080,7 +688,7 @@ function RelatedList({ blurts }: { blurts: Blurt[] }) {
         (blurt) => html`
           <li>
             <a href=${blurtUrl(blurt)}
-              >${blurt.deleted ? 'A deleted blurt' : preview(blurt.text, 90)}</a
+              >${blurt.deleted ? 'A deleted blurt' : preview(blurt.text ?? '', 90)}</a
             >
             ${blurt.username && html`<span class="tiny"> · ${blurt.username}</span>`}
           </li>
@@ -1442,7 +1050,7 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
   `
 }
 
-function TypeSelect<T extends string>({
+function TypeSelect<T extends keyof typeof avatarLabels>({
   name,
   label,
   types,
@@ -1582,7 +1190,7 @@ function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string 
 // The colour theme, saved on the account and carried in the access token (see src/themes.ts). Each choice shows a
 // strip of its colours (classes in public/style.css), so no JS is needed to preview.
 function ThemeForm() {
-  const current = pageContext().theme
+  const current = usePageContext().theme
   return html`
     <section class="panel" aria-label="Theme" id="theme">
       <h2>Theme</h2>
@@ -1610,7 +1218,7 @@ function ThemeForm() {
 
 // The time zone and language of dates and times. <select>s, so no JS is needed.
 function TimeZoneForm() {
-  const { timeZone: current, pickedLocale: locale } = pageContext()
+  const { timeZone: current, pickedLocale: locale } = usePageContext()
   return html`
     <div id="timezone">
       <p class="tiny">
@@ -1837,19 +1445,9 @@ function FeedTabs({ feed }: { feed: FeedData['feed'] }) {
   `
 }
 
-function Discovery({ section, viewer }: { section: DiscoverySection; viewer: Viewer }) {
-  const { title, description } = discoveryTitles[section.kind]
-  return html`
-    <section aria-label=${title} class="discovery">
-      <h2>${title}</h2>
-      <p class="discovery-description">${description}</p>
-      ${section.blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)}
-    </section>
-  `
-}
-
 // The feed pages' aside: shortcuts for logged-in viewers, the way in for everyone else.
 function FeedAside({ viewer }: { viewer: Viewer }) {
+  const { unreadNotifications } = usePageContext()
   if (!viewer) {
     return html`
       <section class="panel">
@@ -1873,8 +1471,8 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
         [`/${viewer.username}/`, 'Your profile'],
         [
           notificationsPath(viewer.username),
-          pageContext().unreadNotifications > 0
-            ? html`Notifications <${UnreadBadge} unread=${pageContext().unreadNotifications} />`
+          unreadNotifications > 0
+            ? html`Notifications <${UnreadBadge} unread=${unreadNotifications} />`
             : 'Notifications',
         ],
         [`/${viewer.username}/edit`, 'Edit profile, avatar and theme'],
@@ -2578,35 +2176,6 @@ function PeoplePage({ people, next }: PeopleData) {
         ${next && html`<${NextPageLink} href=${peoplePageUrl(next)} label="Next" />`}
       </section>
     <//>
-  `
-}
-
-// A line per notification, linking to the blurt and the actor's profile.
-function NotificationItem({ notification }: { notification: Notification }) {
-  const { kind, actor, avatar, blurtId, blurtUsername, text, createdAt, read, id } = notification
-  return html`
-    <article class=${read ? 'blurt notification' : 'blurt notification unread'}>
-      <div class="blurt-main">
-        <${AvatarView} avatar=${avatar} />
-        <div class="blurt-body">
-          <div class="blurt-meta">
-            <strong><a href="/${actor}/">${actor}</a></strong>
-            <span>${notificationVerbs[kind]}</span>
-            <a href="/${blurtUsername}/${blurtId}"><${Timestamp} date=${createdAt} /></a>
-          </div>
-          ${text !== null && html`<p><a href="/${blurtUsername}/${blurtId}">${preview(text, 140)}</a></p>`}
-        </div>
-      </div>
-      ${
-        !read &&
-        html`<div class="blurt-footer">
-          <form method="post" action="/api/notifications/read" class="blurt-actions">
-            <input type="hidden" name="id" value=${id} />
-            <${SubmitButton} icon="check" label="Mark as read" kind="secondary" />
-          </form>
-        </div>`
-      }
-    </article>
   `
 }
 

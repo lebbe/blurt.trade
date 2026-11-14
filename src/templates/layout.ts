@@ -1,18 +1,18 @@
-import { h, type ComponentChildren } from 'preact'
-import htm from 'htm'
+import { h, type ComponentChildren, type VNode } from 'preact'
 import { renderToString } from 'preact-render-to-string'
 import { publicUrl } from '../config.ts'
-import { searchQueryMaxLength } from '../limits.ts'
 import { pageContext } from '../page-context.ts'
-import { criticalCss, themeStylesheetUrl } from '../themes.ts'
-import { Icon, type IconName } from './icons.ts'
+import { searchQueryMaxLength } from '../shared/limits.ts'
+import { criticalCss, themeStylesheetUrl } from '../shared/themes.ts'
+import { PageContextValue, usePageContext, type PageContext } from '../ui/context.ts'
+import { html } from '../ui/html.ts'
+import { Icon, type IconName } from '../ui/icons.ts'
+import { UnreadBadge } from '../ui/notifications.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
 // preview tags, canonical link and stylesheets, then the page (framed by Page) and the footer.
 // Depends on nothing route-specific, so error handlers (src/negotiate.ts, src/logging.ts)
 // can render pages without importing the routes.
-
-const html = htm.bind(h)
 
 export const siteName = 'blurt.trade'
 export const siteDescription = 'Say the thing. Regret it later.'
@@ -45,24 +45,12 @@ export type PageMeta = {
   }
 }
 
-// Text for a title or description: whitespace collapsed, at most `max` characters (code
-// points, so an emoji is never cut in half), with an ellipsis when cut.
-export function preview(text: string, max: number): string {
-  const chars = [...text.replace(/\s+/g, ' ').trim()]
-  return chars.length <= max
-    ? chars.join('')
-    : `${chars
-        .slice(0, max - 1)
-        .join('')
-        .trimEnd()}…`
-}
-
 function Head({ meta }: { meta: PageMeta }) {
   const origin = publicUrl()
   const title = meta.title ? `${meta.title} · ${siteName}` : siteName
   const canonical = meta.canonical && `${origin}${meta.canonical}`
   const share = meta.share
-  const { theme } = pageContext()
+  const { theme } = usePageContext()
   const themeUrl = themeStylesheetUrl(theme)
   return html`
     <head>
@@ -129,12 +117,11 @@ function SiteSearch() {
   `
 }
 
-type NavItem = { href: string; label: string; icon: IconName; current: boolean }
+type NavItem = { href: string; label: string; icon: IconName; current: boolean; badge?: number }
 
 // Every destination, on every page, always visible: no menus to open. Logged-in viewers
 // get their profile and settings; everyone else the way in.
-function navItems(): NavItem[] {
-  const { viewer, isAdmin, path, unreadNotifications } = pageContext()
+function navItems({ viewer, isAdmin, path, unreadNotifications }: PageContext): NavItem[] {
   const item = (
     href: string,
     label: string,
@@ -183,23 +170,12 @@ function navItems(): NavItem[] {
   ]
 }
 
-// "32", or "99+" past the cap (unreadCap in src/routes/state.ts): the notification count.
-export function unreadLabel(unread: number): string {
-  return unread > 99 ? '99+' : String(unread)
-}
-
-// The count as a small pill in the theme's --warn colour. Screen readers get "3 unread"
-// instead of the bare number.
-export function UnreadBadge({ unread }: { unread: number }) {
-  return html`<span class="badge" aria-hidden="true">${unreadLabel(unread)}</span
-    ><span class="visually-hidden">${unreadLabel(unread)} unread</span>`
-}
-
 function TopNav() {
-  const { viewer } = pageContext()
+  const context = usePageContext()
+  const { viewer } = context
   return html`
     <nav class="top-nav" aria-label="Main">
-      ${navItems().map(
+      ${navItems(context).map(
         ({ href, label, icon, current, badge }) =>
           html`<a href=${href} aria-current=${current ? 'page' : undefined}
             ><${Icon} name=${icon} /><span>${label}</span
@@ -285,18 +261,23 @@ function Footer() {
 }
 
 // The doctype is added here as a string: htm has no syntax for it, and inside a template
-// it would come out as the text "!doctype html" in the body.
+// it would come out as the text "!doctype html" in the body. The request's page context
+// goes in at the root, so every component below reads it with usePageContext().
 export function renderDocument(page: ComponentChildren, meta: PageMeta = {}): string {
   return (
     '<!doctype html>' +
-    renderToString(html`
-      <html lang="en">
-        <${Head} meta=${meta} />
-        <body>
-          <div class="shell">${page} <${Footer} /></div>
-        </body>
-      </html>
-    `)
+    renderToString(
+      html`
+        <${PageContextValue.Provider} value=${pageContext()}>
+          <html lang="en">
+            <${Head} meta=${meta} />
+            <body>
+              <div class="shell">${page} <${Footer} /></div>
+            </body>
+          </html>
+        <//>
+      ` as VNode,
+    ) // one root element, so never an array
   )
 }
 

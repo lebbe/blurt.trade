@@ -1,8 +1,7 @@
-import { h, type ComponentChildren } from 'preact'
-import htm from 'htm'
-import { normalizedWebUrl } from '../limits.ts'
+import type { ComponentChildren } from 'preact'
+import { html } from './html.ts'
+import { normalizedWebUrl } from '../shared/limits.ts'
 
-const html = htm.bind(h)
 const tokens = /\[([^\]\n]*)\]\(([^)\n]*)\)|https?:\/\/[^\s<>"']+/gi
 const safeLinkAttributes = {
   rel: 'noreferrer noopener nofollow ugc',

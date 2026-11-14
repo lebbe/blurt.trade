@@ -12,7 +12,8 @@ One path per resource. The `Accept` header picks the representation, not the URL
 Each GET route fetches its data once and hands it to `represent()` in
 `src/negotiate.ts`, which sends it as JSON or renders it with the page's HTML template
 (`src/templates/index.ts`) or Markdown template (`src/templates/pages.md.ts`). Responses
-carry `Vary: Accept`.
+carry `Vary: Accept`. The components the pages share and that a browser could run too
+(see Shared components) are in `src/ui/`.
 
 HTML responses carry `Link: <url>; rel="alternate"; type="text/markdown"` for the same
 URL. `/llms.txt` (llmstxt.org format, in `src/routes/crawl.ts`) describes this to
@@ -505,7 +506,7 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
 
 Every profile has a cartoon face instead of a profile picture, in the style of Terrance
 and Phillip: the whole top of the head flaps up and down when it talks. Code in
-`src/avatar.ts` (the data, palettes, validation) and `src/templates/avatar.ts` (the SVG).
+`src/shared/avatar.ts` (the data and palettes), `src/avatar.ts` (validation, random avatars) and `src/ui/avatar.ts` (the SVG).
 
 - `avatar` is `{ headWidth, skin, hairType, hairColor, eyeType, eyeColor, pupilColor,
   toothType, toothColor }`, stored as JSON in `user_profiles.avatar`. Colours are lower-case
@@ -575,7 +576,7 @@ the same SVG.
 
 ## Themes
 
-Five colour themes, picked on the profile edit page (`#theme`), listed in `src/themes.ts`.
+Five colour themes, picked on the profile edit page (`#theme`), listed in `src/shared/themes.ts`.
 The default, Cobalt Quietude (`defaultTheme`), is `public/style.css` itself: the variables
 at the top, its grid background and uppercase navigation. Each other theme is a small
 stylesheet in `public/themes/` that overrides those (and adds touches of its own, like
@@ -587,7 +588,7 @@ preview.
 - The pick is saved on the account, in `user_profiles.theme` (`NULL` until the user picks
   one: they get `defaultTheme`, whatever it is at the time; a `CHECK` lists the ids, so a
   new theme needs a migration too). `POST /api/theme` with
-  `theme` (one of the ids in `src/themes.ts`; anything else is a 400) saves it.
+  `theme` (one of the ids in `src/shared/themes.ts`; anything else is a 400) saves it.
 - Pages get it from the access token, not the database: login and every token refresh
   read the theme in the same query they already make, and put it in the access token
   next to the username (see Sessions). `POST /api/theme` reissues this browser's access
@@ -596,7 +597,9 @@ preview.
 - Every request runs in a page context (`src/page-context.ts`, set in `src/server.ts`
   after `authenticate`) with the viewer, the path and the theme, so the frame of every
   page (`Page` in `src/templates/layout.ts`: header, navigation, footer) and the
-  stylesheet links need nothing from the route.
+  stylesheet links need nothing from the route. `renderDocument` hands it to the
+  components through a Preact context (`src/ui/context.ts`, read with `usePageContext()`);
+  only the Markdown views read `pageContext()` directly.
 
 ## Sign-up limits
 
@@ -744,7 +747,8 @@ GET it is the query parameter (`before`, `after`, `radius`, `username`, `invite`
 
 ## Input limits
 
-Everything a client sends is bounded, in `src/limits.ts`. Input over a limit is rejected
+Everything a client sends is bounded, in `src/shared/limits.ts` (the numbers, and the
+web address check) and `src/limits.ts` (the zod schemas). Input over a limit is rejected
 with a 400 naming the field (see Errors), never silently truncated. Text is trimmed
 first, then counted in characters (code points, like Postgres' `char_length()`: an emoji
 is one), not bytes. The forms carry the same limits as `maxlength`.
@@ -798,12 +802,12 @@ responses.
   manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
 - **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
   at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see
-  Themes); icons are inline SVG (`src/templates/icons.ts`), not an icon font. Both are
+  Themes); icons are inline SVG (`src/ui/icons.ts`), not an icon font. Both are
   cached with ETag/conditional requests (`If-None-Match` /
   `304 Not Modified`) via the static file handler in `src/server.ts`. Pages link it and never use `style="..."`: a per-element value goes in an SVG
   attribute (the map marker is a `<circle cx cy>`) or a class. A test checks every page.
 - **One inline `<style>`, allowed by hash.** Each page inlines its theme's above-the-fold
-  CSS (`criticalCss` in `src/themes.ts`, at most 15 lines: the colours, the page frame and
+  CSS (`criticalCss` in `src/shared/themes.ts`, at most 15 lines: the colours, the page frame and
   the sizes of the inline SVGs), so a slow connection shows a dark, laid-out page instead
   of a white flash while the stylesheets load. The CSP allows exactly those blocks by
   their SHA-256 hashes, computed at startup, never `'unsafe-inline'`. Change the CSS
@@ -869,6 +873,24 @@ file's exclude list.
 - A POST that costs CPU or can be spammed gets a `rateLimit()` (see Rate limits).
 - No inline `<style>` (beyond the hashed above-the-fold CSS), `style="..."` or scripts: the CSP blocks them (see Security
   headers).
+
+## Shared components
+
+The components that more than one page uses, and that a browser could run as they are,
+live in `src/ui/`: the blurt card (`blurt-card.ts`: likes, reblurts, timestamps, quoted
+blurts, delete and report forms), avatars, icons, blurt text with its links, discovery
+sections, notification items, the unread badge and the URL helpers (`urls.ts`). Pages
+stay in `src/templates/`. Everything is written with htm (`html` from `src/ui/html.ts`,
+`htm.bind(h)`), so it needs no build step.
+
+`src/ui/` and `src/shared/` (the data those components need: limits, time zones and
+timestamps, themes, avatar parts) must not import anything that only runs on the server:
+no `node:*`, `zod`, `tz-lookup`, `express`, `pg`, `src/config.ts`, `src/page-context.ts`
+or `src/routes/`, except `import type`, which is erased. What they need from the request
+comes in through the page context (`usePageContext()`) or the data; what needs the
+server is worked out before rendering (the share card URL, for example, is made by the
+blurt page in `src/templates/index.ts`). oxlint's `no-restricted-imports`
+(`.oxlintrc.json`) and `test/isomorphic.test.ts` (which walks the import graph) enforce it.
 
 ## Markdown templates
 
