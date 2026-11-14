@@ -102,6 +102,10 @@ type RefreshClaims = { userId: number; sessionId: string; generation: number }
 
 // Filled in by `authenticate` for each request that carries a valid session.
 const sessions = new WeakMap<Request, Session>()
+// When the access token the request was authenticated with runs out (ms since the epoch):
+// the verified `exp` claim, or for a token refreshed on the way, the new one's. Kept apart
+// from Session, which is also what new tokens are signed from.
+const accessTokenExpiries = new WeakMap<Request, number>()
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -153,21 +157,28 @@ function isDeletedSession(sessionId: string, now = Date.now()): boolean {
   return until !== undefined
 }
 
-async function verifyAccessToken(token: unknown): Promise<Session | undefined> {
+async function verifyAccessToken(
+  token: unknown,
+): Promise<{ session: Session; expiresAt: number } | undefined> {
   const payload = await verifyJwt(token, accessKey)
   const id = payload && userIdFrom(payload)
   return id !== undefined &&
     typeof payload?.username === 'string' &&
     typeof payload.sid === 'string' &&
+    // jwtVerify has checked it is in the future.
+    typeof payload.exp === 'number' &&
     !isDeletedSession(payload.sid)
     ? {
-        user: { id, username: payload.username },
-        sessionId: payload.sid,
-        theme: isTheme(payload.theme) ? payload.theme : defaultTheme,
-        timeZone: timeZoneOrDefault(payload.tz),
-        locale: isLocale(payload.lc) ? payload.lc : null,
-        // Only `false` turns it off, so tokens from before the setting existed mean on.
-        javascript: payload.js !== false,
+        session: {
+          user: { id, username: payload.username },
+          sessionId: payload.sid,
+          theme: isTheme(payload.theme) ? payload.theme : defaultTheme,
+          timeZone: timeZoneOrDefault(payload.tz),
+          locale: isLocale(payload.lc) ? payload.lc : null,
+          // Only `false` turns it off, so tokens from before the setting existed mean on.
+          javascript: payload.js !== false,
+        },
+        expiresAt: payload.exp * 1000,
       }
     : undefined
 }
@@ -337,9 +348,13 @@ async function resolveSession(
   response: Response,
 ): Promise<Session | undefined | 'refused'> {
   const cookies = (request.cookies ?? {}) as Record<string, unknown>
-  const session = await verifyAccessToken(cookies[accessTokenCookie])
-  if (session || cookies[refreshTokenCookie] === undefined) {
-    return session
+  const verified = await verifyAccessToken(cookies[accessTokenCookie])
+  if (verified) {
+    accessTokenExpiries.set(request, verified.expiresAt)
+    return verified.session
+  }
+  if (cookies[refreshTokenCookie] === undefined) {
+    return undefined
   }
   if (isSpeculative(request)) {
     return 'refused'
@@ -351,6 +366,8 @@ async function resolveSession(
     clearSessionCookies(response)
     return undefined
   }
+  // Taken before signing, so it is never later than the new token's own `exp`.
+  accessTokenExpiries.set(request, Date.now() + accessTokenSeconds * 1000)
   await setSessionCookies(response, refreshed.session, {
     generation: refreshed.generation,
     persistent: refreshed.persistent,
@@ -414,9 +431,13 @@ export function getSessionId(request: Request): string | null {
   return sessions.get(request)?.sessionId ?? null
 }
 
-// How long an access token lasts; also how long a live-update stream stays open before
-// the browser reconnects with fresh tokens (src/events.ts).
-export const accessTokenLifetimeMs = accessTokenSeconds * 1000
+// When the access token this request was authenticated with runs out (ms since the
+// epoch), or undefined for anonymous requests. A live-update stream (src/events.ts) closes
+// by then, so it never outlives the login it was opened with by more than the token does:
+// after a logout everywhere, it stops within the same window as the pages.
+export function getAccessTokenExpiry(request: Request): number | undefined {
+  return sessions.has(request) ? accessTokenExpiries.get(request) : undefined
+}
 
 export const requireAuth: RequestHandler = (
   request: Request,

@@ -4,7 +4,15 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import pg from 'pg'
 import { app } from '../src/server.ts'
-import { closeEventStreams, listenerReady, maxStreamsPerUser, streamCount } from '../src/events.ts'
+import { hkdfSync } from 'node:crypto'
+import { decodeJwt, SignJWT } from 'jose'
+import {
+  closeDelay,
+  closeEventStreams,
+  listenerReady,
+  maxStreamsPerUser,
+  streamCount,
+} from '../src/events.ts'
 import { listenDatabaseUrl } from '../src/db.ts'
 import { blurtIdByText, createSession, request, testMigrationDatabaseUrl } from './helpers.ts'
 
@@ -258,4 +266,34 @@ test('the listener connects straight to PostgreSQL, not through PgBouncer', () =
     }),
     'postgres://l',
   )
+})
+
+test('a stream ends when the access token it was opened with runs out, not a lifetime later', async () => {
+  const lars = await createSession('Lars')
+  // An access token for the same session that runs out in two seconds, signed with the
+  // same key the app derives (src/middleware/auth.ts) from the development secret.
+  const token = lars.slice(lars.indexOf('=') + 1)
+  const claims = decodeJwt(token)
+  const key = new Uint8Array(
+    hkdfSync('sha256', 'development-only-secret', 'blurt.trade', 'access token', 32),
+  )
+  const expiring = await new SignJWT({ ...claims, exp: Math.floor(Date.now() / 1000) + 2 })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .sign(key)
+  const stream = await openStream(`${lars.slice(0, lars.indexOf('='))}=${expiring}`)
+  assert.equal(stream.status, 200)
+  await stream.next('unread')
+  const until = Date.now() + 4000
+  while (streamCount() > 0 && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  stream.close()
+  assert.equal(streamCount(), 0, 'the stream outlived its access token')
+})
+
+test('the close is jittered only ever earlier, never past the token', () => {
+  assert.equal(closeDelay(300_000, 0), 300_000)
+  assert.equal(closeDelay(300_000, 1), 290_000)
+  assert.equal(closeDelay(2000, 1), 1800)
+  assert.equal(closeDelay(-5, 0.5), 0)
 })

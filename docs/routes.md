@@ -522,7 +522,8 @@ nothing asks for it and everything is as above: the count refreshes with the pag
   then the feed's first page is fetched as JSON and the newer blurts are rendered on top
   with the shared card (as endless scrolling does), focus on the first. If none of the
   page's blurts is on the first page any more, the page is loaded instead.
-- **Lifetime.** A stream ends after the access token's lifetime (5 minutes, plus jitter),
+- **Lifetime.** A stream ends when the access token it was opened with runs out (at most
+  5 minutes; a little earlier, at random, so tabs don't reconnect together, never later),
   and the browser reconnects, refreshing its tokens on the way, so a logged-out or
   revoked session stops getting updates as soon as its pages would. The page closes it on
   `pagehide` and opens it again on `pageshow` (an open connection keeps a page out of the

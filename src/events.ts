@@ -47,6 +47,14 @@ type Stream = {
 
 const streams = new Map<number, Set<Stream>>()
 
+// How long before closing a stream whose token runs out in `remainingMs`. A little jitter,
+// so tabs opened together don't all reconnect together, but only ever earlier: up to a
+// tenth of what is left, at most 10 s, never past the token's expiry.
+export function closeDelay(remainingMs: number, random = Math.random()): number {
+  const remaining = Math.max(0, remainingMs)
+  return Math.floor(remaining - random * Math.min(10_000, remaining / 10))
+}
+
 export function streamCount(userId?: number): number {
   if (userId !== undefined) {
     return streams.get(userId)?.size ?? 0
@@ -63,11 +71,12 @@ function write(stream: Stream, event: string, data: unknown): void {
 }
 
 // Starts the stream on `response`, which the route has checked is a logged-in user's
-// with room for one more. It ends when the browser goes away, after `lifetimeMs` (the
-// browser then reconnects, refreshing its tokens on the way, so a logged-out or revoked
-// session stops getting updates as soon as its pages would), or at closeEventStreams().
+// with room for one more. It ends when the browser goes away, by `expiresAt` (ms since the
+// epoch: when the access token it was opened with runs out; the browser then reconnects,
+// refreshing its tokens on the way, so a logged-out or revoked session stops getting
+// updates as soon as its pages would), or at closeEventStreams().
 // Returns false when the user already has maxStreamsPerUser here.
-export function openEventStream(userId: number, response: Response, lifetimeMs: number): boolean {
+export function openEventStream(userId: number, response: Response, expiresAt: number): boolean {
   const own = streams.get(userId) ?? new Set<Stream>()
   if (own.size >= maxStreamsPerUser) {
     return false
@@ -91,8 +100,7 @@ export function openEventStream(userId: number, response: Response, lifetimeMs: 
   streams.set(userId, own)
   stream.timers.push(
     setInterval(() => response.write(': ping\n\n'), heartbeatMs),
-    // A little jitter, so tabs opened together don't all reconnect together.
-    setTimeout(() => response.end(), lifetimeMs + Math.floor(Math.random() * 10_000)),
+    setTimeout(() => response.end(), closeDelay(expiresAt - Date.now())),
   )
   const done = () => {
     for (const timer of stream.timers) {
