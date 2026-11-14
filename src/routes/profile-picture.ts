@@ -11,14 +11,14 @@ import {
 } from '../negotiate.ts'
 import { decodeShapes, pictureSvg } from '../picture.ts'
 import { drawUpload, uploadPicture } from './picture-upload.ts'
+import { getNotificationSettings } from './state/notifications.ts'
 import {
   getLocation,
-  getNotificationSettings,
   getProfilePicture,
   getUserProfileByUsername,
   setPictureCut,
   setProfilePicture,
-} from './state.ts'
+} from './state/profiles.ts'
 import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'
 
 export const profilePictureRouter = Router()

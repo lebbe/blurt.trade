@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
-import { getUserProfileByUsername } from '../src/routes/state.ts'
+import { getUserProfileByUsername } from '../src/routes/state/profiles.ts'
 import { renderProfilePage } from '../src/pages/profile/profile.html.ts'
 import { createSession, json, request } from './helpers.ts'
 

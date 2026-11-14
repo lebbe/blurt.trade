@@ -1,6 +1,6 @@
 import { pageContext } from '../../page-context.ts'
 import { code, link, type Markdown, md, raw } from './markdown.ts'
-import type { Blurt, QuotedBlurt } from '../../routes/state.ts'
+import type { Blurt, QuotedBlurt } from '../../routes/state/blurts.ts'
 import type { Viewer } from '../../ui/context.ts'
 import { plural } from '../../ui/text.ts'
 import { blurtUrl, parentUrl } from '../../ui/urls.ts'

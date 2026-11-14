@@ -23,7 +23,7 @@ import { encodeShapes, pictureFromUpload } from '../src/picture.ts'
 import { createCanvas } from '@napi-rs/canvas'
 import { renderBlurtPage } from '../src/pages/blurt/blurt.html.ts'
 import { AvatarSvg } from '../src/ui/avatar.ts'
-import type { Blurt } from '../src/routes/state.ts'
+import type { Blurt } from '../src/routes/state/blurts.ts'
 
 const avatar = {
   headWidth: 'regular' as const,

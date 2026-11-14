@@ -1,5 +1,6 @@
 import type { AuthenticatedUser } from '../../middleware/auth.ts'
-import type { ReportedBlurt, SignupLimits } from '../../routes/state.ts'
+import type { ReportedBlurt } from '../../routes/state/moderation.ts'
+import type { SignupLimits } from '../../routes/state/signup.ts'
 
 // The admin pages: /admin and /admin/reports: the data the pages are rendered from. The
 // route fetches it once; it goes out as JSON as is, as HTML through admin.html.ts and as

@@ -188,19 +188,19 @@ migrations run as the normal app user.
 
 ## Tables
 
-| table               | contents                                                          |
-| ------------------- | ----------------------------------------------------------------- |
-| `users`             | `id`, `username` (unique), `password_hash` (Argon2id), `deleted_at` |
+| table               | contents                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `users`             | `id`, `username` (unique), `password_hash` (Argon2id), `deleted_at`                                                 |
 | `user_profiles`     | one row per user: homepage, social handles, bio, `location`, settings (`theme`, `timezone`, `locale`, `javascript`) |
-| `blurts`            | `user_id`, `text`, `parent_id` (reply), `reblurt_of_id`, `embedding` |
-| `blurt_stats`       | counters per blurt: `like_count`, `reblurt_count`                 |
-| `follows`           | `user_id` follows `followed_user_id`                              |
-| `likes`             | `user_id` likes `blurt_id` (`blurt_stats.like_count` is the count) |
-| `sessions`          | one row per login: refresh token generation, last use, revoked    |
-| `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`      |
-| `waitlist`          | usernames that asked to be let in while sign-up was full          |
-| `invite_codes`      | single-use sign-up codes: owner `user_id`, `used_by_user_id`      |
-| `retired_usernames` | usernames of deleted accounts, lower case, nothing else           |
+| `blurts`            | `user_id`, `text`, `parent_id` (reply), `reblurt_of_id`, `embedding`                                                |
+| `blurt_stats`       | counters per blurt: `like_count`, `reblurt_count`                                                                   |
+| `follows`           | `user_id` follows `followed_user_id`                                                                                |
+| `likes`             | `user_id` likes `blurt_id` (`blurt_stats.like_count` is the count)                                                  |
+| `sessions`          | one row per login: refresh token generation, last use, revoked                                                      |
+| `signup_counter`    | exactly one row: sign-ups so far, `soft_limit`, `hard_limit`                                                        |
+| `waitlist`          | usernames that asked to be let in while sign-up was full                                                            |
+| `invite_codes`      | single-use sign-up codes: owner `user_id`, `used_by_user_id`                                                        |
+| `retired_usernames` | usernames of deleted accounts, lower case, nothing else                                                             |
 
 `user_id` appears in every table as the future sharding key (see architecture.md).
 `sessions` is an ordinary (logged) table, so logins survive a crash and reach the

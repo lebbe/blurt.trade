@@ -34,7 +34,9 @@ import { profilePageMarkdown } from '../src/pages/profile/profile.md.ts'
 import { searchMarkdown } from '../src/pages/search/search.md.ts'
 import { deleteAccountMarkdown, settingsMarkdown } from '../src/pages/settings/settings.md.ts'
 import type { Avatar } from '../src/avatar.ts'
-import type { Blurt, FeedItem, Notification, UserProfile } from '../src/routes/state.ts'
+import type { Blurt, FeedItem } from '../src/routes/state/blurts.ts'
+import type { Notification } from '../src/routes/state/notifications.ts'
+import type { UserProfile } from '../src/routes/state/profiles.ts'
 
 // Every page, as HTML and as Markdown, rendered from fixed data in a fixed page context and
 // compared byte for byte with the files in test/snapshots/. It pins the output of the

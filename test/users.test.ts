@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
 import { app } from '../src/server.ts'
-import { getUserByUsername } from '../src/routes/state.ts'
+import { getUserByUsername } from '../src/routes/state/accounts.ts'
 import { reservedUsernames } from '../src/routes/users.ts'
 import { countBlurts, createSession, request } from './helpers.ts'
 

@@ -1,5 +1,5 @@
 import type { CardColorId } from '../../card-colors.ts'
-import type { Blurt } from '../../routes/state.ts'
+import type { Blurt } from '../../routes/state/blurts.ts'
 import type { Viewer } from '../../ui/context.ts'
 
 // A blurt page (/:username/:id) and its thread: the data the pages are rendered from. The

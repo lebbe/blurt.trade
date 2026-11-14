@@ -3,7 +3,7 @@ import { clearSessionCookies, requireAuth, setSessionTheme } from '../middleware
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { sendError, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import { isTheme } from '../themes.ts'
-import { setTheme } from './state.ts'
+import { setTheme } from './state/profiles.ts'
 
 export const themeRouter = Router()
 

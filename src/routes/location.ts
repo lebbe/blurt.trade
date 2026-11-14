@@ -4,16 +4,15 @@ import { clearSessionCookies, requireAuth, setSessionTime } from '../middleware/
 import { timeZoneAt } from '../timezones.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError, sendFormErrors, sendFormSuccess, wantsJson } from '../negotiate.ts'
+import { markViewerFlags, parseCursor } from './state/blurts.ts'
+import { listNearbyBlurts } from './state/feeds.ts'
+import { getNotificationSettings } from './state/notifications.ts'
 import {
   getLocation,
-  getNotificationSettings,
   getUserProfileByUsername,
-  listNearbyBlurts,
-  markViewerFlags,
-  parseCursor,
   setLocation,
   setTimeSettings,
-} from './state.ts'
+} from './state/profiles.ts'
 import { renderNearPage } from '../pages/near/near.html.ts'
 import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'
 import { nearMarkdown } from '../pages/near/near.md.ts'

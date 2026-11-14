@@ -1,4 +1,4 @@
-import type { Person } from '../../routes/state.ts'
+import type { Person } from '../../routes/state/profiles.ts'
 import type { Viewer } from '../../ui/context.ts'
 
 // Everyone on the site (/people): the data the pages are rendered from. The route fetches

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { sendError } from '../negotiate.ts'
 import { pictureSvg } from '../picture.ts'
-import { getPictureShapes } from './state.ts'
+import { getPictureShapes } from './state/blurts.ts'
 
 export const picturesRouter = Router()
 

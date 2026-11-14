@@ -1,4 +1,5 @@
-import type { NotificationSettings, UserProfile } from '../../routes/state.ts'
+import type { NotificationSettings } from '../../routes/state/notifications.ts'
+import type { UserProfile } from '../../routes/state/profiles.ts'
 import type { GeoPoint } from '../../shared/geo.ts'
 import type { Viewer } from '../../ui/context.ts'
 

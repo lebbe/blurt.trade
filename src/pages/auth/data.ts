@@ -1,4 +1,4 @@
-import type { SignupState, WaitlistEntry } from '../../routes/state.ts'
+import type { SignupState, WaitlistEntry } from '../../routes/state/signup.ts'
 import type { Viewer } from '../../ui/context.ts'
 
 // Logging in and signing up: /login, /signup and /waitlist: the data the pages are rendered

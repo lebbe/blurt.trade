@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
 import { embedPendingBlurts } from '../src/embeddings.ts'
-import { deleteStaleReblurts } from '../src/routes/state.ts'
+import { deleteStaleReblurts } from '../src/routes/state/blurts.ts'
 import {
   blurtIdByText,
   blurtRow,

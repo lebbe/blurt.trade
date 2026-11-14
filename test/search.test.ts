@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
-import { blurtSearchWhere, deleteBlurts } from '../src/routes/state.ts'
+import { deleteBlurts } from '../src/routes/state/blurts.ts'
+import { blurtSearchWhere } from '../src/routes/state/feeds.ts'
 import {
   blurtIdByText,
   collectLogs,

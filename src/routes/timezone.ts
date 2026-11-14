@@ -4,7 +4,7 @@ import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { sendError, sendFormSuccess, wantsJson } from '../negotiate.ts'
 import { pageContext } from '../page-context.ts'
 import { isLocale, isTimeZone, localeFrom } from '../timezones.ts'
-import { setTimeSettings } from './state.ts'
+import { setTimeSettings } from './state/profiles.ts'
 
 export const timeZoneRouter = Router()
 

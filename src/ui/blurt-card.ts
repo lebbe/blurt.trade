@@ -9,7 +9,7 @@ import { plural } from './text.ts'
 import { blurtAnchor, blurtUrl, deleteBlurtPath, parentUrl, quoteUrl } from './urls.ts'
 import { reportReasonMaxLength } from '../shared/limits.ts'
 import { formatTimestamp } from '../shared/time-zones.ts'
-import type { Blurt, QuotedBlurt } from '../routes/state.ts'
+import type { Blurt, QuotedBlurt } from '../routes/state/blurts.ts'
 
 // A blurt as a card, the same in every list: who said it and when, what they said (with
 // its picture and the blurt it quotes), and what the viewer can do about it.

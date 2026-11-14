@@ -329,7 +329,7 @@ test('read notifications are pruned after a while, unread ones are kept', async 
     `UPDATE notifications SET read_at = now() - interval '1 day' WHERE id IN (
        SELECT id FROM notifications ORDER BY id OFFSET 1 LIMIT 1)`,
   )
-  const { pruneNotifications } = await import('../src/routes/state.ts')
+  const { pruneNotifications } = await import('../src/routes/state/notifications.ts')
   assert.equal(await pruneNotifications(), 1)
   assert.equal((await notifications()).length, 2)
 })
