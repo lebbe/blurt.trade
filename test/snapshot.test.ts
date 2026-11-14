@@ -4,47 +4,35 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { clientBuild } from '../src/client-modules.ts'
 import { runWithPageContext, type PageContext } from '../src/page-context.ts'
-import { renderErrorPage } from '../src/templates/layout.ts'
+import { renderErrorPage } from '../src/pages/error/error.html.ts'
+import { renderAdminReportsPage, renderAdminToolsPage } from '../src/pages/admin/admin.html.ts'
 import {
-  renderAboutPage,
-  renderAdminReportsPage,
-  renderAdminToolsPage,
-  renderBlurtPage,
   renderCreateUserPage,
-  renderDeleteAccountPage,
-  renderFeedPage,
   renderLoginPage,
-  renderNearPage,
-  renderNotificationsPage,
-  renderPeoplePage,
-  renderPrivacyPage,
-  renderProfileEditPage,
-  renderProfilePage,
-  renderSearchPage,
-  renderSettingsPage,
-  renderTermsPage,
   renderWaitlistPage,
-} from '../src/templates/index.ts'
-import {
-  aboutMarkdown,
-  adminReportsMarkdown,
-  adminToolsMarkdown,
-  blurtPageMarkdown,
-  createUserMarkdown,
-  deleteAccountMarkdown,
-  feedMarkdown,
-  loginMarkdown,
-  nearMarkdown,
-  notificationsMarkdown,
-  peopleMarkdown,
-  privacyMarkdown,
-  profileEditMarkdown,
-  profilePageMarkdown,
-  searchMarkdown,
-  settingsMarkdown,
-  termsMarkdown,
-  waitlistMarkdown,
-} from '../src/templates/pages.md.ts'
+} from '../src/pages/auth/auth.html.ts'
+import { renderBlurtPage } from '../src/pages/blurt/blurt.html.ts'
+import { renderFeedPage } from '../src/pages/feed/feed.html.ts'
+import { renderAboutPage, renderPrivacyPage, renderTermsPage } from '../src/pages/info/info.html.ts'
+import { renderNearPage } from '../src/pages/near/near.html.ts'
+import { renderNotificationsPage } from '../src/pages/notifications/notifications.html.ts'
+import { renderPeoplePage } from '../src/pages/people/people.html.ts'
+import { renderProfileEditPage } from '../src/pages/profile-edit/profile-edit.html.ts'
+import { renderProfilePage } from '../src/pages/profile/profile.html.ts'
+import { renderSearchPage } from '../src/pages/search/search.html.ts'
+import { renderDeleteAccountPage, renderSettingsPage } from '../src/pages/settings/settings.html.ts'
+import { adminReportsMarkdown, adminToolsMarkdown } from '../src/pages/admin/admin.md.ts'
+import { createUserMarkdown, loginMarkdown, waitlistMarkdown } from '../src/pages/auth/auth.md.ts'
+import { blurtPageMarkdown } from '../src/pages/blurt/blurt.md.ts'
+import { feedMarkdown } from '../src/pages/feed/feed.md.ts'
+import { aboutMarkdown, privacyMarkdown, termsMarkdown } from '../src/pages/info/info.md.ts'
+import { nearMarkdown } from '../src/pages/near/near.md.ts'
+import { notificationsMarkdown } from '../src/pages/notifications/notifications.md.ts'
+import { peopleMarkdown } from '../src/pages/people/people.md.ts'
+import { profileEditMarkdown } from '../src/pages/profile-edit/profile-edit.md.ts'
+import { profilePageMarkdown } from '../src/pages/profile/profile.md.ts'
+import { searchMarkdown } from '../src/pages/search/search.md.ts'
+import { deleteAccountMarkdown, settingsMarkdown } from '../src/pages/settings/settings.md.ts'
 import type { Avatar } from '../src/avatar.ts'
 import type { Blurt, FeedItem, Notification, UserProfile } from '../src/routes/state.ts'
 

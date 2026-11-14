@@ -69,7 +69,8 @@ test('nothing but the client folders can be fetched, however the path is written
     `${base}/routes/home.ts`,
     `${base}/routes/state.ts`,
     `${base}/middleware/auth.ts`,
-    `${base}/templates/layout.ts`,
+    `${base}/pages/shared/layout.ts`,
+    `${base}/pages/feed/feed.html.ts`,
     `${base}/tz-lookup.d.ts`,
     // Climbing out of a client folder.
     `${base}/ui/../config.ts`,

@@ -19,7 +19,7 @@ import {
   setPictureCut,
   setProfilePicture,
 } from './state.ts'
-import { renderProfileEditPage } from '../templates/index.ts'
+import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'
 
 export const profilePictureRouter = Router()
 

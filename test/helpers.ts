@@ -354,7 +354,7 @@ export function samplePng(width = 800, height = 400): Buffer {
   return canvas.toBuffer('image/png')
 }
 
-// A page without the scripts every page with JavaScript on carries (src/templates/layout.ts):
+// A page without the scripts every page with JavaScript on carries (src/pages/shared/layout.ts):
 // the import map, main.ts and the page context JSON. Only exactly those are removed, so a
 // test looking for injected scripts still sees any other.
 export function withoutOwnScripts(page: string): string {

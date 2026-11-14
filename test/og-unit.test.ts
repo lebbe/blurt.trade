@@ -21,7 +21,7 @@ import {
 } from '../src/og.ts'
 import { encodeShapes, pictureFromUpload } from '../src/picture.ts'
 import { createCanvas } from '@napi-rs/canvas'
-import { renderBlurtPage } from '../src/templates/index.ts'
+import { renderBlurtPage } from '../src/pages/blurt/blurt.html.ts'
 import { AvatarSvg } from '../src/ui/avatar.ts'
 import type { Blurt } from '../src/routes/state.ts'
 

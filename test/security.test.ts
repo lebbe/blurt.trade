@@ -15,7 +15,7 @@ import {
   scriptingContentSecurityPolicy,
   strictTransportSecurity,
 } from '../src/middleware/security-headers.ts'
-import { stylesheetUrl } from '../src/templates/layout.ts'
+import { stylesheetUrl } from '../src/pages/shared/layout.ts'
 import { criticalCss, criticalCssMaxLines, defaultTheme, themes } from '../src/themes.ts'
 import { createSession, request, stylesheet, withoutOwnScripts } from './helpers.ts'
 

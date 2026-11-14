@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { h } from 'preact'
 import { renderToString } from 'preact-render-to-string'
-import { code, escape, join, link, md, raw } from '../src/templates/markdown.ts'
+import { code, escape, join, link, md, raw } from '../src/pages/shared/markdown.ts'
 import { renderBlurtText, sanitizeBlurtLinks } from '../src/ui/blurt-text.ts'
 
 test('escapes interpolated text but not Markdown values', () => {

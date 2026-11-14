@@ -3,13 +3,9 @@ import { contact } from '../config.ts'
 import { getViewer } from '../middleware/auth.ts'
 import { represent, type Views } from '../negotiate.ts'
 import { isInviteOnly } from './state.ts'
-import {
-  renderAboutPage,
-  renderPrivacyPage,
-  renderTermsPage,
-  type InfoPageData,
-} from '../templates/index.ts'
-import { aboutMarkdown, privacyMarkdown, termsMarkdown } from '../templates/pages.md.ts'
+import type { InfoPageData } from '../pages/info/data.ts'
+import { renderAboutPage, renderPrivacyPage, renderTermsPage } from '../pages/info/info.html.ts'
+import { aboutMarkdown, privacyMarkdown, termsMarkdown } from '../pages/info/info.md.ts'
 
 export const infoRouter = Router()
 

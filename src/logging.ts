@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { NextFunction, Request, Response } from 'express'
-import { renderErrorPage } from './templates/layout.ts'
+import { renderErrorPage } from './pages/error/error.html.ts'
 
 // Structured logs: one JSON object per line on stdout (info) or stderr (warn, error),
 // which systemd hands to journald (docs/deploy.md, Logs and monitoring).

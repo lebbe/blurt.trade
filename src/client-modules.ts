@@ -16,7 +16,7 @@ import { preactBundleUrl } from './vendor.ts'
 //   src/shared  the data those components need (limits, time zones, themes, avatars)
 //   src/client  browser-only code: main.ts, the enhancers, small helpers
 //
-// Everything else in src/ (routes, middleware, config, templates) never leaves the server.
+// Everything else in src/ (routes, middleware, config, pages) never leaves the server.
 // The modules are read once, at startup, from those folders only, and a request can only
 // get one of them by its exact path: no file system lookup happens per request, so `..`,
 // encoded slashes and the like have nothing to find. The path pattern below is a second

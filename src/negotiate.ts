@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import type { ZodError } from 'zod'
-import type { Markdown } from './templates/markdown.ts'
-import { renderErrorPage } from './templates/layout.ts'
+import type { Markdown } from './pages/shared/markdown.ts'
+import { renderErrorPage } from './pages/error/error.html.ts'
 import { pictureMode, pictureReplacer } from './picture-json.ts'
 import { setSpeculationRules } from './speculation.ts'
 

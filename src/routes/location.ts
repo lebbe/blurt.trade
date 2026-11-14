@@ -14,8 +14,9 @@ import {
   setLocation,
   setTimeSettings,
 } from './state.ts'
-import { renderNearPage, renderProfileEditPage } from '../templates/index.ts'
-import { nearMarkdown } from '../templates/pages.md.ts'
+import { renderNearPage } from '../pages/near/near.html.ts'
+import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'
+import { nearMarkdown } from '../pages/near/near.md.ts'
 
 export const locationRouter = Router()
 

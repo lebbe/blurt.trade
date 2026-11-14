@@ -4,8 +4,9 @@ import { rateLimit } from '../middleware/rate-limit.ts'
 import { represent, sendError } from '../negotiate.ts'
 import { charLength, searchQueryMaxLength } from '../limits.ts'
 import { markViewerFlags, parseCursor, searchBlurts, searchUsers } from './state.ts'
-import { renderSearchPage, type SearchData } from '../templates/index.ts'
-import { searchMarkdown } from '../templates/pages.md.ts'
+import type { SearchData } from '../pages/search/data.ts'
+import { renderSearchPage } from '../pages/search/search.html.ts'
+import { searchMarkdown } from '../pages/search/search.md.ts'
 
 export const searchRouter = Router()
 

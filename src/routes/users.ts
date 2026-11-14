@@ -34,19 +34,13 @@ import {
 } from './state.ts'
 import {
   renderCreateUserPage,
-  renderDeleteAccountPage,
   renderLoginPage,
-  renderSettingsPage,
   renderWaitlistPage,
-  type WaitlistData,
-} from '../templates/index.ts'
-import {
-  createUserMarkdown,
-  deleteAccountMarkdown,
-  loginMarkdown,
-  settingsMarkdown,
-  waitlistMarkdown,
-} from '../templates/pages.md.ts'
+} from '../pages/auth/auth.html.ts'
+import type { WaitlistData } from '../pages/auth/data.ts'
+import { renderDeleteAccountPage, renderSettingsPage } from '../pages/settings/settings.html.ts'
+import { createUserMarkdown, loginMarkdown, waitlistMarkdown } from '../pages/auth/auth.md.ts'
+import { deleteAccountMarkdown, settingsMarkdown } from '../pages/settings/settings.md.ts'
 
 export const usersRouter = Router()
 

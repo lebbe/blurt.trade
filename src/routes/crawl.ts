@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { publicUrl } from '../config.ts'
-import { siteDescription, siteName } from '../templates/layout.ts'
+import { siteDescription, siteName } from '../pages/shared/layout.ts'
 
 export const crawlRouter = Router()
 

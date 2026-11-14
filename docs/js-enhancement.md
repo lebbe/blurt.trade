@@ -273,6 +273,8 @@ send formen med fetch, rendre kortet på nytt med det nye svaret.
 
 ## 6. Refaktorering først? Ja – men to steg, og grensen viktigere enn mappene
 
+_Merknad: steg 2 er gjort (#37) – sidene ligger nå i én mappe per side under `src/pages/`; stiene under er slik de var da evalueringen ble skrevet._
+
 `src/templates/index.ts` er 2862 linjer, `pages.md.ts` 872 og `routes/state.ts` 1645.
 Det er tungt å navigere i uansett, og med klientkode blir det verre.
 
