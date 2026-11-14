@@ -165,7 +165,7 @@ test('an unexpected error is logged with its request id and answered with a gene
   assert.match(page.body, /Something went wrong/)
   assert.match(page.body, /<h1>Something went wrong<\/h1>/)
   assert.ok(page.body.includes(id), 'the request id is shown')
-  assert.doesNotMatch(page.body, /forced failure|at |\.ts/)
+  assert.doesNotMatch(page.body, /forced failure|at |\.ts:\d/)
 
   const error = logs.find((entry) => entry.msg === 'unhandled error')
   assert.ok(error)

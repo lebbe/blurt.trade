@@ -17,11 +17,13 @@ import {
 import { localeFrom } from './timezones.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
-import { securityHeaders } from './middleware/security-headers.ts'
+import { allowScripts, securityHeaders } from './middleware/security-headers.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { speculationRulesType } from './speculation.ts'
 import { serveVendorFiles } from './vendor.ts'
+import { serveClientModules } from './client-modules.ts'
+import { javascriptEnabled } from './javascript.ts'
 import { runWithPageContext } from './page-context.ts'
 import { countUnreadNotifications, isAdmin, pruneNotifications } from './routes/state.ts'
 import { adminRouter } from './routes/admin.ts'
@@ -31,6 +33,7 @@ import { healthRouter } from './routes/health.ts'
 import { closePicturePool } from './picture-pool.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
+import { javascriptRouter } from './routes/javascript.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
 import { notificationsRouter } from './routes/notifications.ts'
@@ -61,6 +64,9 @@ app.use(crawlRouter)
 // The browser's Preact bundle, at a versioned URL with a year-long immutable cache
 // (src/vendor.ts). Other versions are not found anywhere and 404.
 serveVendorFiles(app)
+// Client modules, TypeScript from src/ui, src/shared and src/client with the types
+// stripped, under /static/js/<build>/ (src/client-modules.ts). Nothing else in src/.
+serveClientModules(app)
 // Public files from public/ (css, images, map), before auth: they are the same for everyone.
 // ETag handles revalidation; keep max-age at 0 so clients check before reuse.
 app.use(
@@ -84,8 +90,13 @@ app.use(readYourWrites) // before anything reads: decides replica or primary for
 app.use(authenticate)
 app.use(ogRouter)
 // After auth: who is looking, on which page and in which theme (from their access token),
-// for every page's frame.
-app.use((request, _response, next) => {
+// for every page's frame. Whether the page gets JavaScript is decided here too, together
+// with the CSP that lets it run (src/middleware/security-headers.ts).
+app.use((request, response, next) => {
+  const javascript = javascriptEnabled(request)
+  if (javascript) {
+    allowScripts(response)
+  }
   const viewer = getViewer(request)
   const lookups: Promise<[boolean, number]> = viewer
     ? Promise.all([isAdmin(viewer.id), countUnreadNotifications(viewer.id)])
@@ -102,6 +113,7 @@ app.use((request, _response, next) => {
           timeZone: getTimeZone(request),
           locale: getLocale(request) ?? localeFrom(request.acceptsLanguages()),
           pickedLocale: getLocale(request),
+          javascript,
         },
         next,
       )
@@ -119,6 +131,7 @@ app.use(adminRouter)
 app.use(searchRouter)
 app.use(peopleRouter)
 app.use(themeRouter)
+app.use(javascriptRouter)
 app.use(timeZoneRouter)
 app.use(notificationsRouter) // before profilesRouter, like locationRouter
 app.use(locationRouter) // before profilesRouter, whose /:username/ would match /near

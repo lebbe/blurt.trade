@@ -191,7 +191,7 @@ migrations run as the normal app user.
 | table               | contents                                                          |
 | ------------------- | ----------------------------------------------------------------- |
 | `users`             | `id`, `username` (unique), `password_hash` (Argon2id), `deleted_at` |
-| `user_profiles`     | one row per user: homepage, social handles, bio, `location`       |
+| `user_profiles`     | one row per user: homepage, social handles, bio, `location`, settings (`theme`, `timezone`, `locale`, `javascript`) |
 | `blurts`            | `user_id`, `text`, `parent_id` (reply), `reblurt_of_id`, `embedding` |
 | `blurt_stats`       | counters per blurt: `like_count`, `reblurt_count`                 |
 | `follows`           | `user_id` follows `followed_user_id`                              |

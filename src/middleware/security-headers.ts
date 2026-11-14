@@ -1,20 +1,36 @@
 import type { NextFunction, Request, Response } from 'express'
+import { importMapHash } from '../client-modules.ts'
 import { criticalCssHashes } from '../themes.ts'
 
 // Security headers on every response: pages, errors, JSON, Markdown and static files.
 // Set by hand rather than with helmet: it is a handful of fixed strings.
 //
-// The pages use no JavaScript at all, so the Content-Security-Policy has no script-src
-// and default-src 'none' blocks every script. CSS comes only from our own stylesheets
-// plus, by hash, the small above-the-fold <style> of each theme (criticalCss in
-// src/themes.ts); no other inline <style> or style="..." runs. Images only from us (the
-// world map; avatars are inline SVG markup, which no policy restricts). Adding any
-// script, inline style, font or third-party resource means changing this policy
-// (see docs/routes.md).
+// Two Content-Security-Policies, picked per response. Every response starts with
+// `contentSecurityPolicy`, which has no script-src at all, so default-src 'none' blocks
+// every script. That is what static files, pages for visitors who turned JavaScript off
+// (src/javascript.ts) and anything answered before the page context is known get. Once
+// the page-context middleware (src/server.ts) knows JavaScript is on for this request,
+// allowScripts() swaps in `scriptingContentSecurityPolicy`, the same policy plus
 //
-// connect-src 'self' is there for tools that fetch from the page's context, like
-// Lighthouse reading /robots.txt, which default-src 'none' blocks. Without any script
-// there is nothing on the page that can use it.
+//   script-src 'self' 'sha256-<import map>'
+//
+// so the only scripts that can run are our own modules (/static/js/…, src/client-modules.ts,
+// and the Preact bundle under /static/vendor/) and the page's one inline script, the
+// import map, by its hash (computed at startup; it only changes with the build). No
+// 'unsafe-inline', no 'unsafe-eval', no other origin. The page context JSON is a
+// <script type="application/json">, a data block that never runs, so it needs nothing.
+// Pages render their scripts from the same page-context flag, so a page never carries
+// scripts its policy blocks, nor the other way around.
+//
+// CSS comes only from our own stylesheets plus, by hash, the small above-the-fold <style>
+// of each theme (criticalCss in src/themes.ts); no other inline <style> or style="..."
+// runs. Images only from us (the world map; avatars are inline SVG markup, which no
+// policy restricts). Adding an inline script, inline style, font, worker, manifest or
+// third-party resource means changing this policy (see docs/routes.md).
+//
+// connect-src 'self' is for our scripts' fetch() calls (src/client/requests.ts), and for
+// tools that fetch from the page's context, like Lighthouse reading /robots.txt, which
+// default-src 'none' would block.
 //
 // Speculation rules (src/speculation.ts) need nothing here. They come from the
 // Speculation-Rules response header, fetched with the "speculationrules" destination,
@@ -23,7 +39,7 @@ import { criticalCssHashes } from '../themes.ts'
 // 'inline-speculation-rules' or a hash), and the header exists to avoid that. The
 // prefetches themselves are navigation requests, outside connect-src and default-src.
 // Cross-document View Transitions are plain CSS.
-export const contentSecurityPolicy = [
+const basePolicy = [
   "default-src 'none'",
   "connect-src 'self'",
   `style-src 'self' ${criticalCssHashes.join(' ')}`,
@@ -31,7 +47,19 @@ export const contentSecurityPolicy = [
   "form-action 'self'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
+]
+
+export const contentSecurityPolicy = basePolicy.join('; ')
+
+export const scriptingContentSecurityPolicy = [
+  ...basePolicy,
+  `script-src 'self' ${importMapHash}`,
 ].join('; ')
+
+// For a response whose page may run our scripts (JavaScript on for this visitor).
+export function allowScripts(response: Response): void {
+  response.set('Content-Security-Policy', scriptingContentSecurityPolicy)
+}
 
 // Two years, the value hstspreload.org asks for. Only in production: on localhost over
 // plain HTTP it would be ignored anyway, and on a dev hostname it would stick for years.

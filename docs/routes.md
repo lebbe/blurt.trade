@@ -188,6 +188,7 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/profile-picture`       | yes           | multipart `picture`, or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
 | `/api/profile-picture/cut`   | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`                   |
 | `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
+| `/api/javascript`            | —             | `javascript`: `on` or `off` (JSON: also `true`/`false`) | 303 → `/settings#javascript` (logged in) or `/about#javascript` | 200 `{ javascript }` |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
 | `/settings/delete`           | yes           | `password`                           | 303 → `/`                   | 204                                            |
@@ -417,8 +418,8 @@ missing one is a 400 on `password` and deletes nothing. It is rate limited per a
 ## Notifications
 
 A notification is a row in `notifications` (`user_id` the recipient, `kind`,
-`actor_user_id`, `blurt_id`, `created_at`, `read_at`). No JavaScript: the page is a list
-and the count is a number that refreshes with the page.
+`actor_user_id`, `blurt_id`, `created_at`, `read_at`). No JavaScript needed: the page is
+a list and the count is a number that refreshes with the page.
 
 - **Kinds.** `reply` (someone replied to your blurt), `reblurt` (someone plain-reblurted
   it), `quote` (someone quoted it) and `followed_blurt` (someone you follow posted a
@@ -657,7 +658,7 @@ Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 
 | Cookie          | Lifetime | Checked by                                                 |
 | --------------- | -------- | ---------------------------------------------------------- |
-| `access_token`  | 5 min    | its signature only, no database; carries the username and theme |
+| `access_token`  | 5 min    | its signature only, no database; carries the username, theme, time zone, language and "Use JavaScript" |
 | `refresh_token` | 400 days, or until the browser closes | one row in `sessions`, then rotated to the next generation |
 
 - When the access token is missing or expired, any request (page load, form POST,
@@ -683,6 +684,9 @@ Every POST (any method but `GET`, `HEAD` or `OPTIONS`) also sets `recent_write` 
 read from the primary database instead of the read replica, so the page a form redirects
 to always shows the change it just made. See db/README.md, Read replica.
 
+Turning JavaScript off sets `javascript=off` (`HttpOnly`, `SameSite=Lax`, 400 days); turning
+it on again clears it. See JavaScript in the browser.
+
 ## Rate limits
 
 POSTs that cost CPU or can be spammed are limited by token buckets in
@@ -705,6 +709,7 @@ error table below.
 | `AVATAR`               | `/api/avatar`, `/api/profile-picture/cut` | account (one budget) | 60/10m |
 | `PROFILE_PICTURE`      | `/api/profile-picture`         | account              | 20/10m  |
 | `THEME`                | `/api/theme`                   | account              | 60/10m  |
+| `JAVASCRIPT`           | `/api/javascript`              | IP                   | 60/10m  |
 | `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read` | account (one budget) | 60/10m |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
@@ -785,7 +790,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` |
+| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map) when the page has JavaScript |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `no-referrer`                                            |
@@ -795,11 +800,20 @@ responses.
 
 `X-Powered-By` is off.
 
-- **There is no `script-src`, so no JavaScript runs at all.** Adding any script (the
-  planned Preact client, an inline `<script>`, an `on...=` attribute) means changing the
-  CSP first: serve the files from `/static` and add `script-src 'self'`, never
-  `'unsafe-inline'`. The same goes for fonts, web app
-  manifests (`manifest-src`), service workers (`worker-src`) and anything third-party.
+- **Two policies, picked per response.** Every response starts with the policy above
+  without `script-src`, so `default-src 'none'` blocks every script. Once the page
+  context is known (the middleware after `authenticate` in `src/server.ts`) and
+  JavaScript is on for this visitor, `allowScripts()` swaps in the same policy plus
+  `script-src 'self' 'sha256-<import map>'`: our own modules (`/static/js/…`,
+  `/static/vendor/…`) and the one inline script, the import map, by the hash of its exact
+  text, computed at startup. Never `'unsafe-inline'` or `'unsafe-eval'`, no other
+  origin. Pages for visitors who turned JavaScript off, static files and anything
+  answered before the page context (a malformed body) keep the policy without
+  `script-src`, and such pages carry no script. The page context JSON is a
+  `<script type="application/json">` data block, which never runs and needs nothing.
+  Inline `<script>` code and `on...=` attributes stay blocked. Fonts, web app manifests
+  (`manifest-src`), service workers (`worker-src`) and anything third-party still need
+  the policy changed first. See JavaScript in the browser.
 - **No inline CSS.** All styles are in one stylesheet file, `public/style.css`, served
   at `/static/style.css`, plus the chosen theme's overrides from `public/themes/` (see
   Themes); icons are inline SVG (`src/ui/icons.ts`), not an icon font. Both are
@@ -873,8 +887,10 @@ file's exclude list.
   out, and `toJson()` drops those keys anyway.
 - Usernames are letters, digits and `_` only, and case-insensitive.
 - A POST that costs CPU or can be spammed gets a `rateLimit()` (see Rate limits).
-- No inline `<style>` (beyond the hashed above-the-fold CSS), `style="..."` or scripts: the CSP blocks them (see Security
-  headers).
+- No inline `<style>` (beyond the hashed above-the-fold CSS), `style="..."` or scripts
+  (beyond the hashed import map): the CSP blocks them (see Security headers).
+- Every page must work without JavaScript. Scripts only enhance what already works (see
+  JavaScript in the browser), and a test runs the same flows with it off and on.
 
 ## Shared components
 
@@ -917,7 +933,125 @@ serves an old file. Any other version, or none, is a 404.
   with the bundle's, so their majors must match. `test/vendor.test.ts` compares the
   versions the bundle was built with (its `devDependencies`) against our `package.json`
   and `node_modules`, for Preact, htm and signals. Upgrade both together.
-- No page loads it yet: the CSP still has no `script-src`.
+- Pages with JavaScript on preload it and point every specifier at it with the import
+  map (see JavaScript in the browser).
+
+## JavaScript in the browser
+
+Every page works without JavaScript; scripts only make something that already works a
+little smoother (progressive enhancement), and they are optional. The plan behind it is
+`docs/js-enhancement.md`.
+
+### Delivering TypeScript
+
+Client code is the TypeScript Node runs, with its types stripped by Node's own
+`stripTypeScriptTypes()` (`node:module`, mode `strip`, which blanks types out so lines
+and columns stay put and no source map is needed). `src/client-modules.ts` reads the
+three client folders once at startup and serves them:
+
+| Folder        | What                                                         |
+| ------------- | ------------------------------------------------------------ |
+| `src/ui`      | components shared with the server (see Shared components)    |
+| `src/shared`  | the data they need                                           |
+| `src/client`  | browser-only code: `main.ts`, the enhancers, helpers         |
+
+| Path                                   | Headers                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| `/static/js/<build>/<folder>/<file>.ts` | `text/javascript; charset=utf-8`, `Cache-Control: public, max-age=31536000, immutable`, `ETag` |
+
+- `<build>` is a hash of every client file's path and contents, computed at startup, so
+  any change gives every module a new URL. Relative imports (`./text.ts`) resolve under
+  the same prefix by themselves: nothing is rewritten, since browsers go by the
+  `Content-Type`, not the extension. An old build is a 404 (a page loaded before a deploy
+  then just lacks that enhancer). `npm run dev` restarts on any change under `src/`
+  (`--watch-path`), which recomputes it.
+- Only those three folders. A request gets a module by its exact path from the set read
+  at startup, never from the file system, behind a strict pattern (lower-case names,
+  `.ts`, no `..`, no encoded characters). Server code (`src/config.ts`, `src/routes/`, …)
+  can't be fetched; `test/client-modules.test.ts` tries traversal, encoded slashes and
+  the real paths of server files.
+- `src/client` follows the same import rules as `src/ui` and `src/shared` (lint and
+  `test/isomorphic.test.ts`), and may use the DOM.
+- Only erasable TypeScript (no `enum`, `namespace`, parameter properties), as for the
+  server. `import type` disappears; `import { type X }` leaves `import {}`, which is fine.
+- Node prints an `ExperimentalWarning` for `stripTypeScriptTypes` once at startup.
+
+### The page
+
+With JavaScript on, `src/templates/layout.ts` puts this in every page's `<head>`:
+
+1. `<script type="importmap">` pointing `preact`, `preact/hooks`, `htm`,
+   `@preact/signals` and the versioned URL of `src/ui/html.ts` at the Preact bundle (one
+   Preact, see Preact in the browser). Its exact text is in the CSP by hash.
+2. `<link rel="modulepreload">` for the bundle, `main.ts` and every module `main.ts`
+   imports statically (`modulePreloads()` follows the imports at startup), so they load
+   in parallel.
+3. `<script type="module" src="/static/js/<build>/client/main.ts">`.
+4. `<script type="application/json" id="page-context">` with the page context (viewer,
+   path, theme, time zone, locale, unread count, `javascript`), `<` escaped as `<`.
+   `readPageContext()` in `src/client/page-context.ts` reads it, and
+   `PageContextProvider` wraps what an island renders so shared components can call
+   `usePageContext()` as they do on the server.
+
+With JavaScript off, none of it is sent.
+
+### Enhancers
+
+`main.ts` sets `<html data-js="on">` once it runs (CSS that hides a fallback keys on
+that, never on `@media (scripting: enabled)` alone), then hands every element with
+`data-enhance="<name> …"` to its enhancer:
+
+- An enhancer is a module in `src/client/` exporting
+  `enhance(element, context)` (`Enhancer` in `src/client/enhance.ts`; `context.page` is
+  the page context). Register it in `main.ts` as `name: () => import('./name.ts')`, a
+  literal relative path. It's loaded only on pages that use it.
+- Each one runs on its own: a module that fails to load or an `enhance()` that throws is
+  logged to the console and the element keeps working as rendered. So an enhancer takes
+  nothing away (`preventDefault`, hidden buttons) until it is ready to replace it.
+  Elements that worked get `data-enhanced="<name>"`.
+- `enhanceAll(root, …)` can run again on new content (the next page of a feed); no
+  element is enhanced twice.
+
+`src/client/requests.ts` sends forms and follows links with `fetch()` and
+`Accept: application/json`, the same request the browser would make:
+
+| Outcome    | When                                                    | The caller     |
+| ---------- | ------------------------------------------------------- | -------------- |
+| `success`  | 2xx with JSON (`data`), or 204 (`data: null`)           | shows the result in place |
+| `errors`   | 4xx (not 401) with `{ errors }` or `{ error, field }`   | shows the messages |
+| `fallback` | network error, 5xx, 401, a redirect, an answer that is not JSON | nothing: the helper has started the real submission (`form.submit()`, which skips the handler; the submitter's name and value go along) or navigation |
+| `failed`   | as `fallback`, with `{ fallback: false }`: nothing was started | decides (an autosave keeps its button) |
+
+`submitForm(form, { submitter })` honours the submitter's `formaction`/`formmethod`, and
+sends url-encoded bodies unless the form is `multipart/form-data` (the server parses
+multipart only where a file is uploaded). `followLink(link)` does the same for a GET.
+
+### Turning it off
+
+"Use JavaScript" is on by default. Off, the server sends no `<script>`, import map or
+module preload at all (not code that switches itself off), and the response's CSP has no
+`script-src`, so the page is what a browser without JavaScript gets.
+
+- Logged in: `user_profiles.javascript` (default `true`), on `/settings#javascript`,
+  carried in the access token like the theme (a token without the claim means on).
+- Not logged in: the `javascript=off` cookie, on `/about#javascript`.
+- `POST /api/javascript` with `javascript=on|off` sets this browser's cookie and, logged
+  in, the account (reissuing the access token). While logged in the account counts.
+- Every page's footer links to the setting ("Turn JavaScript off" / "on").
+- Code: `src/javascript.ts`, `src/routes/javascript.ts`.
+
+### Tests in a browser
+
+`npm run e2e` (part of `npm run qa`, about 10 seconds) runs `test/e2e/*.test.ts`: the app
+on a random port with the test database, driven by Chromium through Playwright (a dev
+dependency pinned to the version whose browser is installed; after changing it, run
+`npx playwright install chromium`). `bothModes()` in `test/e2e/helpers.ts` runs each flow
+with the browser's JavaScript off and on and fails on any page error, console error or
+failed request. They cover sign-up, blurting and liking, every page of the frame,
+turning JavaScript off and on (anonymous and logged in), importing every client module
+in the page, rendering a shared component with the page context on the bundle's Preact,
+enhancer failures, and the `requests.ts` contract. Contexts use reduced motion, which
+turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates
 

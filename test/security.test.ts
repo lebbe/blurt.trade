@@ -7,14 +7,16 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { db } from '../src/db.ts'
 import { mapUrl } from '../src/geo.ts'
+import { importMapHash } from '../src/client-modules.ts'
 import {
   contentSecurityPolicy,
   permissionsPolicy,
+  scriptingContentSecurityPolicy,
   strictTransportSecurity,
 } from '../src/middleware/security-headers.ts'
 import { stylesheetUrl } from '../src/templates/layout.ts'
 import { criticalCss, criticalCssMaxLines, defaultTheme, themes } from '../src/themes.ts'
-import { createSession, request, stylesheet } from './helpers.ts'
+import { createSession, request, stylesheet, withoutOwnScripts } from './helpers.ts'
 
 test('refuses to start in production without a strong JWT_SECRET', () => {
   const authModule = pathToFileURL(
@@ -30,8 +32,12 @@ test('refuses to start in production without a strong JWT_SECRET', () => {
   assert.match(result.stderr, /JWT_SECRET/)
 })
 
-function assertSecurityHeaders(headers: http.IncomingHttpHeaders, what: string): void {
-  assert.equal(headers['content-security-policy'], contentSecurityPolicy, what)
+function assertSecurityHeaders(
+  headers: http.IncomingHttpHeaders,
+  what: string,
+  policy = contentSecurityPolicy,
+): void {
+  assert.equal(headers['content-security-policy'], policy, what)
   assert.equal(headers['x-content-type-options'], 'nosniff', what)
   assert.equal(headers['referrer-policy'], 'same-origin', what)
   assert.equal(headers['permissions-policy'], permissionsPolicy, what)
@@ -45,9 +51,16 @@ test('sends the security headers on pages, errors and static files', async () =>
   assert.match(contentSecurityPolicy, /default-src 'none'/)
   assert.match(contentSecurityPolicy, /connect-src 'self'(;|$)/)
   assert.doesNotMatch(contentSecurityPolicy, /script-src|unsafe-inline|unsafe-eval/)
+  // With JavaScript on: the same policy plus our own scripts and the import map by hash.
+  assert.equal(
+    scriptingContentSecurityPolicy,
+    `${contentSecurityPolicy}; script-src 'self' ${importMapHash}`,
+  )
+  assert.doesNotMatch(scriptingContentSecurityPolicy, /unsafe-inline|unsafe-eval|\*|https?:/)
 
   const cookie = await createSession('Lars')
-  const responses = {
+  const off = { cookie: 'javascript=off' }
+  const scripting = {
     page: await request('GET', '/'),
     'logged-in page': await request('GET', '/Lars/edit', '', { cookie }),
     json: await request('GET', '/', '', { accept: 'application/json' }),
@@ -55,6 +68,12 @@ test('sends the security headers on pages, errors and static files', async () =>
     404: await request('GET', '/no/such/page/here'),
     406: await request('GET', '/', '', { accept: 'application/xml' }),
     'failed form': await request('POST', '/api/blurts', 'text=', { cookie }),
+  }
+  // Without script-src: JavaScript turned off, anything answered before the page context
+  // is known, and static files.
+  const scriptless = {
+    'page, JavaScript off': await request('GET', '/', '', off),
+    '404, JavaScript off': await request('GET', '/no/such/page/here', '', off),
     'malformed JSON': await request('POST', '/api/blurts', '{', {
       'content-type': 'application/json',
       cookie,
@@ -62,9 +81,12 @@ test('sends the security headers on pages, errors and static files', async () =>
     map: await request('GET', mapUrl),
     stylesheet: await request('GET', stylesheetUrl),
   }
-  assert.equal(responses[404].statusCode, 404)
-  assert.equal(responses['malformed JSON'].statusCode, 400)
-  for (const [what, response] of Object.entries(responses)) {
+  assert.equal(scripting[404].statusCode, 404)
+  assert.equal(scriptless['malformed JSON'].statusCode, 400)
+  for (const [what, response] of Object.entries(scripting)) {
+    assertSecurityHeaders(response.headers, what, scriptingContentSecurityPolicy)
+  }
+  for (const [what, response] of Object.entries(scriptless)) {
     assertSecurityHeaders(response.headers, what)
   }
 })
@@ -81,7 +103,9 @@ test('pages use no inline styles or scripts, so the CSP needs no unsafe-inline',
     // The one inline <style> is the theme's above-the-fold CSS, allowed by its hash.
     const critical = `<style>${criticalCss(defaultTheme)}</style>`
     assert.ok(page.body.includes(critical), path)
-    const rest = page.body.replace(critical, '')
+    // Besides it, only our own scripts: the import map (by hash), main.ts and the page
+    // context JSON (test/javascript.test.ts checks those).
+    const rest = withoutOwnScripts(page.body.replace(critical, ''))
     assert.doesNotMatch(rest, /<style|\sstyle=|<script|\son\w+=|javascript:/i, path)
     assert.ok(page.body.includes(`<link rel="stylesheet" href="${stylesheetUrl}"/>`), path)
   }
@@ -123,7 +147,7 @@ test('user text cannot break out of the HTML or the Markdown', async () => {
 
   for (const path of ['/', '/Lars/']) {
     const page = await request('GET', path, '', { cookie })
-    assert.doesNotMatch(page.body, /<script|<img|href="javascript/i, path)
+    assert.doesNotMatch(withoutOwnScripts(page.body), /<script|<img|href="javascript/i, path)
     assert.ok(page.body.includes('&lt;/p>&lt;script>alert(1)&lt;/script>'), path)
 
     const markdown = await request('GET', path, '', { accept: 'text/markdown', cookie })

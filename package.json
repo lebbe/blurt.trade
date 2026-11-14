@@ -5,10 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test --test-isolation=none \"test/*.test.ts\"",
+    "e2e": "node --test --test-isolation=none \"test/e2e/*.test.ts\"",
     "lint": "oxlint src test",
     "format": "oxfmt src test",
-    "qa": "npm run lint && npm run typecheck && oxfmt --check src test && npm test",
-    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "qa": "npm run lint && npm run typecheck && oxfmt --check src test && npm test && npm run e2e",
+    "dev": "node --env-file-if-exists=.env --watch-path=src --watch-path=db src/server.ts",
     "start": "node --env-file-if-exists=.env src/server.ts",
     "migrate": "node --env-file-if-exists=.env db/migrate.ts",
     "check-config": "node --env-file-if-exists=.env src/config.ts",
@@ -48,6 +49,7 @@
     "@types/pg": "^8.23.1",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
+    "playwright": "1.63.0",
     "typescript": "^7.0.2"
   },
   "allowScripts": {

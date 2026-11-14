@@ -4,10 +4,17 @@ import { publicUrl } from '../config.ts'
 import { pageContext } from '../page-context.ts'
 import { searchQueryMaxLength } from '../shared/limits.ts'
 import { criticalCss, themeStylesheetUrl } from '../shared/themes.ts'
-import { PageContextValue, usePageContext, type PageContext } from '../ui/context.ts'
+import { importMapJson, mainModulePreloads, mainModuleUrl } from '../client-modules.ts'
+import {
+  pageContextElementId,
+  PageContextValue,
+  usePageContext,
+  type PageContext,
+} from '../ui/context.ts'
 import { html } from '../ui/html.ts'
 import { Icon, type IconName } from '../ui/icons.ts'
 import { UnreadBadge } from '../ui/notifications.ts'
+import { javascriptSettingPath } from '../ui/urls.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
 // preview tags, canonical link and stylesheets, then the page (framed by Page) and the footer.
@@ -65,6 +72,7 @@ function Head({ meta }: { meta: PageMeta }) {
       <style dangerouslySetInnerHTML=${{ __html: criticalCss(theme) }}></style>
       <link rel="stylesheet" href=${stylesheetUrl} />
       ${themeUrl && html`<link rel="stylesheet" href=${themeUrl} />`}
+      <${Scripts} />
       ${
         share &&
         html`
@@ -96,6 +104,31 @@ function Head({ meta }: { meta: PageMeta }) {
         `
       }
     </head>
+  `
+}
+
+// The page's JavaScript, only when it is on for this visitor (src/javascript.ts); off,
+// none of this is sent. The import map first, so it applies to every module after it (its
+// exact text is allowed by hash in the CSP, src/middleware/security-headers.ts). Then
+// preloads for main.ts and everything it imports, so the browser fetches them in parallel,
+// and main.ts itself (a module, so it runs after the page is parsed). The page context as
+// JSON for components rendered in the browser (src/client/page-context.ts): a data block,
+// never run; `<` is escaped so no value can end the element.
+function Scripts() {
+  const context = usePageContext()
+  if (!context.javascript) {
+    return null
+  }
+  const json = JSON.stringify(context).replaceAll('<', '\\u003c')
+  return html`
+    <script type="importmap" dangerouslySetInnerHTML=${{ __html: importMapJson }}></script>
+    ${mainModulePreloads.map((url) => html`<link rel="modulepreload" href=${url} />`)}
+    <script type="module" src=${mainModuleUrl}></script>
+    <script
+      type="application/json"
+      id=${pageContextElementId}
+      dangerouslySetInnerHTML=${{ __html: json }}
+    ></script>
   `
 }
 
@@ -249,12 +282,18 @@ export function Page({
   `
 }
 
+// The last link turns the site's optional JavaScript off or on (src/javascript.ts), on
+// the page that has the setting.
 function Footer() {
+  const { viewer, javascript } = usePageContext()
   return html`
     <footer>
       <nav aria-label="About this site">
         <a href="/">blurt.trade</a> · <a href="/about">About</a> ·
-        <a href="/terms">Terms</a>${' · '}<a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>${' · '}<a href="/privacy">Privacy</a>${' · '}<a
+          href=${javascriptSettingPath(viewer !== null)}
+          >Turn JavaScript ${javascript ? 'off' : 'on'}</a
+        >
       </nav>
     </footer>
   `

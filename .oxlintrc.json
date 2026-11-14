@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "overrides": [
     {
-      "files": ["src/ui/**", "src/shared/**"],
+      "files": ["src/ui/**", "src/shared/**", "src/client/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -10,8 +10,8 @@
             "paths": [
               { "name": "zod", "message": "Validation stays on the server (src/limits.ts)." },
               { "name": "tz-lookup", "message": "Its table is server-only (src/timezones.ts)." },
-              { "name": "express", "message": "src/ui and src/shared must run in a browser." },
-              { "name": "pg", "message": "src/ui and src/shared must run in a browser." },
+              { "name": "express", "message": "src/ui, src/shared and src/client must run in a browser." },
+              { "name": "pg", "message": "src/ui, src/shared and src/client must run in a browser." },
               {
                 "name": "preact-render-to-string",
                 "message": "Rendering to a string is the server's job (src/templates/layout.ts)."
@@ -20,11 +20,11 @@
             "patterns": [
               {
                 "group": ["node:*"],
-                "message": "src/ui and src/shared must run in a browser.",
+                "message": "src/ui, src/shared and src/client must run in a browser.",
                 "allowTypeImports": true
               },
               {
-                "regex": "(^|/)(config|page-context)(\\.ts)?$",
+                "regex": "(^|\\.\\./)(config|page-context)(\\.ts)?$",
                 "message": "Server-only: get it from the page context (usePageContext) or the data.",
                 "allowTypeImports": true
               },

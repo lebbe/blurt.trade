@@ -64,7 +64,7 @@ file without starting anything: `node --env-file=/etc/blurt/blurt.env src/config
 | `MIGRATE_ON_START`         | `true`                        | `false` when migrations run as a deploy step (production).                                                                                                      |
 | `MODEL_CACHE_DIR`          | inside `node_modules`         | Where the embedding model is downloaded to. Set it outside `node_modules`, which `npm ci` deletes.                                                              |
 | `RATE_LIMIT_SCALE`         | `1`                           | Multiplies every rate limit's burst; `0` switches them off (warned about in production).                                                                         |
-| `RATE_LIMIT_<NAME>`        | see `src/middleware/rate-limit.ts` | One limit as `burst/period`, e.g. `RATE_LIMIT_LOGIN_IP=10/10m`. Names: `LOGIN_IP`, `LOGIN_USERNAME`, `CREATE_USER_IP`, `WAITLIST_IP`, `BLURT`, `FOLLOW`, `PROFILE_EDIT`, `LOCATION`, `AVATAR`, `REPORT`, `DELETE_BLURT`. See docs/routes.md, Rate limits. |
+| `RATE_LIMIT_<NAME>`        | see `src/middleware/rate-limit.ts` | One limit as `burst/period`, e.g. `RATE_LIMIT_LOGIN_IP=10/10m`. Names: `LOGIN_IP`, `LOGIN_USERNAME`, `CREATE_USER_IP`, `WAITLIST_IP`, `BLURT`, `FOLLOW`, `PROFILE_EDIT`, `LOCATION`, `AVATAR`, `REPORT`, `DELETE_BLURT`, `JAVASCRIPT` and the others there. See docs/routes.md, Rate limits. |
 | `ALERT_WEBHOOK_URL`        | unset: no alerts from the app | Gets a POST with `{"text": "..."}` when the app crashes or 5xx responses spike (Logs and monitoring). A secret; never logged. Warned about in production if missing. |
 | `ALERT_5XX_THRESHOLD`      | `10`                          | How many 5xx responses within 5 minutes make a spike. One alert per 5 minutes at most.                                                                           |
 | `CONTACT_EMAIL`            | unset                         | A public address for things that shouldn't go in a public issue (security, illegal content, data requests), shown on `/about`, `/terms` and `/privacy`. A placeholder until the owner picks one; use a role address, not a personal one. |
@@ -185,6 +185,14 @@ finishes requests in flight, closes its database pools and exits (`src/server.ts
 most 10 seconds). Caddy answers 502 for the second or two until the new process listens.
 
 Logs: `journalctl -u blurt -f` (Logs and monitoring, below).
+
+The browser's JavaScript needs no build step: the client modules are read from `src/` and
+type-stripped at startup, under a URL with a hash of their contents
+(`/static/js/<build>/…`, docs/routes.md, JavaScript in the browser), so a deploy gives
+them new URLs and browsers never mix old modules with a new page. A page loaded before
+the deploy that imports a module afterwards gets a 404 and carries on without that
+enhancer. Proxies in front must pass `Content-Type` and `Cache-Control` through
+unchanged; compressing `text/javascript` there helps (the nginx config does).
 
 ## Logs and monitoring
 

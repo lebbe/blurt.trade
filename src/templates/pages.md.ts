@@ -24,6 +24,7 @@ import {
   nearPageUrl,
   notificationsPath,
   olderBlurtsUrl,
+  javascriptSettingPath,
   parentUrl,
   peoplePageUrl,
   searchUrl,
@@ -535,6 +536,22 @@ function privateContact({ email }: Contact): Markdown {
     : md`the contact on the ${link('About page', '/about')}`
 }
 
+// "Use JavaScript" (src/javascript.ts), on /about for everyone and on /settings for
+// logged-in users, like the HTML pages. Off, pages carry no script at all.
+function javascriptSetting(where: 'about' | 'settings'): Markdown {
+  const { viewer, javascript } = pageContext()
+  const state = javascript ? 'on' : 'off'
+  const flip = javascript ? 'off' : 'on'
+  if (viewer && where === 'about') {
+    return md`Everything works without JavaScript. The site's JavaScript is optional, and comes only from blurt.trade itself. It is ${state} for your account: turn it ${flip} in ${link('Settings', '/settings#javascript')}.`
+  }
+  return md`
+    Everything works without JavaScript: every page is plain HTML and every button is an ordinary form. A little JavaScript, only from blurt.trade itself, can make some things smoother. It is optional: turned off, not a single script is sent.
+
+    JavaScript is **${state}** ${viewer ? 'for your account, on every device' : 'in this browser'}. Send ${code('POST /api/javascript')} as a form or as JSON with ${code(`javascript=${flip}`)} to turn it ${flip}.
+  `
+}
+
 export function aboutMarkdown({ contact }: InfoPageData): Markdown {
   const { email, issuesUrl, securityUrl } = contact
   const security = securityUrl
@@ -545,7 +562,11 @@ export function aboutMarkdown({ contact }: InfoPageData): Markdown {
 
     ${home}
 
-    blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength} characters. It works without JavaScript, has no ads and no tracking, and collects as little about you as it can: see ${link('Privacy', '/privacy')} and ${link('Terms', '/terms')}.
+    blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength} characters. It has no ads and no tracking, and collects as little about you as it can: see ${link('Privacy', '/privacy')} and ${link('Terms', '/terms')}. It works fully without JavaScript, which is optional (below).
+
+    ## JavaScript
+
+    ${javascriptSetting('about')}
 
     ## Contact
 
@@ -625,7 +646,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
     For each account:
 
     - Your username, a hash of your password (Argon2id: the password itself is never stored), and when you signed up.
-    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked.
+    - The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked, and whether you turned JavaScript off.
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
@@ -657,13 +678,16 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
 
     ## Cookies
 
-    Three, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none. All three are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade. The site uses no JavaScript, so nothing is stored in your browser in any other way.
+    Up to four, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none, unless they turn JavaScript off. All four are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade.
+
+    The site works fully without JavaScript. Its JavaScript is optional (${link('you can turn it off', javascriptSettingPath(pageContext().viewer !== null))}), comes only from blurt.trade, and stores nothing in your browser: no local storage, no other cookies.
 
     | Cookie | What it's for | Lasts |
     | --- | --- | --- |
-    | ${code('__Host-access_token')} | Shows you're logged in, with your colour theme, time zone and language | 5 minutes |
+    | ${code('__Host-access_token')} | Shows you're logged in, with your colour theme, time zone, language and whether JavaScript is on | 5 minutes |
     | ${code('__Host-refresh_token')} | Keeps you logged in and renews the one above | Until you close the browser, or, if you ticked *Keep me logged in*, 400 days without a visit. Gone when you log out. |
     | ${code('recent_write')} | After you post or change something, makes sure you see your own change straight away | 10 seconds |
+    | ${code('javascript')} | Only once you turn JavaScript off: remembers that in this browser. Logged in, it's saved on your account too, and the account's setting counts | 400 days, or until you turn JavaScript back on |
 
     ## Why we may use your data
 
@@ -851,6 +875,10 @@ export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Mark
 
     Send ${code('POST /api/logout-everywhere')} to log out everywhere, this client included.
     Other devices are logged out within 5 minutes.
+
+    ## JavaScript
+
+    ${javascriptSetting('settings')}
 
     ## Delete account
 

@@ -15,8 +15,9 @@ test('every page links to about, terms and privacy in its footer, without JS', a
     assert.equal(response.statusCode, 200, path)
     assert.match(response.body, footer, path)
   }
+  // With JavaScript turned off, not a single script (test/javascript.test.ts has more).
   for (const path of ['/about', '/terms', '/privacy']) {
-    const response = await request('GET', path)
+    const response = await request('GET', path, '', { cookie: 'javascript=off' })
     assert.match(response.contentType ?? '', /^text\/html/, path)
     assert.doesNotMatch(response.body, /<script/, path)
   }
@@ -144,7 +145,7 @@ test('the privacy page is in step with the database columns', async () => {
     sessions: 'created_at current_generation id last_used_at persistent revoked_at user_id',
     signup_counter: 'current_count hard_limit id soft_limit',
     user_profiles:
-      'avatar bio card_color github homepage instagram linkedin locale location notify_followed_blurts notify_reblurts notify_replies picture picture_cut picture_version theme tiktok timezone updated_at user_id x youtube',
+      'avatar bio card_color github homepage instagram javascript linkedin locale location notify_followed_blurts notify_reblurts notify_replies picture picture_cut picture_version theme tiktok timezone updated_at user_id x youtube',
     users: 'created_at deleted_at id is_admin password_hash username',
     waitlist: 'created_at id status username',
   })

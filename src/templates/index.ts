@@ -40,6 +40,7 @@ import { plural, preview } from '../ui/text.ts'
 import {
   blurtUrl,
   deleteBlurtPath,
+  javascriptSettingPath,
   moreRepliesUrl,
   nearPageUrl,
   notificationsPath,
@@ -587,6 +588,30 @@ function LoginPage({ username = '', validationError }: LoginProps) {
   `
 }
 
+// "Use JavaScript" (src/javascript.ts): what it does, whether it's on, and a plain form
+// button that flips it, which works with JavaScript off. On /settings for logged-in users
+// (saved on the account) and on /about for everyone else (a cookie in this browser).
+function JavaScriptSetting() {
+  const { viewer, javascript } = usePageContext()
+  const where = viewer ? 'for your account, on every device' : 'in this browser'
+  return html`
+    <p>
+      Everything works without JavaScript: every page is plain HTML and every button is an ordinary
+      form. A little JavaScript, only from blurt.trade itself, can make some things smoother. It is
+      optional: turned off, not a single script is sent.
+    </p>
+    <p>JavaScript is <strong>${javascript ? 'on' : 'off'}</strong> ${where}.</p>
+    <form method="post" action="/api/javascript" class="inline">
+      <input type="hidden" name="javascript" value=${javascript ? 'off' : 'on'} />
+      <${SubmitButton}
+        icon="sliders"
+        label=${`Turn JavaScript ${javascript ? 'off' : 'on'}`}
+        kind="secondary"
+      />
+    </form>
+  `
+}
+
 function SettingsPage({ viewer, activeSessions }: SettingsData) {
   const edit = `/${viewer.username}/edit`
   return html`
@@ -621,6 +646,10 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
           <${ButtonLink} href=${`${edit}#location`} icon="pin" label="Location" />
           <${ButtonLink} href=${`${edit}#theme`} icon="palette" label="Theme" />
         </div>
+      </section>
+      <section class="panel" id="javascript" aria-label="JavaScript">
+        <h2>JavaScript</h2>
+        <${JavaScriptSetting} />
       </section>
       <section class="panel" aria-label="Delete account">
         <h2 class="warn">Delete account</h2>
@@ -1453,8 +1482,9 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
       <section class="panel">
         <h3>What is this?</h3>
         <p>
-          Short posts, blurts, of up to ${blurtMaxLength} characters. No ads, no tracking, no
-          JavaScript, no email address needed.
+          Short posts, blurts, of up to ${blurtMaxLength} characters. No ads, no tracking, no email
+          address needed. Works fully without JavaScript, and you can${' '}
+          <a href="/about#javascript">turn it off</a>.
         </p>
         <div class="actions">
           <${ButtonLink} href="/signup" icon="personPlus" label="Sign up" kind="" />
@@ -1778,13 +1808,29 @@ function InfoPage({
 
 function AboutPage({ contact }: InfoPageData) {
   const { email, issuesUrl, securityUrl } = contact
+  const { viewer, javascript } = usePageContext()
   return html`
     <${InfoPage} title="About blurt.trade" tagline="A small hobby site for blurting.">
       <p>
-        blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength}
-        characters. It works without JavaScript, has no ads and no tracking, and collects as little
-        about you as it can: see <a href="/privacy">Privacy</a> and <a href="/terms">Terms</a>.
+        blurt.trade is a small hobby site for short posts, blurts, of up to ${blurtMaxLength}${' '}
+        characters. It has no ads and no tracking, and collects as little about you as it can:
+        see${' '}
+        <a href="/privacy">Privacy</a> and <a href="/terms">Terms</a>. It works fully without
+        JavaScript, which is <a href="#javascript">optional</a>.
       </p>
+      <section id="javascript" aria-label="JavaScript">
+        <h2>JavaScript</h2>
+        ${
+          viewer
+            ? html`<p>
+                Everything works without JavaScript. The site's JavaScript is optional, and comes
+                only from blurt.trade itself. It is ${javascript ? 'on' : 'off'} for your account:
+                turn it ${javascript ? 'off' : 'on'} in${' '}
+                <a href="/settings#javascript">Settings</a>.
+              </p>`
+            : html`<${JavaScriptSetting} />`
+        }
+      </section>
       <section aria-label="Contact">
         <h2>Contact</h2>
         ${
@@ -1865,6 +1911,7 @@ function TermsPage({ contact }: InfoPageData) {
 }
 
 function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
+  const { viewer } = usePageContext()
   return html`
     <${InfoPage} title="Privacy" tagline="As little as we can.">
       <p>
@@ -1889,7 +1936,7 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
         </li>
         <li>
           The profile fields you fill in: bio, homepage and social links, your avatar's settings,
-          the colour theme and share card colour you picked.
+          the colour theme and share card colour you picked, and whether you turned JavaScript off.
         </li>
         <li>
           Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts
@@ -1971,10 +2018,17 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
       </ul>
       <h2>Cookies</h2>
       <p>
-        Three, all strictly necessary for things you ask the site to do, none for tracking or
-        analytics, so there's no cookie banner. Visitors who aren't logged in get none. All three
-        are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade. The site uses no
-        JavaScript, so nothing is stored in your browser in any other way.
+        Up to four, all strictly necessary for things you ask the site to do, none for tracking or
+        analytics, so there's no cookie banner. Visitors who aren't logged in get none, unless they
+        turn JavaScript off. All four are HttpOnly, Secure and SameSite=Lax, and only sent to
+        blurt.trade.
+      </p>
+      <p>
+        The site works fully without JavaScript. Its JavaScript is optional (<a
+          href=${javascriptSettingPath(viewer !== null)}
+          >you can turn it off</a
+        >), comes only from blurt.trade, and stores nothing in your browser: no local storage, no
+        other cookies.
       </p>
       <table>
         <thead>
@@ -1987,7 +2041,10 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
         <tbody>
           <tr>
             <td><code>__Host-access_token</code></td>
-            <td>Shows you're logged in, with your colour theme, time zone and language</td>
+            <td>
+              Shows you're logged in, with your colour theme, time zone, language and whether
+              JavaScript is on
+            </td>
             <td>5 minutes</td>
           </tr>
           <tr>
@@ -2004,6 +2061,14 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
               After you post or change something, makes sure you see your own change straight away
             </td>
             <td>10 seconds</td>
+          </tr>
+          <tr>
+            <td><code>javascript</code></td>
+            <td>
+              Only once you turn JavaScript off: remembers that in this browser. Logged in, it's
+              saved on your account too, and the account's setting counts
+            </td>
+            <td>400 days, or until you turn JavaScript back on</td>
           </tr>
         </tbody>
       </table>

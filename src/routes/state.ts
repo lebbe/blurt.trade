@@ -1197,6 +1197,15 @@ export async function setTheme(userId: number, theme: ThemeId): Promise<boolean>
   return rowCount === 1
 }
 
+// The "Use JavaScript" setting (src/javascript.ts). False when the user no longer exists.
+export async function setJavaScript(userId: number, javascript: boolean): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'UPDATE user_profiles SET javascript = $2, updated_at = now() WHERE user_id = $1',
+    [userId, javascript],
+  )
+  return rowCount === 1
+}
+
 // The time zone and the language of dates and times (src/timezones.ts); a field left out
 // stays as it was, a null locale goes back to the browser's. False when the user no longer
 // exists.

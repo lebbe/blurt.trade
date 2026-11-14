@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { clientBuild } from '../src/client-modules.ts'
 import { runWithPageContext, type PageContext } from '../src/page-context.ts'
 import { renderErrorPage } from '../src/templates/layout.ts'
 import {
@@ -264,6 +265,7 @@ const anonymous: PageContext = {
   timeZone: 'UTC',
   locale: 'en-GB',
   pickedLocale: null,
+  javascript: true,
 }
 
 const loggedIn: PageContext = {
@@ -275,6 +277,7 @@ const loggedIn: PageContext = {
   timeZone: 'Europe/Oslo',
   locale: 'nb-NO',
   pickedLocale: 'nb-NO',
+  javascript: true,
 }
 
 const quiet: PageContext = {
@@ -286,6 +289,7 @@ const quiet: PageContext = {
   timeZone: 'America/New_York',
   locale: 'en-US',
   pickedLocale: null,
+  javascript: false, // so the settings and the frame are pinned with JavaScript off too
 }
 
 type Snapshot = { name: string; context: PageContext; html?: () => string; markdown?: () => string }
@@ -651,6 +655,12 @@ function pages(): Snapshot[] {
       markdown: () => md(aboutMarkdown(info)),
     },
     {
+      name: 'about-javascript-off',
+      context: { ...anonymous, path: '/about', javascript: false },
+      html: () => renderAboutPage(info),
+      markdown: () => md(aboutMarkdown(info)),
+    },
+    {
       name: 'about-no-contact',
       context: { ...quiet, path: '/about' },
       html: () => renderAboutPage(infoNoContact),
@@ -771,7 +781,13 @@ function pages(): Snapshot[] {
   ]
 }
 
-function check(file: string, actual: string): void {
+// The client modules' URLs carry a hash of their contents (src/client-modules.ts), which
+// changes with every edit to src/ui, src/shared or src/client; the snapshots don't.
+const normalize = (output: string) =>
+  output.replaceAll(`/static/js/${clientBuild}/`, '/static/js/<build>/')
+
+function check(file: string, rendered: string): void {
+  const actual = normalize(rendered)
   const path = join(snapshotDir, file)
   if (update) {
     mkdirSync(snapshotDir, { recursive: true })
