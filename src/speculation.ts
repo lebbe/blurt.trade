@@ -19,9 +19,31 @@ import type { Request, Response } from 'express'
 //   the way loses the new token, and the old one coming back later revokes the session.
 //
 // Prefetched pages are only used by the page that fetched them, and only for a few
-// minutes, so a stale page can't outlive the next form POST.
+// minutes. A form POST without JavaScript replaces that page, and its prefetches go with
+// it. A write sent with fetch() keeps the page, so its prefetches would still be used:
+// hover Profile, post a blurt in place, open Profile, and the page shown would be the one
+// fetched before the blurt. So every write's answer tells the browser to drop them
+// (clearSpeculations).
 export const speculationRulesPath = '/static/speculation-rules.json'
 export const speculationRulesType = 'application/speculationrules+json'
+
+const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+// Middleware: `Clear-Site-Data: "prefetchCache", "prerenderCache"` on the answer to every
+// state-changing request sent with fetch() (one that asks for JSON, as src/client/
+// requests.ts does; src/negotiate.ts). Only those two: cookies, storage and the HTTP cache
+// stay. Not on a form POST without JavaScript: its answer replaces the page, and the
+// prefetches go with it. Chromium was seen leaving that page's live-update connection
+// open after such a navigation answer carried the header, so it is kept to the answers
+// that need it. On a refused write too, since the header must be set before the route
+// decides: that only costs the next hover a fresh prefetch. Browsers that don't know the
+// two types ignore them.
+export function clearSpeculations(request: Request, response: Response, next: () => void): void {
+  if (!safeMethods.has(request.method) && request.accepts(['html', 'json']) === 'json') {
+    response.set('Clear-Site-Data', '"prefetchCache", "prerenderCache"')
+  }
+  next()
+}
 
 // A structured-field list of strings (RFC 8941), so the URL is quoted.
 export function setSpeculationRules(response: Response): void {

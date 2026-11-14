@@ -1053,7 +1053,14 @@ page. Browsers without them ignore them and navigate as before.
   except `/api/*`, `/logout`, `/search`, `/near`, `/admin` and non-page files. No prerender: these pages are light, and prerendering also
   loads their stylesheets and images. The CSP needs no change: rules fetched from the
   header are not governed by any CSP directive (only inline rules would need
-  `script-src`), see `src/middleware/security-headers.ts`.
+  `script-src`), see `src/middleware/security-headers.ts`. The answer to every
+  state-changing request sent with `fetch()` (asking for JSON; refused or not) carries
+  `Clear-Site-Data: "prefetchCache", "prerenderCache"`: a write sent with `fetch()` keeps
+  the page, and without it the page's earlier prefetches (a profile fetched on hover
+  before a blurt was posted in place) would still be shown. Only those two are cleared,
+  never cookies or storage. A form POST without JavaScript doesn't get it: its answer
+  replaces the page and the prefetches with it (and Chromium was seen keeping the old
+  page's live-update connection open when a navigation's answer carried it).
 - **bfcache.** Pages send no `Cache-Control`, so Back and Forward can restore them from
   the back/forward cache. Only responses that set or clear the session cookies (log in,
   log out, a token refresh) are `no-store`, so that no shared cache keeps someone's
