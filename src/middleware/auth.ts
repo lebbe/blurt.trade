@@ -37,9 +37,10 @@ import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 // server also ends the session after a day without use. Revoking a session (log out, log out everywhere, a
 // replayed token) takes effect at its next refresh, so within the access token's lifetime.
 //
-// The access token also carries the user's colour theme (user_profiles.theme), read with
-// the same query at login and at each refresh, so pages get it without a database call.
-// Picking a theme reissues the access token (setSessionTheme); other devices pick it up
+// The access token also carries the user's colour theme (user_profiles.theme), time zone,
+// language and "Use JavaScript" setting, read with the same query at login and at each
+// refresh, so pages get them without a database call. Changing one reissues the access
+// token (setSessionTheme, setSessionTime, setSessionJavaScript); other devices pick it up
 // at their next refresh.
 
 const production = process.env.NODE_ENV === 'production'
@@ -94,6 +95,7 @@ type Session = {
   theme: ThemeId
   timeZone: string
   locale: string | null // null: follow the browser's Accept-Language
+  javascript: boolean // the "Use JavaScript" setting (src/javascript.ts)
 }
 
 type RefreshClaims = { userId: number; sessionId: string; generation: number }
@@ -164,6 +166,8 @@ async function verifyAccessToken(token: unknown): Promise<Session | undefined> {
         theme: isTheme(payload.theme) ? payload.theme : defaultTheme,
         timeZone: timeZoneOrDefault(payload.tz),
         locale: isLocale(payload.lc) ? payload.lc : null,
+        // Only `false` turns it off, so tokens from before the setting existed mean on.
+        javascript: payload.js !== false,
       }
     : undefined
 }
@@ -193,12 +197,12 @@ function cookieOptions(maxAgeSeconds?: number): CookieOptions {
 // A new access token, and a refresh token too unless `refresh` is left out.
 async function setSessionCookies(
   response: Response,
-  { user, sessionId, theme, timeZone, locale }: Session,
+  { user, sessionId, theme, timeZone, locale, javascript }: Session,
   refresh?: { generation: number; persistent: boolean },
 ): Promise<void> {
   const accessToken = await signJwt(
     accessKey,
-    { username: user.username, sid: sessionId, theme, tz: timeZone, lc: locale },
+    { username: user.username, sid: sessionId, theme, tz: timeZone, lc: locale, js: javascript },
     user.id,
     accessTokenSeconds,
   )
@@ -244,7 +248,8 @@ async function refreshSession(claims: RefreshClaims): Promise<
   const theme = (value: string | null): ThemeId => (isTheme(value) ? value : defaultTheme)
   const profileColumns = `(SELECT theme FROM user_profiles WHERE user_id = u.id) AS theme,
        (SELECT timezone FROM user_profiles WHERE user_id = u.id) AS timezone,
-       (SELECT locale FROM user_profiles WHERE user_id = u.id) AS locale`
+       (SELECT locale FROM user_profiles WHERE user_id = u.id) AS locale,
+       (SELECT javascript FROM user_profiles WHERE user_id = u.id) AS javascript`
   const rotated = await db().query<{
     generation: number
     persistent: boolean
@@ -252,6 +257,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
     theme: string | null
     timezone: string | null
     locale: string | null
+    javascript: boolean | null
   }>(
     `UPDATE sessions s
      SET current_generation = s.current_generation + 1, last_used_at = now()
@@ -263,7 +269,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
     [sessionId, userId, generation, sessionIdleSeconds, temporarySessionIdleSeconds],
   )
   if (rotated.rows[0]) {
-    const { generation: next, persistent, username, timezone, locale } = rotated.rows[0]
+    const { generation: next, persistent, username, timezone, locale, javascript } = rotated.rows[0]
     return {
       session: {
         user: { id: userId, username },
@@ -271,6 +277,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
         theme: theme(rotated.rows[0].theme),
         timeZone: timeZoneOrDefault(timezone),
         locale: isLocale(locale) ? locale : null,
+        javascript: javascript !== false, // null: no profile row, so the default
       },
       generation: next,
       persistent,
@@ -284,6 +291,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
     theme: string | null
     timezone: string | null
     locale: string | null
+    javascript: boolean | null
     active: boolean
     racing: boolean
   }>(
@@ -309,6 +317,7 @@ async function refreshSession(claims: RefreshClaims): Promise<
         theme: theme(row.theme),
         timeZone: timeZoneOrDefault(row.timezone),
         locale: isLocale(row.locale) ? row.locale : null,
+        javascript: row.javascript !== false,
       },
       generation: row.current,
       persistent: row.persistent,
@@ -388,6 +397,12 @@ export function getLocale(request: Request): string | null {
   return sessions.get(request)?.locale ?? null
 }
 
+// The logged-in user's "Use JavaScript" setting, from their access token; undefined for
+// anonymous visitors, whose choice is a cookie (src/javascript.ts).
+export function getJavaScriptSetting(request: Request): boolean | undefined {
+  return sessions.get(request)?.javascript
+}
+
 // The logged-in user, or null (not undefined, so it survives JSON) for anonymous visitors.
 export function getViewer(request: Request): AuthenticatedUser | null {
   return sessions.get(request)?.user ?? null
@@ -441,19 +456,22 @@ export async function startSession(
     theme: string | null
     timezone: string | null
     locale: string | null
+    javascript: boolean | null
   }>(
     `INSERT INTO sessions (user_id, persistent) VALUES ($1, $2)
      RETURNING id, (SELECT theme FROM user_profiles WHERE user_id = $1) AS theme,
        (SELECT timezone FROM user_profiles WHERE user_id = $1) AS timezone,
-       (SELECT locale FROM user_profiles WHERE user_id = $1) AS locale`,
+       (SELECT locale FROM user_profiles WHERE user_id = $1) AS locale,
+       (SELECT javascript FROM user_profiles WHERE user_id = $1) AS javascript`,
     [id, persistent],
   )
   const theme = isTheme(rows[0].theme) ? rows[0].theme : defaultTheme
   const timeZone = timeZoneOrDefault(rows[0].timezone)
   const locale = isLocale(rows[0].locale) ? rows[0].locale : null
+  const javascript = rows[0].javascript !== false
   await setSessionCookies(
     response,
-    { user: { id, username }, sessionId: rows[0].id, theme, timeZone, locale },
+    { user: { id, username }, sessionId: rows[0].id, theme, timeZone, locale, javascript },
     { generation: 0, persistent },
   )
 }
@@ -483,6 +501,20 @@ export async function setSessionTheme(
   const session = sessions.get(request)
   if (session) {
     const updated = { ...session, theme }
+    sessions.set(request, updated)
+    await setSessionCookies(response, updated)
+  }
+}
+
+// After the user changes "Use JavaScript" (saved in user_profiles), like setSessionTheme.
+export async function setSessionJavaScript(
+  request: Request,
+  response: Response,
+  javascript: boolean,
+): Promise<void> {
+  const session = sessions.get(request)
+  if (session) {
+    const updated = { ...session, javascript }
     sessions.set(request, updated)
     await setSessionCookies(response, updated)
   }

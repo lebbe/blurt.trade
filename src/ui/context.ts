@@ -22,10 +22,13 @@ export type PageContext = {
   timeZone: string // IANA name; timestamps are shown in it
   locale: string // how dates and times are written: the one picked, else from Accept-Language
   pickedLocale: string | null // the one picked on the edit page, if any
+  // The "Use JavaScript" setting (src/javascript.ts): off, the page has no <script> at all.
+  javascript: boolean
 }
 
 // Outside a request (or before the middleware ran, e.g. a malformed body): anonymous, the
-// default theme and no page marked.
+// default theme, no page marked, and no JavaScript (the response's CSP only allows scripts
+// once the middleware has decided, see src/middleware/security-headers.ts).
 export const outsidePageContext: PageContext = {
   viewer: null,
   isAdmin: false,
@@ -35,7 +38,13 @@ export const outsidePageContext: PageContext = {
   timeZone: defaultTimeZone,
   locale: 'en-GB',
   pickedLocale: null,
+  javascript: false,
 }
+
+// The page context also goes into every page with JavaScript on, as JSON in
+// <script type="application/json" id="page-context"> (src/templates/layout.ts), so
+// components rendered in the browser see the same context (src/client/page-context.ts).
+export const pageContextElementId = 'page-context'
 
 export const PageContextValue = createContext<PageContext>(outsidePageContext)
 

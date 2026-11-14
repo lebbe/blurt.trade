@@ -129,7 +129,7 @@ test('the unread count shows in Your corner, capped at 99+', async () => {
   const ada = await createSession('Ada')
   const corner = async () =>
     (await request('GET', '/', '', { cookie: lars })).body.match(
-      /Notifications( <span class="badge" aria-hidden="true">[^<]*)?/,
+      /\bNotifications( <span class="badge" aria-hidden="true">[^<]*)?/,
     )?.[0]
   await blurt(lars, 'popular')
   const id = await blurtIdByText('popular')

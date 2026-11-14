@@ -54,3 +54,9 @@ export function searchUrl(query: string, next?: string): string {
 export function peoplePageUrl(next?: string): string {
   return next ? `/people?after=${next}` : '/people'
 }
+
+// Where "Use JavaScript" is offered (src/javascript.ts): in Settings for logged-in users,
+// on the About page for everyone.
+export function javascriptSettingPath(loggedIn: boolean): string {
+  return loggedIn ? '/settings#javascript' : '/about#javascript'
+}

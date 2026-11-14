@@ -61,6 +61,45 @@ test('src/ui and src/shared import nothing that only runs on the server', () => 
   assert.deepEqual(problems, [])
 })
 
+// Browser-only code (src/client) may use the DOM, and the same modules and packages as
+// src/ui and src/shared, nothing else. Its import() calls load enhancers on demand
+// (src/client/main.ts); they must be literal relative paths inside src/client, so they
+// resolve under the versioned URL the page loaded main.ts from (src/client-modules.ts).
+test('src/client imports only client modules and the Preact packages', () => {
+  const clientDir = join(root, 'src/client')
+  const files = filesIn(clientDir)
+  assert.ok(
+    files.some((file) => file.endsWith('main.ts')),
+    'found src/client/main.ts',
+  )
+  const problems: string[] = []
+  for (const file of files) {
+    const name = relative(root, file)
+    const source = readFileSync(file, 'utf8')
+    for (const specifier of runtimeImports(source)) {
+      if (specifier === 'import()') {
+        continue
+      }
+      if (specifier.startsWith('.')) {
+        const target = resolve(dirname(file), specifier)
+        if (![...sharedDirs, clientDir].some((dir) => target.startsWith(`${dir}/`))) {
+          problems.push(`${name} imports ${relative(root, target)}`)
+        }
+      } else if (!allowedPackages.has(specifier)) {
+        problems.push(`${name} imports ${specifier}`)
+      }
+    }
+    const code = stripTypeScriptTypes(source)
+    for (const [call] of code.matchAll(/\bimport\s*\((?!\))[^)]*\)/g)) {
+      const literal = /^import\s*\(\s*'(\.\/[a-z0-9-]+\.ts)'\s*\)$/.exec(call)
+      if (!literal) {
+        problems.push(`${name} has ${call}`)
+      }
+    }
+  }
+  assert.deepEqual(problems, [])
+})
+
 test('the import check sees what Node loads', () => {
   assert.deepEqual(
     runtimeImports(

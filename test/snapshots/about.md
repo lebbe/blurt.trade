@@ -2,7 +2,13 @@
 
 [Back to blurt.trade](</>)
 
-blurt.trade is a small hobby site for short posts, blurts, of up to 280 characters. It works without JavaScript, has no ads and no tracking, and collects as little about you as it can: see [Privacy](</privacy>) and [Terms](</terms>).
+blurt.trade is a small hobby site for short posts, blurts, of up to 280 characters. It has no ads and no tracking, and collects as little about you as it can: see [Privacy](</privacy>) and [Terms](</terms>). It works fully without JavaScript, which is optional (below).
+
+## JavaScript
+
+Everything works without JavaScript: every page is plain HTML and every button is an ordinary form. A little JavaScript, only from blurt.trade itself, can make some things smoother. It is optional: turned off, not a single script is sent.
+
+JavaScript is **on** in this browser. Send `POST /api/javascript` as a form or as JSON with `javascript=off` to turn it off.
 
 ## Contact
 

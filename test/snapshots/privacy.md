@@ -15,7 +15,7 @@ blurt.trade runs on a server owned and operated by a private individual in Norwa
 For each account:
 
 - Your username, a hash of your password (Argon2id: the password itself is never stored), and when you signed up.
-- The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked.
+- The profile fields you fill in: bio, homepage and social links, your avatar's settings, the colour theme, time zone and share card colour you picked, and whether you turned JavaScript off.
 - Only if you set it: a coarse location, a 1° by 1° square, about 111 km across. Only you see it, but it puts your blurts in "Near you" for people nearby.
 - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
 - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
@@ -42,13 +42,16 @@ Public: your username, profile, avatar, blurts, reblurts, follower, like and reb
 
 ## Cookies
 
-Three, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none. All three are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade. The site uses no JavaScript, so nothing is stored in your browser in any other way.
+Up to four, all strictly necessary for things you ask the site to do, none for tracking or analytics, so there's no cookie banner. Visitors who aren't logged in get none, unless they turn JavaScript off. All four are HttpOnly, Secure and SameSite=Lax, and only sent to blurt.trade.
+
+The site works fully without JavaScript. Its JavaScript is optional ([you can turn it off](</about#javascript>)), comes only from blurt.trade, and stores nothing in your browser: no local storage, no other cookies.
 
 | Cookie | What it's for | Lasts |
 | --- | --- | --- |
-| `__Host-access_token` | Shows you're logged in, with your colour theme, time zone and language | 5 minutes |
+| `__Host-access_token` | Shows you're logged in, with your colour theme, time zone, language and whether JavaScript is on | 5 minutes |
 | `__Host-refresh_token` | Keeps you logged in and renews the one above | Until you close the browser, or, if you ticked *Keep me logged in*, 400 days without a visit. Gone when you log out. |
 | `recent_write` | After you post or change something, makes sure you see your own change straight away | 10 seconds |
+| `javascript` | Only once you turn JavaScript off: remembers that in this browser. Logged in, it's saved on your account too, and the account's setting counts | 400 days, or until you turn JavaScript back on |
 
 ## Why we may use your data
 

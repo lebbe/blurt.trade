@@ -353,3 +353,12 @@ export function samplePng(width = 800, height = 400): Buffer {
   context.fillRect(width / 4, height / 4, width / 2, height / 2)
   return canvas.toBuffer('image/png')
 }
+
+// A page without the scripts every page with JavaScript on carries (src/templates/layout.ts):
+// the import map, main.ts and the page context JSON. Only exactly those are removed, so a
+// test looking for injected scripts still sees any other.
+export function withoutOwnScripts(page: string): string {
+  const own =
+    /<script type="importmap">[^<]*<\/script>|<script type="module" src="\/static\/js\/[0-9a-f]{12}\/client\/main\.ts"><\/script>|<script type="application\/json" id="page-context">[^<]*<\/script>/g
+  return page.replace(own, '')
+}
