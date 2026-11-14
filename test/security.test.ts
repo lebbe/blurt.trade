@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { publicUrl } from '../src/config.ts'
 import { db } from '../src/db.ts'
 import { mapUrl } from '../src/geo.ts'
 import { importMapHash } from '../src/client-modules.ts'
@@ -197,4 +198,42 @@ test('in production: HSTS, and session cookies are __Host-, Secure, HttpOnly, Sa
     assert.match(cookie, /; SameSite=Lax(;|$)/, name)
     assert.doesNotMatch(cookie, /; Domain=/i, name)
   }
+})
+
+test('state-changing requests from other origins are refused; without Origin they pass', async () => {
+  const cookie = await createSession('Lars')
+  const post = (headers: Record<string, string>) =>
+    request('POST', '/api/theme', 'theme=plum-steel', { cookie, ...headers })
+
+  // Another site, a sibling subdomain, another port or scheme, and an opaque origin.
+  for (const origin of [
+    'https://evil.example',
+    'https://www.blurt.trade.evil.example',
+    'http://example.test:8080',
+    'https://example.test',
+    'null',
+  ]) {
+    const refused = await post({ host: 'example.test', origin })
+    assert.equal(refused.statusCode, 403, origin)
+    assert.match(refused.body, /other sites/)
+  }
+  // JSON callers get the error as JSON.
+  const json = await post({ origin: 'https://evil.example', accept: 'application/json' })
+  assert.equal(json.statusCode, 403)
+  assert.deepEqual(JSON.parse(json.body), { error: 'Requests from other sites are not accepted' })
+  const { rows } = await db().query(
+    `SELECT p.theme FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE u.username = 'Lars'`,
+  )
+  assert.equal(rows[0].theme, null, 'nothing was saved')
+
+  // Our own origin: the one the request was sent to, or the public one (PUBLIC_URL).
+  assert.equal(
+    (await post({ host: 'example.test', origin: 'http://example.test' })).statusCode,
+    303,
+  )
+  assert.equal((await post({ origin: new URL(publicUrl()).origin })).statusCode, 303)
+  // No Origin at all: old browsers, curl, API clients.
+  assert.equal((await post({})).statusCode, 303)
+  // Reading is never refused, wherever it comes from.
+  assert.equal((await request('GET', '/', '', { origin: 'https://evil.example' })).statusCode, 200)
 })

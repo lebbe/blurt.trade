@@ -18,6 +18,7 @@ import { localeFrom } from './timezones.ts'
 import { readYourWrites } from './middleware/replica.ts'
 import { trustProxySetting } from './middleware/rate-limit.ts'
 import { allowScripts, securityHeaders } from './middleware/security-headers.ts'
+import { sameOriginWrites } from './middleware/same-origin.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
 import { speculationRulesType } from './speculation.ts'
@@ -58,6 +59,8 @@ app.disable('x-powered-by')
 app.use(requestLogger)
 // Next, so every response has them, errors included.
 app.use(securityHeaders)
+// Before anything reads a body or changes anything: POSTs from other sites are refused.
+app.use(sameOriginWrites)
 // Before cookies and auth: the uptime check needs neither.
 app.use(healthRouter)
 app.use(crawlRouter)
