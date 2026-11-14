@@ -104,7 +104,7 @@ test('the import check sees what Node loads', () => {
   assert.deepEqual(
     runtimeImports(
       [
-        "import type { Blurt } from '../routes/state.ts'",
+        "import type { Blurt } from '../routes/state/blurts.ts'",
         "import { type Viewer } from './context.ts'",
         "import {\n  a,\n  b,\n} from 'node:fs'",
         "import 'zod'",

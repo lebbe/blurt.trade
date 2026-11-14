@@ -14,7 +14,7 @@ export type HeadWidth = (typeof headWidths)[number]
 
 // An uploaded profile picture, which replaces the cartoon wherever the avatar is shown
 // (src/ui/avatar.ts, AvatarView). Never stored in the avatar JSON: the queries add
-// it (avatarColumn in src/routes/state.ts). `cut` is where the mouth is, in percent from
+// it (avatarColumn in src/routes/state/blurts.ts). `cut` is where the mouth is, in percent from
 // the top; `version` changes with every upload.
 export type AvatarPhoto = { user: number; version: number; cut: number }
 

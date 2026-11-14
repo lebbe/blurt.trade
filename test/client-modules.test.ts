@@ -67,7 +67,7 @@ test('nothing but the client folders can be fetched, however the path is written
     `${base}/config.ts`,
     `${base}/server.ts`,
     `${base}/routes/home.ts`,
-    `${base}/routes/state.ts`,
+    `${base}/routes/state/blurts.ts`,
     `${base}/middleware/auth.ts`,
     `${base}/pages/shared/layout.ts`,
     `${base}/pages/feed/feed.html.ts`,
