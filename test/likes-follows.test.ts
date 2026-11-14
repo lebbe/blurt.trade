@@ -76,7 +76,7 @@ test('likes and unlikes from the feed, a profile and a blurt page without JS', a
 
   // Anonymous visitors see the count, no button.
   const anonymous = await request('GET', '/')
-  assert.match(anonymous.body, /0 likes/)
+  assert.match(anonymous.body, /0 <span class="count-label">likes<\/span>/)
   assert.doesNotMatch(anonymous.body, /api\/(un)?like/)
 
   for (const page of ['/', '/Lars/', `/Lars/${id}`]) {
@@ -91,7 +91,7 @@ test('likes and unlikes from the feed, a profile and a blurt page without JS', a
     const after = await request('GET', page, '', { cookie: adaCookie })
     assert.match(after.body, unlikeForm, page)
     assert.match(after.body, new RegExp(`id="blurt-${id}"`), page)
-    assert.match(after.body, /1 like</, page)
+    assert.match(after.body, /1 <span class="count-label">like<\/span>/, page)
     // Liking twice does nothing.
     await request('POST', '/api/like', `blurtId=${id}`, { cookie: adaCookie })
     assert.equal(await likeCount(id), 1)
@@ -101,7 +101,9 @@ test('likes and unlikes from the feed, a profile and a blurt page without JS', a
     assert.equal(unliked.location, `/Lars/${id}`) // no Referer: the blurt's page
     await request('POST', '/api/unlike', `blurtId=${id}`, { cookie: adaCookie })
     assert.equal(await likeCount(id), 0)
-    assert.match((await request('GET', page, '', { cookie: adaCookie })).body, likeForm, page)
+    const afterUnlike = await request('GET', page, '', { cookie: adaCookie })
+    assert.match(afterUnlike.body, likeForm, page)
+    assert.match(afterUnlike.body, /0 <span class="count-label">likes<\/span>/, page)
   }
 
   // Another site's Referer is not followed.
