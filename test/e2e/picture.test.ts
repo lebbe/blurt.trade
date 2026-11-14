@@ -454,3 +454,49 @@ bothModes(
     assert.equal((await drawnInPage(page, file)).svg, served)
   },
 )
+
+test('profile picture: uploading and removing in place leave the page as a reload draws it', async (t) => {
+  const { page, problems } = await openTab(t, true)
+  await signUp(page, 'Lars')
+  // What the edit page shows of the cartoon: its form, and the aside's link to it.
+  const cartoon = () =>
+    page.evaluate(() => ({
+      form: document.querySelectorAll('form.avatar-form').length,
+      anchor: document.getElementById('avatar')?.localName,
+      link: document.querySelectorAll('aside a[href="#avatar"]').length,
+    }))
+  await openPicturePanel(page)
+  const withoutPicture = await cartoon()
+  assert.deepEqual(withoutPicture, { form: 1, anchor: 'section', link: 1 })
+  await markWindow(page)
+
+  await page.setInputFiles(`${pictureForm} input[type=file]`, {
+    name: 'me.png',
+    mimeType: 'image/png',
+    buffer: samplePng(400, 400),
+  })
+  await page.locator('.picture-crop').waitFor()
+  await page.click(`${pictureForm} button[type=submit]:has-text("Upload picture")`)
+  await page.locator('form.cut-form').waitFor()
+  assert.ok(await samePage(page), 'no page load')
+  // The cartoon's form is gone, as after a reload, so its fields can't draw a cartoon over
+  // the picture's preview (it showed the photo, which is what is stored).
+  const inPlace = await cartoon()
+  assert.deepEqual(inPlace, { form: 0, anchor: 'span', link: 0 })
+  await openPicturePanel(page)
+  assert.deepEqual(await cartoon(), inPlace)
+
+  // Removing it brings the cartoon's form back, working (autosave), as a reload would.
+  await markWindow(page)
+  await page.click(`${pictureForm} button[name=remove]`)
+  await page.locator(`${pictureForm} button[name=remove]`).waitFor({ state: 'detached' })
+  assert.ok(await samePage(page))
+  assert.deepEqual(await cartoon(), withoutPicture)
+  await enhancersReady(page)
+  await page.fill('form.avatar-form input[name=skin]', '#123456')
+  await page.locator('form.avatar-form .autosave-status[data-state=saved]').waitFor()
+  assert.match(await page.innerHTML('form.avatar-form .avatar-preview'), /fill="#123456"/)
+  await openPicturePanel(page)
+  assert.deepEqual(await cartoon(), withoutPicture)
+  assert.deepEqual(problems, [])
+})
