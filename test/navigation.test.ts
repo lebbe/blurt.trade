@@ -151,3 +151,17 @@ test('a prefetch never rotates the refresh token: it is refused until the real n
   assert.ok(cookiesSet(real).refresh_token)
   assert.equal(await generation(), before + 1)
 })
+
+test('every write sent with fetch() tells the browser to drop its prefetched pages, and only those', async () => {
+  const lars = await createSession('Lars')
+  const clear = '"prefetchCache", "prerenderCache"'
+  const posted = await request('POST', '/api/blurts', 'text=hello', { cookie: lars, ...json })
+  assert.equal(posted.statusCode, 201)
+  assert.equal(posted.headers['clear-site-data'], clear)
+  const form = await request('POST', '/api/blurts', 'text=again', { cookie: lars })
+  assert.equal(form.statusCode, 303)
+  // A form POST replaces the page, and its prefetches with it.
+  assert.equal(form.headers['clear-site-data'], undefined)
+  const page = await request('GET', '/', '', { cookie: lars })
+  assert.equal(page.headers['clear-site-data'], undefined)
+})

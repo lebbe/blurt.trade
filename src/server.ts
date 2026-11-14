@@ -21,7 +21,7 @@ import { allowScripts, securityHeaders } from './middleware/security-headers.ts'
 import { sameOriginWrites } from './middleware/same-origin.ts'
 import { bodyLimit } from './limits.ts'
 import { sendError } from './negotiate.ts'
-import { speculationRulesType } from './speculation.ts'
+import { clearSpeculations, speculationRulesType } from './speculation.ts'
 import { serveVendorFiles } from './vendor.ts'
 import { serveClientModules } from './client-modules.ts'
 import { javascriptEnabled } from './javascript.ts'
@@ -65,6 +65,8 @@ app.use(requestLogger)
 app.use(securityHeaders)
 // Before anything reads a body or changes anything: POSTs from other sites are refused.
 app.use(sameOriginWrites)
+// Writes make the page's prefetched pages stale (src/speculation.ts).
+app.use(clearSpeculations)
 // Before cookies and auth: the uptime check needs neither.
 app.use(healthRouter)
 app.use(crawlRouter)
