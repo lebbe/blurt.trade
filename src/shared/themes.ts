@@ -48,6 +48,12 @@ export function themeStylesheetUrl(theme: ThemeId): string | null {
   return theme === defaultTheme ? null : `/static/themes/${theme}.css`
 }
 
+// The browser's own colour around the page (<meta name="theme-color">, the address bar on
+// phones): the theme's background, so it matches the page.
+export function themeColor(theme: ThemeId): string {
+  return themes.find(({ id }) => id === theme)!.colors.bg
+}
+
 // Above-the-fold CSS, inlined in every page's <head> (at most 15 lines): the theme's
 // colours, the page frame and the sizes of the inline SVGs, so a slow connection shows a
 // dark, laid-out page while the stylesheets load instead of a white flash with giant

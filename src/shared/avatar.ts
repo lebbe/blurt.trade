@@ -79,6 +79,26 @@ export const avatarPalettes = {
 
 export const colorPattern = /^#[0-9a-f]{6}$/
 
+// A random avatar from those palettes, for new profiles and the edit page's "Random".
+// `index(n)` picks a whole number below n: node:crypto's randomInt on the server
+// (src/avatar.ts), Math.random in the browser (src/client/avatar-live.ts), where nothing
+// depends on it being unguessable.
+export function randomAvatarWith(index: (count: number) => number): Avatar {
+  const pick = <T>(values: readonly T[]): T => values[index(values.length)]
+  return {
+    headWidth: pick(headWidths),
+    skin: pick(avatarPalettes.skin),
+    hairType: pick(hairTypes),
+    hairColor: pick(avatarPalettes.hairColor),
+    eyeType: pick(eyeTypes),
+    eyeColor: pick(avatarPalettes.eyeColor),
+    pupilColor: pick(avatarPalettes.pupilColor),
+    // Mostly some teeth: a toothless mouth just looks closed.
+    toothType: pick(toothTypes.filter((type) => type !== 'none')),
+    toothColor: pick(avatarPalettes.toothColor),
+  }
+}
+
 // Where the mouth of a profile picture may be, in percent from the top. The table's
 // CHECK on user_profiles.picture_cut repeats it; 65 is the default there too.
 export const minPictureCut = 5
