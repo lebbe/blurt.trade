@@ -2,7 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { Page } from 'playwright'
 import { samplePng } from '../helpers.ts'
-import { bothModes, openTab, signUp } from './helpers.ts'
+import {
+  bothModes,
+  enhancersReady,
+  holdRequests,
+  markWindow,
+  openTab,
+  samePage,
+  signUp,
+} from './helpers.ts'
 
 // The profile edit page: with JavaScript, settings save as they change and the map and the
 // picture save a click, all without a page load (src/client/autosave.ts, map.ts, mouth.ts).
@@ -12,24 +20,7 @@ import { bothModes, openTab, signUp } from './helpers.ts'
 // change made before that is an ordinary form, as it should be, but not what is tested).
 async function openEditPage(page: Page, hash = ''): Promise<void> {
   await page.goto(`/Lars/edit${hash}`)
-  if (await page.evaluate(() => document.documentElement.dataset.js === 'on')) {
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll<HTMLElement>('[data-enhance]')].every(
-        (element) => element.dataset.enhanced === element.dataset.enhance,
-      ),
-    )
-  }
-}
-
-// A mark on the window: it survives anything but a page load.
-async function markWindow(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    ;(window as unknown as { stillHere: boolean }).stillHere = true
-  })
-}
-
-async function samePage(page: Page): Promise<boolean> {
-  return page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere === true)
+  await enhancersReady(page)
 }
 
 // Waits for a form's autosave to say "Saved".
@@ -296,38 +287,6 @@ test('the picture from the keyboard: arrows move the line, Enter saves it', asyn
   )
 })
 
-// Holds every request to `path` until release() (then it goes on to the server), so a test
-// can see what the page does before the answer comes. `answer` instead gives that status
-// with an error body, as a failed save.
-async function holdRequests(
-  page: Page,
-  path: string,
-  answer?: number,
-): Promise<{ release: () => void; sent: () => number }> {
-  let release!: () => void
-  const released = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  let sent = 0
-  await page.route(
-    (url) => url.pathname === path,
-    async (route) => {
-      sent++
-      await released
-      if (answer) {
-        await route.fulfill({
-          status: answer,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'Something broke' }),
-        })
-      } else {
-        await route.continue()
-      }
-    },
-  )
-  return { release, sent: () => sent }
-}
-
 const avatarForm = 'form[action="/api/avatar"]'
 const avatarPreview = `${avatarForm} .avatar-preview > svg.avatar`
 
@@ -392,7 +351,7 @@ bothModes('the avatar is drawn as it is changed', async ({ page }, javaScriptEna
   // A select: drawn before the server has answered.
   await page.selectOption(`${avatarForm} select[name=hairType]`, hair)
   await page.waitForFunction(() => document.querySelector('.autosave-status[data-state=saving]'))
-  assert.equal(held.sent(), 1)
+  assert.equal(await held.sentAtLeast(1), 1)
   await redrawn(page, dragged)
   const drawn = await page.innerHTML(`${avatarForm} .avatar-preview`)
   assert.match(drawn, /fill="#123456"/)
@@ -511,7 +470,7 @@ test('a picked theme shows before it is saved', async (t) => {
   const held = await holdRequests(page, '/api/theme')
   await page.check(`${themeForm} input[value=plum-steel]`)
   await themeShown(page, '#17121f')
-  assert.equal(held.sent(), 1)
+  assert.equal(await held.sentAtLeast(1), 1)
   assert.equal(
     await page.locator(`${themeForm} .autosave-status[role=status]`).getAttribute('data-state'),
     'saving',

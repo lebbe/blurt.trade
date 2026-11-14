@@ -226,6 +226,12 @@ test('POST routes answer JSON callers with JSON instead of redirects', async () 
   const newBlurt = JSON.parse(blurt.body)
   assert.equal(newBlurt.text, 'From fetch')
   assert.equal(blurt.location, `/Ada/${newBlurt.id}`)
+  // A feed item, as the feed's own JSON has it, so a script shows it with the same card.
+  const feed = JSON.parse((await request('GET', '/', '', { ...json, cookie })).body)
+  assert.deepEqual(feed.blurts[0], newBlurt)
+  assert.deepEqual(newBlurt.replies, [])
+  assert.equal(newBlurt.viewerLikes, false)
+  assert.equal(typeof newBlurt.avatar, 'object')
 
   const reply = await sendJson('/api/blurts', { parentId: newBlurt.id, text: 'Hi' }, { cookie })
   assert.equal(reply.statusCode, 201)

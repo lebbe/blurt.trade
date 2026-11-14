@@ -78,7 +78,11 @@ function SearchPage({ viewer, query, users, blurts, next }: SearchData) {
                 }
                 ${
                   next &&
-                  html`<${NextPageLink} href=${searchUrl(query, next)} label="Older blurts" />`
+                  html`<${NextPageLink}
+                    href=${searchUrl(query, next)}
+                    label="Older blurts"
+                    list="blurts"
+                  />`
                 }
               </section>
             `

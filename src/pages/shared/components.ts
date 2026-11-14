@@ -5,6 +5,7 @@ import { usePageContext } from '../../ui/context.ts'
 import { SubmitButton } from '../../ui/forms.ts'
 import { html } from '../../ui/html.ts'
 import { Icon, type IconName } from '../../ui/icons.ts'
+import type { ListKind } from '../../ui/lists.ts'
 import { MapMarker } from '../../ui/location.ts'
 
 // Small components more than one page uses. One that only a single page uses stays in
@@ -104,8 +105,21 @@ export function JavaScriptSetting() {
   `
 }
 
-export function NextPageLink({ href, label }: { href: string; label: string }) {
-  return html`<p class="next-page"><a href=${href} rel="next">${label}</a></p>`
+// The link to the next page of a list. With `list` (which kind it is, src/ui/lists.ts) and
+// JavaScript on, src/client/more.ts loads that page into this one as it scrolls into view;
+// the link stays as it was for everyone else.
+export function NextPageLink({
+  href,
+  label,
+  list,
+}: {
+  href: string
+  label: string
+  list?: ListKind
+}) {
+  return html`<p class="next-page" data-enhance=${list && 'more'} data-list=${list}>
+    <a href=${href} rel="next">${label}</a>
+  </p>`
 }
 
 // Opt-in, coarse location. Clicking the map image submits the pixel (location.x,

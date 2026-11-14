@@ -13,7 +13,11 @@ import { readPageContext } from './page-context.ts'
 // URL (src/client-modules.ts).
 const enhancers: Registry = {
   autosave: () => import('./autosave.ts'),
+  'blurt-actions': () => import('./blurt-actions.ts'),
+  composer: () => import('./composer.ts'),
+  follow: () => import('./follow.ts'),
   map: () => import('./map.ts'),
+  more: () => import('./more.ts'),
   mouth: () => import('./mouth.ts'),
 }
 

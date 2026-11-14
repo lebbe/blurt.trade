@@ -8,9 +8,9 @@ import type { InviteCode } from '../../routes/state/signup.ts'
 import { isWebUrl, normalizedWebUrl } from '../../shared/limits.ts'
 import { AvatarView } from '../../ui/avatar.ts'
 import { BlurtCard } from '../../ui/blurt-card.ts'
+import { FollowForm, followTagline } from '../../ui/follow.ts'
 import { html } from '../../ui/html.ts'
-import { Icon } from '../../ui/icons.ts'
-import { plural, preview } from '../../ui/text.ts'
+import { preview } from '../../ui/text.ts'
 import { olderBlurtsUrl } from '../../ui/urls.ts'
 
 // Today a plain link to the share card image, which works without JavaScript. With
@@ -57,19 +57,6 @@ function ProfileLinks({ profile }: { profile: UserProfile }) {
         )}
       </dl>
     </section>
-  `
-}
-
-function FollowForm({ username, following }: { username: string; following: boolean }) {
-  return html`
-    <form method="post" action=${following ? '/api/unfollow' : '/api/follow'} class="follow-form">
-      <input type="hidden" name="username" value=${username} />
-      <button type="submit" class=${following ? 'secondary' : undefined}>
-        <${Icon} name=${following ? 'personMinus' : 'personPlus'} /><span
-          >${following ? 'Unfollow' : 'Follow'}</span
-        >
-      </button>
-    </form>
   `
 }
 
@@ -143,7 +130,7 @@ function ProfilePage({
   return html`
     <${Page}
       title=${profile.username}
-      tagline=${`${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following`}
+      tagline=${followTagline(follows)}
       lead=${html`<${AvatarView}
         avatar=${profile.avatar}
         label="${profile.username}'s avatar"
@@ -172,6 +159,7 @@ function ProfilePage({
           html`<${NextPageLink}
             href=${olderBlurtsUrl(`/${profile.username}/`, next)}
             label="Older blurts"
+            list="blurts"
           />`
         }
       </section>

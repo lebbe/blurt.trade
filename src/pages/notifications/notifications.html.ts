@@ -48,7 +48,14 @@ function NotificationsPage({ viewer, read, unread, notifications, next }: Notifi
                 ${read ? 'Nothing read yet.' : 'Nothing new. You are all caught up.'}
               </p>`
         }
-        ${next && html`<${NextPageLink} href=${here(next)} label="Older notifications" />`}
+        ${
+          next &&
+          html`<${NextPageLink}
+            href=${here(next)}
+            label="Older notifications"
+            list="notifications"
+          />`
+        }
       </section>
     <//>
   `

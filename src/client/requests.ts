@@ -47,6 +47,9 @@ async function interpret<T>(response: Response): Promise<Outcome<T> | undefined>
     return undefined
   }
   if (response.status === 204 && response.ok) {
+    // Read to the end all the same: until then the request counts as still loading, and a
+    // page load right after it would cancel it (harmless, but reported as a failure).
+    await response.arrayBuffer()
     return { kind: 'success', status: 204, data: null }
   }
   if (!jsonType.test(response.headers.get('Content-Type') ?? '')) {
@@ -77,7 +80,10 @@ async function interpret<T>(response: Response): Promise<Outcome<T> | undefined>
 // the browser already did before the event). It ignores the submitter, so its name and
 // value go in as a hidden field, and its formaction/formmethod/... are honoured by
 // setting them on the form.
-function submitForReal(
+//
+// Exported for enhancers that send a form with `fallback: false` because they changed the
+// page first (an optimistic Like): they put the page back, then submit for real.
+export function submitForReal(
   form: HTMLFormElement,
   submitter?: HTMLElement | null,
   fields: Record<string, string> = {},

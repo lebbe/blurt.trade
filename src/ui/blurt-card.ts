@@ -167,6 +167,11 @@ export function ReportForm({ blurt, error }: { blurt: Blurt; error?: string }) {
   `
 }
 
+// What a card says instead of the Report form once the viewer has reported the blurt.
+export function ReportedNote() {
+  return html`<span class="empty">You reported this blurt.</span>`
+}
+
 // `replies` are shown inline (the feed); the link below covers the rest of the thread.
 // `viewer` decides the Delete / Report actions; `reported` says the viewer already did.
 // `inThread`: shown under (or as) the blurt it replies to, so "Replying to" is left out.
@@ -243,11 +248,18 @@ export function BlurtCard({
     `
   }
 
+  // With JavaScript, the viewer's buttons on it (like, reblurt, delete, report) work
+  // without a page load: src/client/blurt-actions.ts. Nothing to do for anonymous viewers.
+  //
   // Two boxes. .blurt-main is what was said: avatar, nick, date, text and the picture (which
   // runs the full width of the card). .blurt-footer is what you can do about it: actions
   // and replies. The avatar sits on the left of odd blurts and the right of even ones (CSS).
   return html`
-    <article class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'} id=${blurtAnchor(blurt)}>
+    <article
+      class=${blurt.reblurtedBy ? 'blurt reblurt' : 'blurt'}
+      id=${blurtAnchor(blurt)}
+      data-enhance=${viewer ? 'blurt-actions' : undefined}
+    >
       <div class="blurt-main">
         <${AvatarView} avatar=${blurt.avatar} />
         <div class="blurt-body">
@@ -298,7 +310,7 @@ export function BlurtCard({
           ${
             action === 'report' &&
             (reported
-              ? html`<span class="empty">You reported this blurt.</span>`
+              ? html`<${ReportedNote} />`
               : html`<${ReportForm} blurt=${blurt} error=${reportError} />`)
           }
         </div>

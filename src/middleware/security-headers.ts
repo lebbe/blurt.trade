@@ -14,6 +14,7 @@ import { criticalCssHashes } from '../themes.ts'
 //
 //   script-src 'self' 'sha256-<import map>'
 //
+// (and blob: images, below)
 // so the only scripts that can run are our own modules (/static/js/…, src/client-modules.ts,
 // and the Preact bundle under /static/vendor/) and the page's one inline script, the
 // import map, by its hash (computed at startup; it only changes with the build). No
@@ -51,8 +52,13 @@ const basePolicy = [
 
 export const contentSecurityPolicy = basePolicy.join('; ')
 
+// With scripts, images may also be blob: URLs. Only a script on the page can make one
+// (URL.createObjectURL), from data it already has: the composer's preview of the picture
+// about to be uploaded (src/client/composer.ts). Never another origin.
 export const scriptingContentSecurityPolicy = [
-  ...basePolicy,
+  ...basePolicy.map((directive) =>
+    directive === "img-src 'self'" ? "img-src 'self' blob:" : directive,
+  ),
   `script-src 'self' ${importMapHash}`,
 ].join('; ')
 

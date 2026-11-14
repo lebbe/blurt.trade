@@ -1,7 +1,8 @@
 /* blurt.trade. The default theme, Cobalt Quietude, is these variables and the grid
    background and uppercase navigation below; the other themes (public/themes/*.css,
    linked after this file) override them and add a few touches of their own.
-   No JavaScript anywhere: hover, details and forms do all the moving. */
+   Without JavaScript, hover, details and forms do all the moving; the little that scripts
+   add (src/client/) is styled at the end. */
 :root {
   color-scheme: dark;
   --bg: #0a1323;
@@ -1569,4 +1570,78 @@ td {
 
 .top-nav .badge {
   font-size: 0.78rem;
+}
+
+/* --- With JavaScript (src/client/) ------------------------------------------------------------- */
+
+/* The composer (composer.ts): the count turns warning colours near and past the limit. */
+.composer-hint[data-state='low'] {
+  color: var(--signal);
+}
+
+.composer-hint[data-state='over'] {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.composer-status:empty {
+  display: none;
+}
+
+.composer-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.picture-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.picture-preview img {
+  max-width: 120px;
+  max-height: 90px;
+  border: 2px solid var(--line-soft);
+  object-fit: cover;
+}
+
+/* The next page of a list on its way (more.ts). */
+.next-page[data-loading] a {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Items the focus is moved to (a new blurt, the first of a loaded page): a quiet ring. */
+[tabindex='-1']:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus), transparent 56%);
+  outline-offset: 2px;
+}
+
+[tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Delete's confirmation (blurt-actions.ts). */
+dialog.confirm {
+  max-width: min(24rem, calc(100vw - 32px));
+  padding: 16px 18px;
+  border: var(--panel-border) solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--panel-shadow);
+}
+
+dialog.confirm::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+dialog.confirm p {
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+
+dialog.confirm .actions {
+  justify-content: flex-end;
 }

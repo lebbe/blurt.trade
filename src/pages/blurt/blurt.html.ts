@@ -108,7 +108,7 @@ function BlurtPage({
       }
       <section class="panel" aria-label="Replies">
         <h2>Replies</h2>
-        <div class="thread-children">
+        <div class="thread-children" data-new-blurts="end">
           ${
             replies.length > 0
               ? replies.map(
@@ -117,7 +117,14 @@ function BlurtPage({
               : html`<p class="empty">No replies yet.</p>`
           }
         </div>
-        ${next && html`<${NextPageLink} href=${moreRepliesUrl(blurt, next)} label="More replies" />`}
+        ${
+          next &&
+          html`<${NextPageLink}
+            href=${moreRepliesUrl(blurt, next)}
+            label="More replies"
+            list="replies"
+          />`
+        }
       </section>
     <//>
   `
