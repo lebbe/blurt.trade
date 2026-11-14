@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
+import express from 'express'
 import pg from 'pg'
 import { app } from '../src/server.ts'
 import { hkdfSync } from 'node:crypto'
@@ -11,6 +12,7 @@ import {
   closeEventStreams,
   listenerReady,
   maxStreamsPerUser,
+  openEventStream,
   streamCount,
 } from '../src/events.ts'
 import { listenDatabaseUrl } from '../src/db.ts'
@@ -296,4 +298,27 @@ test('the close is jittered only ever earlier, never past the token', () => {
   assert.equal(closeDelay(300_000, 1), 290_000)
   assert.equal(closeDelay(2000, 1), 1800)
   assert.equal(closeDelay(-5, 0.5), 0)
+})
+
+test('a request the browser gave up on before the stream opened is not kept', async () => {
+  // As when the page navigates away while the route is still checking the login.
+  const gone = express()
+  gone.get('/', (request, response) => {
+    request.on('close', () => {
+      assert.equal(openEventStream(4242, response, Date.now() + 60_000), true)
+      opened()
+    })
+  })
+  let opened!: () => void
+  const done = new Promise<void>((resolve) => {
+    opened = resolve
+  })
+  const server = gone.listen(0)
+  await new Promise((resolve) => server.once('listening', resolve))
+  const req = http.get({ port: (server.address() as AddressInfo).port, path: '/' })
+  req.on('error', () => {})
+  setTimeout(() => req.destroy(), 50)
+  await done
+  assert.equal(streamCount(4242), 0)
+  await new Promise((resolve) => server.close(resolve))
 })
