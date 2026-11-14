@@ -337,3 +337,9 @@ export function AvatarView(props: {
         size=${props.size}
       />`
 }
+
+// Under the picture on the edit page: where its mouth opens now. Also rewritten by the
+// mouth's script (src/client/mouth.ts) after a click saved without a page load.
+export function cutHint(cut: number): string {
+  return `Click where the mouth should open (now ${cut}% from the top).`
+}

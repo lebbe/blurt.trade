@@ -12,7 +12,9 @@ import { readPageContext } from './page-context.ts'
 // import() must be a literal relative path, so it resolves under this module's versioned
 // URL (src/client-modules.ts).
 const enhancers: Registry = {
-  // autosave: () => import('./autosave.ts'),
+  autosave: () => import('./autosave.ts'),
+  map: () => import('./map.ts'),
+  mouth: () => import('./mouth.ts'),
 }
 
 // Set only once this script actually runs: CSS that hides a fallback (a save button that

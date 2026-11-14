@@ -36,3 +36,18 @@ export function PageContextProvider({
 }) {
   return html`<${PageContextValue.Provider} value=${value}>${children}<//>`
 }
+
+// After a setting changed without a page load (theme, time zone): the same change to the
+// context enhancers were given and to the JSON in the page, so everything that reads it
+// later (other enhancers, islands rendered from then on) sees the page as it now is.
+export function updatePageContext(
+  page: PageContext,
+  changes: Partial<PageContext>,
+  doc: Document = document,
+): void {
+  Object.assign(page, changes)
+  const element = doc.getElementById(pageContextElementId)
+  if (element) {
+    element.textContent = JSON.stringify(page).replaceAll('<', '\\u003c')
+  }
+}

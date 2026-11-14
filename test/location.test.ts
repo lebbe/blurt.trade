@@ -26,7 +26,8 @@ test('sets, moves and removes a coarse location by clicking the map without JS',
   const before = await request('GET', '/Lars/edit', '', { cookie })
   assert.match(before.body, /<input type="image" name="location" src="\/static\/world-map\.svg"/)
   assert.match(before.body, /You haven't set a location\./)
-  assert.doesNotMatch(before.body, /Remove my location/)
+  // The remove button is there for the map's script to show, but hidden: nothing to remove.
+  assert.match(before.body, /<form [^>]*class="inline location-clear" hidden>/)
 
   // Pixel (381, 60) is around 59.75° N, 10.75° E: stored as the middle of its 1° cell.
   const click = await request('POST', '/api/location', 'location.x=381&location.y=60', { cookie })
@@ -37,6 +38,7 @@ test('sets, moves and removes a coarse location by clicking the map without JS',
   const after = await request('GET', '/Lars/edit', '', { cookie })
   assert.match(after.body, /Your location: <strong>59\.5° N, 10\.5° E<\/strong>/)
   assert.match(after.body, /class="map-marker"[^]*?<circle cx="381" cy="61"/)
+  assert.match(after.body, /<form [^>]*class="inline location-clear">/)
 
   const moved = await request('POST', '/api/location', 'location.x=100&location.y=300', {
     cookie,
@@ -58,11 +60,15 @@ test('locations are snapped to the grid, validated, and shown only to their owne
 
   const precise = await sendJson('/api/location', { lat: 59.91234, lon: 10.75678 }, { cookie })
   assert.equal(precise.statusCode, 200)
-  assert.deepEqual(JSON.parse(precise.body), { location: { lat: 59.5, lon: 10.5 } })
+  // With the time zone it set, the place's, for the map's script to show.
+  assert.deepEqual(JSON.parse(precise.body), {
+    location: { lat: 59.5, lon: 10.5 },
+    timeZone: 'Europe/Oslo',
+  })
 
   // The edges of the world.
   const corner = await sendJson('/api/location', { lat: 90, lon: 180 }, { cookie })
-  assert.deepEqual(JSON.parse(corner.body), { location: { lat: 89.5, lon: -179.5 } })
+  assert.deepEqual(JSON.parse(corner.body).location, { lat: 89.5, lon: -179.5 })
 
   // A keyboard "click" on the image sends 0,0: the form comes back with the error.
   const keyboard = await request('POST', '/api/location', 'location.x=0&location.y=0', { cookie })
@@ -95,7 +101,8 @@ test('locations are snapped to the grid, validated, and shown only to their owne
   }
 
   const cleared = await sendJson('/api/location', { clear: true }, { cookie })
-  assert.deepEqual(JSON.parse(cleared.body), { location: null })
+  // Removing it leaves the time zone alone.
+  assert.deepEqual(JSON.parse(cleared.body), { location: null, timeZone: null })
   assert.equal((await sendJson('/api/location', { lat: 1, lon: 1 })).statusCode, 401)
 
   // The database refuses anything but a cell centre, whatever the app does.
