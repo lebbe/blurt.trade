@@ -100,12 +100,15 @@ export type ReblurtState = { blurtId: number; reblurtCount: number; viewerReblur
 // reblurt per user and blurt (blurts_plain_reblurt_key). Un-reblurting deletes the row,
 // like unliking: a plain reblurt has no content and nothing hangs off it. Your own blurts
 // can't be reblurted ('own'; quoting them is fine). Locks and counts like setLike.
-export function setReblurt(
+// `onNotified` gets the author's id once a reblurt that notified them is saved (addBlurt).
+export async function setReblurt(
   userId: number,
   blurtId: number,
   reblurts: boolean,
+  onNotified?: (userIds: number[]) => void,
 ): Promise<ReblurtState | 'not-found' | 'no-user' | 'own'> {
-  return inTransaction(async (client) => {
+  let notified: number[] = []
+  const state = await inTransaction(async (client) => {
     const locked = await lockForAction(client, userId, blurtId)
     if (typeof locked === 'string') {
       return locked
@@ -125,7 +128,7 @@ export function setReblurt(
           [userId, blurtId],
         )
     if (changed.rowCount === 1) {
-      await (reblurts
+      const notification = await (reblurts
         ? client.query(
             `INSERT INTO notifications (user_id, kind, actor_user_id, blurt_id)
              SELECT $1, 'reblurt', $2, $3 FROM user_profiles WHERE user_id = $1 AND notify_reblurts
@@ -137,6 +140,7 @@ export function setReblurt(
              WHERE user_id = $1 AND kind = 'reblurt' AND actor_user_id = $2 AND blurt_id = $3`,
             [locked.authorId, userId, blurtId],
           ))
+      notified = reblurts && notification.rowCount === 1 ? [locked.authorId] : []
     }
     const reblurtCount =
       changed.rowCount === 1
@@ -144,4 +148,8 @@ export function setReblurt(
         : await readStat(client, blurtId, 'reblurt_count')
     return { blurtId, reblurtCount, viewerReblurted: reblurts }
   })
+  if (notified.length > 0) {
+    onNotified?.(notified)
+  }
+  return state
 }

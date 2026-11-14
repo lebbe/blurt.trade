@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { closeDb, dbRead } from '../src/db.ts'
 import { configProblems } from '../src/config.ts'
+import { generateVapidKeys } from '../src/vapid.ts'
 import {
   countServerError,
   log,
@@ -18,6 +19,11 @@ test('development needs no configuration', () => {
   assert.deepEqual(configProblems({}), { errors: [], warnings: [] })
 })
 
+const vapid = (() => {
+  const { publicKey, privateKey } = generateVapidKeys()
+  return { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey }
+})()
+
 test('production refuses to start with a missing or malformed configuration', () => {
   const good = {
     NODE_ENV: 'production',
@@ -27,6 +33,7 @@ test('production refuses to start with a missing or malformed configuration', ()
     TRUST_PROXY: '1',
     ALERT_WEBHOOK_URL: 'https://hooks.example.com/T000/secret',
     CONTACT_REPO_URL: 'https://github.com/example/blurt.trade',
+    ...vapid,
   }
   assert.deepEqual(configProblems(good), { errors: [], warnings: [] })
 
@@ -52,9 +59,23 @@ test('production refuses to start with a missing or malformed configuration', ()
     configProblems({ ...good, ...changes }).warnings
   assert.match(warningsWith({ MIGRATION_DATABASE_URL: undefined }).join(), /MIGRATION/)
   assert.deepEqual(
-    warningsWith({ MIGRATION_DATABASE_URL: undefined, MIGRATE_ON_START: 'false' }),
+    warningsWith({
+      MIGRATION_DATABASE_URL: undefined,
+      MIGRATE_ON_START: 'false',
+      LISTEN_DATABASE_URL: 'postgres://blurt:secret@127.0.0.1:5432/blurt',
+    }),
     [],
   )
+  // Live updates need a direct connection too (src/db.ts, listenDatabaseUrl).
+  assert.match(
+    warningsWith({ MIGRATION_DATABASE_URL: undefined, MIGRATE_ON_START: 'false' }).join(),
+    /LISTEN_DATABASE_URL/,
+  )
+  assert.match(
+    warningsWith({ VAPID_PUBLIC_KEY: undefined, VAPID_PRIVATE_KEY: undefined }).join(),
+    /VAPID/,
+  )
+  assert.match(errorsWith({ LISTEN_DATABASE_URL: 'mysql://x' }).join(), /LISTEN_DATABASE_URL/)
   assert.match(warningsWith({ RATE_LIMIT_SCALE: '0' }).join(), /RATE_LIMIT_SCALE/)
   assert.match(warningsWith({ ALERT_WEBHOOK_URL: undefined }).join(), /ALERT_WEBHOOK_URL/)
   assert.match(warningsWith({ CONTACT_REPO_URL: undefined }).join(), /CONTACT_EMAIL nor/)

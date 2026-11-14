@@ -121,8 +121,9 @@ export async function markNotificationsRead(
   return countUnreadFromPrimary(userId)
 }
 
-// Like countUnreadNotifications, but from the primary: right after a write of ours.
-async function countUnreadFromPrimary(userId: number): Promise<number> {
+// Like countUnreadNotifications, but from the primary: right after a write (ours, or one
+// another instance told us about, src/events.ts).
+export async function countUnreadFromPrimary(userId: number): Promise<number> {
   const { rows } = await db().query<{ count: number }>(
     `SELECT count(*)::int AS count FROM (
        SELECT 1 FROM notifications WHERE user_id = $1 AND read_at IS NULL LIMIT ${unreadCap}

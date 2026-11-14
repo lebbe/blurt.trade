@@ -19,7 +19,9 @@ const enhancers: Registry = {
   map: () => import('./map.ts'),
   more: () => import('./more.ts'),
   mouth: () => import('./mouth.ts'),
+  'new-blurts': () => import('./new-blurts.ts'),
   'picture-upload': () => import('./picture-upload.ts'),
+  push: () => import('./push.ts'),
   share: () => import('./share.ts'),
 }
 
@@ -28,4 +30,10 @@ const enhancers: Registry = {
 // script that fails to load would leave the page without the fallback.
 document.documentElement.dataset.js = 'on'
 
-void enhanceAll(document, enhancers, { page: readPageContext() })
+const page = readPageContext()
+void enhanceAll(document, enhancers, { page })
+
+// Live updates (unread count, new blurts) for logged-in viewers, on every page.
+if (page.viewer) {
+  void import('./live.ts').then((live) => live.start(page))
+}

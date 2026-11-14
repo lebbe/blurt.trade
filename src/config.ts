@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url'
+import { vapidProblem } from './vapid.ts'
 
 // Checks the environment before the server starts, so a typo or a missing variable stops
 // the deploy instead of quietly falling back to a development default (the local database,
@@ -39,7 +40,12 @@ export function configProblems(env: Env = process.env): ConfigProblems {
     errors.push('ALERT_WEBHOOK_URL must be an http(s):// URL')
   }
 
-  for (const name of ['DATABASE_URL', 'MIGRATION_DATABASE_URL', 'DATABASE_READ_URL']) {
+  for (const name of [
+    'DATABASE_URL',
+    'MIGRATION_DATABASE_URL',
+    'DATABASE_READ_URL',
+    'LISTEN_DATABASE_URL',
+  ]) {
     if (set(name) && !/^postgres(ql)?:\/\//.test(env[name] as string)) {
       errors.push(`${name} must be a postgres:// URL`)
     }
@@ -58,6 +64,20 @@ export function configProblems(env: Env = process.env): ConfigProblems {
     errors.push(
       `PUBLIC_URL must be an http(s):// origin without a path, like https://blurt.trade, not "${env.PUBLIC_URL}"`,
     )
+  }
+
+  // Push is optional, but half a key pair, or a mismatched one, is a mistake.
+  if (set('VAPID_PUBLIC_KEY') || set('VAPID_PRIVATE_KEY')) {
+    const problem = vapidProblem(env.VAPID_PUBLIC_KEY ?? '', env.VAPID_PRIVATE_KEY ?? '')
+    if (problem) {
+      errors.push(problem)
+    }
+  }
+  if (
+    set('VAPID_SUBJECT') &&
+    !/^(mailto:\S+@\S+|https:\/\/\S+)$/.test(env.VAPID_SUBJECT as string)
+  ) {
+    errors.push(`VAPID_SUBJECT must be a mailto: or https:// URL, not "${env.VAPID_SUBJECT}"`)
   }
 
   if (set('MIGRATE_ON_START') && !['true', 'false'].includes(env.MIGRATE_ON_START as string)) {
@@ -81,6 +101,19 @@ export function configProblems(env: Env = process.env): ConfigProblems {
       warnings.push(
         'MIGRATION_DATABASE_URL is not set, so migrations use DATABASE_URL. If that is ' +
           'PgBouncer in transaction mode, point MIGRATION_DATABASE_URL at PostgreSQL itself',
+      )
+    }
+    if (!set('LISTEN_DATABASE_URL') && !set('MIGRATION_DATABASE_URL')) {
+      warnings.push(
+        'Neither LISTEN_DATABASE_URL nor MIGRATION_DATABASE_URL is set, so live updates ' +
+          'LISTEN through DATABASE_URL. If that is PgBouncer in transaction mode, point ' +
+          'LISTEN_DATABASE_URL at PostgreSQL itself',
+      )
+    }
+    if (!set('VAPID_PUBLIC_KEY')) {
+      warnings.push(
+        'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not set, so push notifications are off ' +
+          '(npm run vapid-keys makes a pair)',
       )
     }
     if (!set('ALERT_WEBHOOK_URL')) {

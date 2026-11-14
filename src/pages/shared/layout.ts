@@ -5,15 +5,10 @@ import { pageContext } from '../../page-context.ts'
 import { searchQueryMaxLength } from '../../shared/limits.ts'
 import { criticalCss, themeColor, themeStylesheetUrl } from '../../shared/themes.ts'
 import { importMapJson, mainModulePreloads, mainModuleUrl } from '../../client-modules.ts'
-import {
-  pageContextElementId,
-  PageContextValue,
-  usePageContext,
-  type PageContext,
-} from '../../ui/context.ts'
+import { pageContextElementId, PageContextValue, usePageContext } from '../../ui/context.ts'
 import { html } from '../../ui/html.ts'
-import { Icon, type IconName } from '../../ui/icons.ts'
-import { UnreadBadge } from '../../ui/notifications.ts'
+import { Icon } from '../../ui/icons.ts'
+import { NavLink, navItems } from '../../ui/nav.ts'
 import { javascriptSettingPath } from '../../ui/urls.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
@@ -78,6 +73,8 @@ function Head({ meta }: { meta: PageMeta }) {
       ${meta.noindex && html`<meta name="robots" content="noindex" />`}
       ${canonical && html`<link rel="canonical" href=${canonical} />`}
       <link rel="icon" href=${faviconPath} type="image/svg+xml" />
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png" />
       <style dangerouslySetInnerHTML=${{ __html: criticalCss(theme) }}></style>
       <link rel="stylesheet" href=${stylesheetUrl} />
       ${themeUrl && html`<link rel="stylesheet" href=${themeUrl} />`}
@@ -158,71 +155,12 @@ function SiteSearch() {
   `
 }
 
-type NavItem = { href: string; label: string; icon: IconName; current: boolean; badge?: number }
-
-// Every destination, on every page, always visible: no menus to open. Logged-in viewers
-// get their profile and settings; everyone else the way in.
-function navItems({ viewer, isAdmin, path, unreadNotifications }: PageContext): NavItem[] {
-  const item = (
-    href: string,
-    label: string,
-    icon: IconName,
-    current = path === href,
-    badge?: number,
-  ) => ({
-    href,
-    label,
-    icon,
-    current,
-    badge,
-  })
-  if (!viewer) {
-    return [
-      item('/', 'Home', 'home'),
-      item('/people', 'People', 'people'),
-      item('/search', 'Search', 'search'),
-      item('/login', 'Log in', 'login'),
-      item('/signup', 'Sign up', 'personPlus'),
-    ]
-  }
-  const profile = `/${viewer.username}/`
-  return [
-    item('/', 'Home', 'home'),
-    item('/everyone', 'Everyone', 'globe'),
-    item('/people', 'People', 'people'),
-    item('/search', 'Search', 'search'),
-    item('/near', 'Near', 'pin'),
-    item(profile, 'Profile', 'person', path === profile || path === `/${viewer.username}/edit`),
-    // Only while there is something to see, so the bar stays short on phones. The same
-    // link is in Your corner, always.
-    ...(unreadNotifications > 0
-      ? [
-          item(
-            `/${viewer.username}/notifications/`,
-            'Alerts',
-            'bell',
-            path.startsWith(`/${viewer.username}/notifications`),
-            unreadNotifications,
-          ),
-        ]
-      : []),
-    item('/settings', 'Settings', 'sliders', path.startsWith('/settings')),
-    ...(isAdmin ? [item('/admin', 'Admin', 'shield', path.startsWith('/admin'))] : []),
-  ]
-}
-
 function TopNav() {
   const context = usePageContext()
   const { viewer } = context
   return html`
     <nav class="top-nav" aria-label="Main">
-      ${navItems(context).map(
-        ({ href, label, icon, current, badge }) =>
-          html`<a href=${href} aria-current=${current ? 'page' : undefined}
-            ><${Icon} name=${icon} /><span>${label}</span
-            >${badge !== undefined && html`<${UnreadBadge} unread=${badge} />`}</a
-          >`,
-      )}
+      ${navItems(context).map((item) => html`<${NavLink} item=${item} />`)}
       ${
         viewer &&
         html`<form method="post" action="/api/logout" class="logout">

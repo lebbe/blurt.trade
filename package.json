@@ -13,6 +13,7 @@
     "start": "node --env-file-if-exists=.env src/server.ts",
     "migrate": "node --env-file-if-exists=.env db/migrate.ts",
     "check-config": "node --env-file-if-exists=.env src/config.ts",
+    "vapid-keys": "node src/vapid.ts",
     "prefetch-model": "node --env-file-if-exists=.env src/embeddings.ts",
     "deploy": "bash docker/deploy.sh",
     "typecheck": "tsc -p ."

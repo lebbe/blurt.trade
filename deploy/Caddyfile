@@ -2,7 +2,10 @@
 # redirects HTTP to HTTPS, and sets X-Forwarded-For/-Proto/-Host for the app
 # (TRUST_PROXY=1). The app sends HSTS and the other security headers itself.
 blurt.trade {
-	encode zstd gzip
+	# Not the live-update stream (/api/events, text/event-stream): a compressor would hold
+	# its small events back. reverse_proxy passes event streams through at once by itself.
+	@compress not path /api/events
+	encode @compress zstd gzip
 	reverse_proxy 127.0.0.1:3000
 	# The access log keeps client addresses truncated (IPv4 to /24, IPv6 to /48), and two
 	# weeks at most. Caddy already leaves Cookie and Authorization values out.

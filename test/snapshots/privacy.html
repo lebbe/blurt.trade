@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="theme-color" content="#0a1323"/><title>Privacy · blurt.trade</title><meta name="description" content="Say the thing. Regret it later."/><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/><style>:root{color-scheme:dark;background:#0a1323;color:#e8f0ff}
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="theme-color" content="#0a1323"/><title>Privacy · blurt.trade</title><meta name="description" content="Say the thing. Regret it later."/><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/><link rel="manifest" href="/manifest.webmanifest"/><link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/><style>:root{color-scheme:dark;background:#0a1323;color:#e8f0ff}
 body{margin:0;font:16px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 a{color:#aac9ff}
 .shell{max-width:1180px;margin:0 auto;padding:20px}
@@ -25,7 +25,10 @@ a{color:#aac9ff}
           profile picture also cropped as you chose).</li><li>Who you follow.</li><li>Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt
           from someone you follow, with who did it, which blurt and when, and whether you've read
           it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile.
-          Only you see them.</li><li>Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
+          Only you see them.</li><li>Only if you turn on notifications on a device (on your edit page): that browser's push
+          address, an address at the push service of whoever made the browser (Google, Mozilla,
+          Apple or Microsoft), with the keys that come with it, tied to that login. It goes when you
+          turn them off there, log out there, or delete your account.</li><li>Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
           who liked it.</li><li>Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your
           followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.</li><li>Your invite codes, and who signed up with them. Who invited you shows on your profile.</li><li>Blurts you report, with your reason and when.</li><li>Your sessions: one record per login, with when it started and was last used. No IP address
           and no browser details.</li></ul><p>The waitlist stores only the username you'd like, whether you've signed up since, and when
@@ -42,7 +45,13 @@ a{color:#aac9ff}
         analytics, so there's no cookie banner. Visitors who aren't logged in get none, unless they
         turn JavaScript off. All four are HttpOnly, Secure and SameSite=Lax, and only sent to
         blurt.trade.</p><p>The site works fully without JavaScript. Its JavaScript is optional (<a href="/about#javascript">you can turn it off</a>), comes only from blurt.trade, and stores nothing in your browser: no local storage, no
-        other cookies.</p><table><thead><tr><th>Cookie</th><th>What it's for</th><th>Lasts</th></tr></thead><tbody><tr><td><code>__Host-access_token</code></td><td>Shows you're logged in, with your colour theme, time zone, language and whether
+        other cookies. While a page is open, it keeps a connection to blurt.trade for the unread
+        count and new blurts.</p><p>Only if you turn on notifications on a device does the browser keep something of ours: a
+        service worker, a small script it runs to show the notifications. It caches nothing, and
+        it's removed when you turn notifications off there. The push that wakes it passes through
+        your browser maker's push service, but carries nothing: no text, no names, not even what
+        kind of notification it is. It only tells your browser to ask blurt.trade what's new, which
+        it then fetches straight from us.</p><table><thead><tr><th>Cookie</th><th>What it's for</th><th>Lasts</th></tr></thead><tbody><tr><td><code>__Host-access_token</code></td><td>Shows you're logged in, with your colour theme, time zone, language and whether
               JavaScript is on</td><td>5 minutes</td></tr><tr><td><code>__Host-refresh_token</code></td><td>Keeps you logged in and renews the one above</td><td>Until you close the browser, or, if you ticked <em>Keep me logged in</em>, 400 days
               without a visit. Gone when you log out.</td></tr><tr><td><code>recent_write</code></td><td>After you post or change something, makes sure you see your own change straight away</td><td>10 seconds</td></tr><tr><td><code>javascript</code></td><td>Only once you turn JavaScript off: remembers that in this browser. Logged in, it's
               saved on your account too, and the account's setting counts</td><td>400 days, or until you turn JavaScript back on</td></tr></tbody></table><h2>Why we may use your data</h2><ul><li>Your account, posts, follows, likes and the rest, to provide the service you signed up for

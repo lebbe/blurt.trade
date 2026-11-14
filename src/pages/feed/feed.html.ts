@@ -95,7 +95,14 @@ function FeedPage(data: FeedData & { composer?: ComposerProps }) {
           ${cards(followedBlurts)}
         </section>`
       }
-      <section aria-label="Blurts" class="panel" data-new-blurts="start">
+      <section
+        aria-label="Blurts"
+        class="panel"
+        data-new-blurts="start"
+        data-enhance=${viewer ? 'new-blurts' : undefined}
+        data-feed=${viewer ? feed : undefined}
+        data-feed-path=${viewer ? feedPath(data) : undefined}
+      >
         <h2>${feed === 'following' ? 'Following' : 'Everyone'}</h2>
         ${
           blurts.length > 0

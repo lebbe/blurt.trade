@@ -26,7 +26,7 @@ import { criticalCssHashes } from '../themes.ts'
 // CSS comes only from our own stylesheets plus, by hash, the small above-the-fold <style>
 // of each theme (criticalCss in src/themes.ts); no other inline <style> or style="..."
 // runs. Images only from us (the world map; avatars are inline SVG markup, which no
-// policy restricts). Adding an inline script, inline style, font, worker, manifest or
+// policy restricts), and the manifest. Adding an inline script, inline style, font, worker or
 // third-party resource means changing this policy (see docs/routes.md).
 //
 // connect-src 'self' is for our scripts' fetch() calls (src/client/requests.ts), and for
@@ -45,6 +45,8 @@ const basePolicy = [
   "connect-src 'self'",
   `style-src 'self' ${criticalCssHashes.join(' ')}`,
   "img-src 'self'",
+  // The web app manifest (/manifest.webmanifest), for Add to Home Screen.
+  "manifest-src 'self'",
   "form-action 'self'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
@@ -56,8 +58,11 @@ export const contentSecurityPolicy = basePolicy.join('; ')
 // (URL.createObjectURL), from data it already has: the drawing of a picture about to be
 // uploaded, made in the browser (src/client/composer.ts, picture-upload.ts). Never
 // another origin. And workers, from our own modules only: the one that draws those
-// pictures (src/client/picture-worker.ts). It runs under the policy its script is served
-// with (moduleContentSecurityPolicy in src/client-modules.ts).
+// pictures (src/client/picture-worker.ts), and the service worker for push notifications
+// (/sw.js, src/client/sw.ts). Each runs under the policy its script is served with
+// (moduleContentSecurityPolicy in src/client-modules.ts, serviceWorkerContentSecurityPolicy
+// in src/routes/push.ts). connect-src 'self' also covers the live-update stream
+// (EventSource, /api/events).
 export const scriptingContentSecurityPolicy = [
   ...basePolicy.map((directive) =>
     directive === "img-src 'self'" ? "img-src 'self' blob:" : directive,

@@ -14,7 +14,7 @@ export type User = {
 // valid and nothing cascades from it. Everything else that refers to the user goes: their
 // content through deleteBlurts (a blurt with replies from others stays as a placeholder
 // that names nobody), their plain reblurts and likes (off each blurt's counters), the
-// profile (avatar, location), sessions, follows both ways, notifications to and from them,
+// profile (avatar, location), sessions and push subscriptions, follows both ways, notifications to and from them,
 // their own invite codes and the reports they made. The code they signed up with stays used (used_at) with
 // used_by_user_id set NULL. Their waitlist entry goes. The username is retired for good
 // (retired_usernames), so nobody can take it and pass for them. signup_counter is left
@@ -71,6 +71,9 @@ export async function deleteAccount(userId: number): Promise<string[] | undefine
       [user.username],
     )
     await client.query('DELETE FROM waitlist WHERE lower(username) = lower($1)', [user.username])
+    // Deleting the sessions would take these with them; said out loud, since a missed
+    // one would keep pushing to a device of a deleted account.
+    await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
     const sessions = await client.query<{ id: string }>(
       'DELETE FROM sessions WHERE user_id = $1 RETURNING id',
       [userId],

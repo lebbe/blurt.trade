@@ -1790,3 +1790,17 @@ dialog.share::backdrop {
 dialog.share .actions {
   justify-content: flex-end;
 }
+
+/* "3 new blurts" at the top of the feed (src/client/new-blurts.ts): only with JavaScript,
+   and only while there are some (the button is hidden otherwise). */
+.new-blurts button {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+/* Push notifications on the edit page (src/client/push.ts). */
+.push-device .tiny,
+.push-all .tiny {
+  margin-bottom: 8px;
+}

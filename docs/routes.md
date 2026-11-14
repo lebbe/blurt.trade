@@ -50,7 +50,11 @@ agents, next to `/robots.txt` and `/sitemap.xml`.
 | `/everyone`        | —     | the same, always the everyone feed                                            | 400 bad cursor          |
 | `/:username/`      | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
 | `/:username/:id`   | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
-| `/:username/edit`  | owner | `{ viewer, profile, location }`                                               | 401, 403 not owner, 404 |
+| `/:username/edit`  | owner | `{ viewer, profile, location, notifications, push }` (`push` only when VAPID keys are set: `{ publicKey, thisDevice, devices }`) | 401, 403 not owner, 404 |
+| `/notifications/`  | —     | 303 → `/:username/notifications/` of the viewer (query kept), or `/login`     |                         |
+| `/api/events`      | yes   | `text/event-stream`, see Live updates                                         | 401, 429 too many tabs  |
+| `/sw.js`           | —     | the service worker (`src/client/sw.ts`, types stripped), see Push notifications |                       |
+| `/manifest.webmanifest` | — | the web app manifest                                                        |                         |
 | `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next }`                       | 400, 401, 403 not owner |
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
@@ -201,6 +205,8 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
 | `/api/notifications/settings` | yes          | `replies`, `reblurts`, `followedBlurts` (left out → off) | 303 → `/:username/edit#notifications` | 200 the settings |
 | `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
+| `/api/push/subscriptions`    | yes           | a `PushSubscription` as JSON (`endpoint`, `keys.p256dh`, `keys.auth`), or those as fields | 303 → `/:username/edit#notifications` | 201 `{ subscribed: true }` |
+| `/api/push/subscriptions/delete` | yes       | optional `endpoint` (left out: all of the user's devices) | 303 → `/:username/edit#notifications` | 200 `{ subscribed: false }` |
 | `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location, timeZone }` (the zone it set, or `null`) |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/profile-picture`       | yes           | multipart `picture` (+ optional `cut`), or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
@@ -494,6 +500,88 @@ a list and the count is a number that refreshes with the page.
   all as read" and a per-notification "Mark as read" are plain forms posting to
   `POST /api/notifications/read` (with `id` for one; another user's id is a 404). JSON
   callers get `{ unread }` back.
+
+### Live updates
+
+With JavaScript, every page of a logged-in viewer opens one `EventSource` on
+`GET /api/events` (`src/client/live.ts`, server side `src/events.ts`). Without JavaScript
+nothing asks for it and everything is as above: the count refreshes with the page.
+
+- **Events.** `unread` `{ "unread": 3 }` at the start and whenever the count changes (a
+  new notification, one read in another tab, an un-reblurt). `blurts`
+  `[{ id, everyone, following }]` for blurts others posted: `id` is what a feed shows (the
+  original, for a plain reblurt), `everyone` whether it tops the everyone feed (top-level
+  blurts and quotes), `following` whether it tops this viewer's following feed (posted or
+  plain-reblurted by someone they follow). Never the viewer's own. A comment line every
+  25 s keeps proxies from timing out. `retry: 3000`.
+- **In the page.** `unread` updates the Alerts link in the navigation (added before
+  Settings, updated, or taken away, rendered with the shared `NavLink`, `src/ui/nav.ts`),
+  the Notifications link in Your corner, the page context and, in an installed app, the
+  app badge. `blurts` goes to the feed's list (`data-enhance="new-blurts"`, first page
+  only): a button "3 new blurts" under its heading. Nothing moves until it is clicked;
+  then the feed's first page is fetched as JSON and the newer blurts are rendered on top
+  with the shared card (as endless scrolling does), focus on the first. If none of the
+  page's blurts is on the first page any more, the page is loaded instead.
+- **Lifetime.** A stream ends after the access token's lifetime (5 minutes, plus jitter),
+  and the browser reconnects, refreshing its tokens on the way, so a logged-out or
+  revoked session stops getting updates as soon as its pages would. The page closes it on
+  `pagehide` and opens it again on `pageshow` (an open connection keeps a page out of the
+  back/forward cache). A refused stream (401, 429) makes `EventSource` give up; the page
+  tries again after a minute, then less and less often (at most every 10 minutes).
+- **Limits.** At most 5 streams per user per instance (the 6th gets 429), and the `events`
+  rate limit on opening them. Each costs a socket, no database connection.
+- **Between instances.** Triggers on `notifications` (insert, delete, `read_at` changed)
+  and `blurts` (top-level insert) `NOTIFY blurt_events` with a tiny JSON payload of ids
+  (db/README.md). NOTIFY is delivered at commit to every listener, so whichever instance
+  wrote, every instance hears it. Each instance LISTENs on one connection of its own,
+  straight to PostgreSQL (`LISTEN_DATABASE_URL`, docs/deploy.md): PgBouncer in transaction
+  mode can't hold a LISTEN. It opens with the first stream, reconnects with backoff if it
+  drops (and then sends every stream its count again), and closes with `closeDb()`. Counts
+  are recounted from the primary, at most once per user per 100 ms; blurts go out in one
+  batch a second.
+- **Proxies.** The response is `Cache-Control: no-store, no-transform` and
+  `X-Accel-Buffering: no`; the Caddyfile leaves `/api/events` out of `encode`, and the
+  nginx config has its own `location` without buffering or gzip.
+- **Shutdown.** `closeEventStreams()` ends every stream before `server.close()`, which
+  would otherwise wait for them.
+
+### Push notifications
+
+"Notify me on this device" under Notifications on the edit page (`src/client/push.ts`),
+only when the server has VAPID keys and the page has JavaScript (the button is `hidden`
+until the script shows it). The browser's permission is asked for only on the click.
+
+- **Turning it on** registers the service worker `/sw.js` (scope `/`), subscribes with the
+  server's public VAPID key, and posts the subscription to `POST /api/push/subscriptions`.
+  It is saved in `push_subscriptions` for the user **and the login**: logging out there
+  stops the pushes at once (revoked sessions are skipped) and deletes the row with the
+  session at the hourly cleanup; account deletion deletes them. Endpoints must be at a
+  browser maker's push service (FCM, Mozilla, Apple, WNS: `isPushEndpoint` in
+  `src/push.ts`), so the server can't be made to POST anywhere else. On iPhone and iPad
+  Safari only offers push from the Home Screen; the button's place says so there.
+- **Turning it off** unsubscribes, tells the server and unregisters the worker. A plain
+  form, which works without JavaScript, stops pushes on all of the user's devices.
+- **Sending** (`src/push.ts`): when `addBlurt` or `setReblurt` saves notifications, the
+  route hands the notified users to `pushNotifications`, which POSTs an empty message to
+  each device's push service in the background (`TTL` a day, `Topic: notifications` so a
+  device that was offline gets one, `Authorization: vapid t=<ES256 JWT>, k=<public key>`,
+  signed with `jose`, one token per push service reused for 12 hours). No payload, so no
+  encryption, and nothing about the notification passes the push service. 404 and 410
+  delete the subscription; other failures are logged.
+- **Grouping.** A device is pushed to at most once a minute (`pushed_at`, claimed
+  atomically, so across instances too). Notifications within the minute push once when it
+  is up, and only if something is still unread.
+- **The worker** (`src/client/sw.ts`, a classic script without imports) has no `fetch`
+  handler: it caches nothing and never stands between the browser and the site. On a push
+  it fetches `/notifications/` as JSON with the browser's cookies and shows one
+  notification (`tag: notifications`, replacing the last): the newest one's words for a
+  single unread, "3 new notifications" for more. A click opens the blurt (or the
+  notifications page). `setAppBadge` shows the count. `skipWaiting` and `clients.claim`
+  make a deployed change take over at once; `/sw.js` is `Cache-Control: no-cache` and
+  registered with `updateViaCache: 'none'`.
+- **The manifest** (`/manifest.webmanifest`, `display: standalone`) and the icons in
+  `public/icons/` (made by `node scripts/make-icons.ts` from the favicon) are linked from
+  every page, for Add to Home Screen.
 
 ## Location
 
@@ -795,6 +883,8 @@ error table below.
 | `THEME`                | `/api/theme`                   | account              | 60/10m  |
 | `JAVASCRIPT`           | `/api/javascript`              | IP                   | 60/10m  |
 | `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read` | account (one budget) | 60/10m |
+| `PUSH`                 | `/api/push/subscriptions`, `/api/push/subscriptions/delete` | account (one budget) | 30/10m |
+| `EVENTS`               | opening `/api/events` (each tab, every page load and every ~5 minutes) | account | 600/10m |
 | `REPORT`               | `/api/report`                  | account              | 20/1h   |
 | `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
 | `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |
@@ -879,7 +969,7 @@ responses.
 
 | Header                                  | Value                                                    |
 | --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map), `; worker-src 'self'` and `blob:` in `img-src` when the page has JavaScript. Client modules (`/static/js/…`) carry `default-src 'none'; script-src 'self'`, the policy of a worker started from one |
+| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map), `; worker-src 'self'` and `blob:` in `img-src` when the page has JavaScript. Client modules (`/static/js/…`) carry `default-src 'none'; script-src 'self'`, the policy of a worker started from one; `/sw.js` carries `default-src 'none'; connect-src 'self'` |
 | `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
 | `X-Content-Type-Options`                | `nosniff`                                                |
 | `Referrer-Policy`                       | `no-referrer`                                            |
@@ -900,10 +990,11 @@ responses.
   answered before the page context (a malformed body) keep the policy without
   `script-src`, and such pages carry no script. The page context JSON is a
   `<script type="application/json">` data block, which never runs and needs nothing.
-  Inline `<script>` code and `on...=` attributes stay blocked. Fonts, web app manifests
-  (`manifest-src`), service workers and anything third-party still need the policy
-  changed first. `worker-src 'self'` is there for the dedicated worker that draws
-  pictures (`src/client/picture-worker.ts`); a dedicated worker runs under the CSP its
+  Inline `<script>` code and `on...=` attributes stay blocked. Fonts and anything
+  third-party still need the policy changed first. `manifest-src 'self'` (in both
+  policies) is for the web app manifest. `worker-src 'self'` is there for the dedicated
+  worker that draws pictures (`src/client/picture-worker.ts`) and the service worker
+  (`/sw.js`, which runs under its own `default-src 'none'; connect-src 'self'`); a dedicated worker runs under the CSP its
   script was served with (per spec; Chromium lets it inherit the page's), so client
   modules are served with `default-src 'none'; script-src 'self'`: the worker can import
   our modules and nothing else. See JavaScript in the browser.
@@ -1147,6 +1238,8 @@ multipart only where a file is uploaded). `followLink(link)` does the same for a
 | `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
 | `more`     | the next-page link of every paged list | `src/client/more.ts`    |
 | `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
+| `new-blurts` | the feed's list, first page, logged in | `src/client/new-blurts.ts` |
+| `push`     | "Notify me on this device" on the edit page | `src/client/push.ts` |
 | `picture-upload` | the profile picture's upload form | `src/client/picture-upload.ts` |
 | `share`    | Share on every blurt card and on profiles | `src/client/share.ts` |
 
@@ -1310,7 +1403,16 @@ events), the mouth set by click and keys, the talking preview, nothing sent befo
 Upload, one request with the PNG square and `cut`, the stored drawing equal to the
 preview, Remove, and the same without JavaScript; and the composer's preview, Remove,
 the scaled PNG sent, the server's drawing equal to the preview, and without JavaScript
-the file sent as it was. Contexts use reduced motion, which
+the file sent as it was; and live updates (`live.test.ts`): the Alerts link and Your
+corner following replies, reblurts and reading elsewhere without a page load, the "N new
+blurts" banner (nothing inserted before the click, own blurts not counted, order and
+focus after it), no stream without JavaScript, the stream closed on leaving and opened on
+Back, and push: the permission asked only on click, the real service worker registered,
+the subscription saved, an empty push to a fake push service, the worker showing one
+notification (pushes handed to it through CDP's `ServiceWorker.deliverPushMessage`, since
+headless Chromium has no push service; `pushManager.subscribe` is stubbed to a fake
+endpoint; this test runs full Chromium, `channel: 'chromium'`, as the headless shell
+denies notifications), and turning it off. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates

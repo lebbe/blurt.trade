@@ -138,6 +138,7 @@ test('the privacy page is in step with the database columns', async () => {
       'created_at deleted_at embedding id parent_id reblurt_of_id reblurt_of_user_id text user_id',
     follows: 'created_at followed_user_id user_id',
     likes: 'blurt_id created_at user_id',
+    push_subscriptions: 'auth created_at endpoint p256dh pushed_at session_id user_id',
     notifications: 'actor_user_id blurt_id created_at id kind read_at user_id',
     invite_codes: 'code created_at expires_at used_at used_by_user_id user_id',
     reports: 'blurt_id created_at dismissed_at reason user_id',
