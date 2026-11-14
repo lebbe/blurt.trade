@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { accessTokenLifetimeMs, requireAuth } from '../middleware/auth.ts'
+import { getAccessTokenExpiry, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { sendError } from '../negotiate.ts'
 import { maxStreamsPerUser, openEventStream } from '../events.ts'
@@ -8,15 +8,17 @@ export const eventsRouter = Router()
 
 // The live-update stream of a logged-in user's tab (src/events.ts; read by
 // src/client/live.ts with EventSource). Without JavaScript nothing asks for it. A stream
-// lasts at most an access token's lifetime, so it never outlives the login it was opened
-// with by more than the token does.
+// ends when the access token it was opened with runs out, so it never outlives the login
+// by more than the token does; the browser then reconnects and refreshes on the way.
 eventsRouter.get(
   '/api/events',
   requireAuth,
   rateLimit('events', accountKey),
   (request, response) => {
     const viewer = response.locals.authenticatedUser
-    if (!openEventStream(viewer.id, response, accessTokenLifetimeMs)) {
+    // requireAuth has let only authenticated requests through, so the expiry is there.
+    const expiresAt = getAccessTokenExpiry(request) ?? Date.now()
+    if (!openEventStream(viewer.id, response, expiresAt)) {
       sendError(
         request,
         response,
