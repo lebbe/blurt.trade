@@ -1,5 +1,12 @@
 import { h, type ComponentChildren } from 'preact'
-import { gridDegrees, mapHeight, mapUrl, mapWidth, pointToPixel, type GeoPoint } from '../geo.ts'
+import {
+  formatLocation,
+  gridDescription,
+  mapHeight,
+  mapUrl,
+  mapWidth,
+  type GeoPoint,
+} from '../shared/geo.ts'
 import type { AuthenticatedUser } from '../middleware/auth.ts'
 import { contact, publicUrl, type Contact } from '../config.ts'
 import {
@@ -28,13 +35,14 @@ import {
   searchQueryMaxLength,
   usernameMaxLength,
 } from '../shared/limits.ts'
-import { AvatarSvg, AvatarView } from '../ui/avatar.ts'
+import { AvatarSvg, AvatarView, cutHint } from '../ui/avatar.ts'
 import { BlurtCard, Timestamp } from '../ui/blurt-card.ts'
 import { usePageContext, type Viewer } from '../ui/context.ts'
 import { Discovery, discoveryAfter, type DiscoverySection } from '../ui/discovery.ts'
 import { SubmitButton, ValidationError } from '../ui/forms.ts'
 import { html } from '../ui/html.ts'
 import { Icon, type IconName } from '../ui/icons.ts'
+import { LocationStatus, MapMarker } from '../ui/location.ts'
 import { NotificationItem, UnreadBadge } from '../ui/notifications.ts'
 import { plural, preview } from '../ui/text.ts'
 import {
@@ -147,12 +155,7 @@ export type NearData = {
   next: string | null
 }
 
-// A stored location as people read it, e.g. "59.5° N, 10.5° E".
-export function formatLocation({ lat, lon }: GeoPoint): string {
-  return `${Math.abs(lat)}° ${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon)}° ${lon < 0 ? 'W' : 'E'}`
-}
-
-export const gridDescription = `a ${gridDegrees}° by ${gridDegrees}° square, about ${Math.round(gridDegrees * 111)} km across`
+export { formatLocation, gridDescription } from '../shared/geo.ts'
 
 // /search: `query` as searched for ('' before a search), matching users (first page only)
 // and blurts, newest first. `next` is the cursor for older matching blurts.
@@ -1009,10 +1012,12 @@ function ProfileLinks({ profile }: { profile: UserProfile }) {
 // Opt-in, coarse location. Clicking the map image submits the pixel (location.x,
 // location.y) with no JS; the server snaps it to a grid cell. The marker shows exactly what
 // is stored.
+//
+// With JavaScript, src/client/map.ts saves the click with fetch() instead, moves the marker
+// in place, and lets the arrow keys move it (Enter or Space saves).
 function LocationMap({ location, returnTo }: { location: GeoPoint | null; returnTo?: 'near' }) {
-  const marker = location && pointToPixel(location)
   return html`
-    <form method="post" action="/api/location" class="map-form">
+    <form method="post" action="/api/location" class="map-form" data-enhance="map">
       ${returnTo && html`<input type="hidden" name="return" value=${returnTo} />`}
       <div class="map">
         <div class="map-inner">
@@ -1024,26 +1029,7 @@ function LocationMap({ location, returnTo }: { location: GeoPoint | null; return
             height=${mapHeight}
             alt="World map: click to set your location"
           />
-          ${
-            marker &&
-            html`<svg
-              class="map-marker"
-              width=${mapWidth}
-              height=${mapHeight}
-              viewBox="0 0 ${mapWidth} ${mapHeight}"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle
-                cx=${marker.x}
-                cy=${marker.y}
-                r="6"
-                fill="#a32020"
-                stroke="#fffdf8"
-                stroke-width="2"
-              />
-            </svg>`
-          }
+          ${location && html`<${MapMarker} location=${location} />`}
         </div>
       </div>
     </form>
@@ -1059,17 +1045,17 @@ function LocationForms({ location, error }: { location: GeoPoint | null; error?:
         zone to that place's.
       </p>
       <${ValidationError} message=${error} />
-      <p class="location-status">
-        ${
-          location
-            ? html`${'Your location: '}<strong>${formatLocation(location)}</strong>${` (the middle of ${gridDescription}).`}`
-            : "You haven't set a location."
-        }
-      </p>
+      <${LocationStatus} location=${location} />
       <${LocationMap} location=${location} />
       ${
-        location &&
-        html`<form method="post" action="/api/location" class="inline">
+        // Always there, hidden while nothing is stored, so the map's script can show it
+        // after a click without a page load.
+        html`<form
+          method="post"
+          action="/api/location"
+          class="inline location-clear"
+          hidden=${!location}
+        >
           <input type="hidden" name="clear" value="1" />
           <${SubmitButton} icon="trash" label="Remove my location" kind="secondary" />
         </form>`
@@ -1114,7 +1100,7 @@ function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }) {
     <section class="panel" aria-label="Avatar" id="avatar">
       <h2>Avatar</h2>
       <${ValidationError} message=${error} />
-      <form method="post" action="/api/avatar" class="avatar-form">
+      <form method="post" action="/api/avatar" class="avatar-form" data-enhance="autosave">
         <div class="avatar-preview">
           <${AvatarSvg} avatar=${avatar} label="Your avatar" size="large" />
           <p class="empty">Hover it to hear it talk.</p>
@@ -1169,7 +1155,12 @@ function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string 
       ${
         photo &&
         html`<div class="picture-editor">
-          <form method="post" action="/api/profile-picture/cut" class="cut-form">
+          <form
+            method="post"
+            action="/api/profile-picture/cut"
+            class="cut-form"
+            data-enhance="mouth"
+          >
             <input
               type="image"
               name="cut"
@@ -1178,7 +1169,7 @@ function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string 
               height=${cutImageSize}
               alt="Your profile picture: click where the mouth should open"
             />
-            <p class="tiny">Click where the mouth should open (now ${photo.cut}% from the top).</p>
+            <p class="tiny cut-hint">${cutHint(photo.cut)}</p>
           </form>
           <div class="avatar-preview">
             <${AvatarView} avatar=${avatar} label="Your profile picture" size="large" />
@@ -1224,7 +1215,7 @@ function ThemeForm() {
     <section class="panel" aria-label="Theme" id="theme">
       <h2>Theme</h2>
       <p class="tiny">Saved on your account, so it follows you to every device.</p>
-      <form method="post" action="/api/theme">
+      <form method="post" action="/api/theme" data-enhance="autosave">
         <fieldset class="theme-choices">
           <legend class="visually-hidden">Theme</legend>
           ${themes.map(
@@ -1255,7 +1246,7 @@ function TimeZoneForm() {
         times are written (17.10.2026 14:37 or 10/17/2026 02:37 PM); until you pick one, your
         browser's language is used. Saved on your account, so it follows you to every device.
       </p>
-      <form method="post" action="/api/timezone">
+      <form method="post" action="/api/timezone" data-enhance="autosave">
         <div class="field-grid">
           <label>
             Time zone
@@ -1292,7 +1283,7 @@ function NotificationsForm({ settings }: { settings: NotificationSettings }) {
         Choose what ends up on your notifications page and in the count in Your corner. Only new
         things after you switch a kind on are added. Nobody is notified about their own actions.
       </p>
-      <form method="post" action="/api/notifications/settings">
+      <form method="post" action="/api/notifications/settings" data-enhance="autosave">
         <label class="check"
           ><input type="checkbox" name="replies" value="1" checked=${settings.replies} /> Replies to
           my blurts</label
@@ -1321,6 +1312,10 @@ function NotificationsForm({ settings }: { settings: NotificationSettings }) {
 
 // The colour of the share cards. Its inputs and button belong to the profile form above
 // (the `form` attribute), so one POST saves everything and no JavaScript is needed.
+//
+// The settings forms on this page are `data-enhance="autosave"`: with JavaScript they save
+// as they change and their save buttons give way to a status line (src/client/autosave.ts).
+// Without it, the buttons below are how they save.
 function CardForm({ profile }: { profile: UserProfile }) {
   const cardPath = profileCardPath(profile)
   return html`
@@ -1414,7 +1409,12 @@ function ProfileEditForm({
     >
       <section class="panel" aria-label="Profile" id="profile">
         <h2>Profile</h2>
-        <form method="post" action="/${profile.username}/edit" id="profile-form">
+        <form
+          method="post"
+          action="/${profile.username}/edit"
+          id="profile-form"
+          data-enhance="autosave"
+        >
           ${validationError && html`<p class="validation-error" role="alert">${validationError}</p>`}
           <label
             >Bio

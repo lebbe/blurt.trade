@@ -32,6 +32,9 @@ export type RequestOptions = {
   submitter?: HTMLElement | null // the button that submitted the form, as on SubmitEvent
   fallback?: boolean // default true: on failure, submit or navigate for real
   signal?: AbortSignal
+  // Extra fields sent with the form's own, as hidden fields would be: where a click on an
+  // <input type="image"> landed (`location.x`), when the enhancer handled the click itself.
+  fields?: Record<string, string>
 }
 
 const jsonType = /^application\/json\b/
@@ -74,14 +77,25 @@ async function interpret<T>(response: Response): Promise<Outcome<T> | undefined>
 // the browser already did before the event). It ignores the submitter, so its name and
 // value go in as a hidden field, and its formaction/formmethod/... are honoured by
 // setting them on the form.
-function submitForReal(form: HTMLFormElement, submitter?: HTMLElement | null): void {
+function submitForReal(
+  form: HTMLFormElement,
+  submitter?: HTMLElement | null,
+  fields: Record<string, string> = {},
+): void {
+  const hidden = (name: string, value: string) => {
+    const field = document.createElement('input')
+    field.type = 'hidden'
+    field.name = name
+    field.value = value
+    form.append(field)
+  }
+  for (const [name, value] of Object.entries(fields)) {
+    hidden(name, value)
+  }
   if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
-    if (submitter.name) {
-      const field = document.createElement('input')
-      field.type = 'hidden'
-      field.name = submitter.name
-      field.value = submitter.value
-      form.append(field)
+    // An image button's name alone is never sent (only name.x and name.y).
+    if (submitter.name && submitter.type !== 'image') {
+      hidden(submitter.name, submitter.value)
     }
     for (const attribute of ['action', 'method', 'enctype', 'target'] as const) {
       const value = submitter.getAttribute(`form${attribute}`)
@@ -93,7 +107,11 @@ function submitForReal(form: HTMLFormElement, submitter?: HTMLElement | null): v
   HTMLFormElement.prototype.submit.call(form)
 }
 
-function formRequest(form: HTMLFormElement, submitter?: HTMLElement | null) {
+function formRequest(
+  form: HTMLFormElement,
+  submitter?: HTMLElement | null,
+  fields: Record<string, string> = {},
+) {
   const button =
     submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement
       ? submitter
@@ -104,7 +122,14 @@ function formRequest(form: HTMLFormElement, submitter?: HTMLElement | null) {
     button?.hasAttribute('formmethod') ? button.formMethod : form.method
   ).toUpperCase()
   const enctype = button?.hasAttribute('formenctype') ? button.formEnctype : form.enctype
-  const data = new FormData(form, submitter)
+  // An image button can't be a FormData submitter; its click comes in through `fields`.
+  const data = new FormData(
+    form,
+    submitter instanceof HTMLInputElement && submitter.type === 'image' ? null : submitter,
+  )
+  for (const [name, value] of Object.entries(fields)) {
+    data.append(name, value)
+  }
   if (method === 'GET') {
     const url = new URL(action)
     url.search = new URLSearchParams(
@@ -126,9 +151,9 @@ function formRequest(form: HTMLFormElement, submitter?: HTMLElement | null) {
 // Sends `form` as the browser would have, asking for JSON. See the contract above.
 export async function submitForm<T = unknown>(
   form: HTMLFormElement,
-  { submitter, fallback = true, signal }: RequestOptions = {},
+  { submitter, fallback = true, signal, fields }: RequestOptions = {},
 ): Promise<Outcome<T>> {
-  const { url, init } = formRequest(form, submitter)
+  const { url, init } = formRequest(form, submitter, fields)
   let status: number | undefined
   try {
     const response = await fetch(url, {
@@ -147,13 +172,13 @@ export async function submitForm<T = unknown>(
     if (signal?.aborted || !fallback) {
       return { kind: 'failed', error }
     }
-    submitForReal(form, submitter)
+    submitForReal(form, submitter, fields)
     return { kind: 'fallback' }
   }
   if (!fallback) {
     return { kind: 'failed', status }
   }
-  submitForReal(form, submitter)
+  submitForReal(form, submitter, fields)
   return { kind: 'fallback' }
 }
 
@@ -161,7 +186,7 @@ export async function submitForm<T = unknown>(
 // to the page for real (location.assign), or with `fallback: false` returns 'failed'.
 export async function followLink<T = unknown>(
   link: HTMLAnchorElement | string,
-  { fallback = true, signal }: Omit<RequestOptions, 'submitter'> = {},
+  { fallback = true, signal }: Omit<RequestOptions, 'submitter' | 'fields'> = {},
 ): Promise<Outcome<T>> {
   const href = typeof link === 'string' ? new URL(link, document.baseURI).href : link.href
   let status: number | undefined

@@ -183,11 +183,12 @@ POSTs without a page of their own live under `/api/`. Bodies are form-encoded or
 | `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
 | `/api/notifications/settings` | yes          | `replies`, `reblurts`, `followedBlurts` (left out → off) | 303 → `/:username/edit#notifications` | 200 the settings |
 | `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
-| `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location }`                             |
+| `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location, timeZone }` (the zone it set, or `null`) |
 | `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
 | `/api/profile-picture`       | yes           | multipart `picture`, or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
 | `/api/profile-picture/cut`   | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`                   |
 | `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
+| `/api/timezone`              | yes           | `timezone` (IANA name) and/or `locale` (empty: the browser's) | 303 → `/:username/edit#timezone` | 200 `{ timezone?, locale?, display: { timeZone, locale } }`: what was sent, and how pages show times from now on |
 | `/api/javascript`            | —             | `javascript`: `on` or `off` (JSON: also `true`/`false`) | 303 → `/settings#javascript` (logged in) or `/about#javascript` | 200 `{ javascript }` |
 | `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
 | `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
@@ -497,10 +498,25 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
     `POST /api/location` with `lat` and `lon`. This is how an agent sets a location, since
     a map pixel is no use to it.
   - `http/home.http`: the "Set your location from fetch()" example request.
-  - `tickets/013b-geo-picker-enhancement.md`: planned. The JS map will post `{ lat, lon }`.
+  - `tickets/013b-geo-picker-enhancement.md`: planned to post `{ lat, lon }`. The map's
+    script (`src/client/map.ts`) posts the same `location.x`/`location.y` as a click
+    without JavaScript instead, so the server's rules stay in one place.
 - Errors are 400 with `field` `location`, `lat` or `lon`. Forms get the edit page again
   with the error.
-- The edit page shows what is stored, as text and as a marker on the map.
+- The edit page shows what is stored, as text and as a marker on the map. The "Remove my
+  location" form is always in the page, `hidden` while nothing is stored.
+- JSON callers get `{ location, timeZone }`: `timeZone` is the zone the click set (the
+  place's), `null` when none was set (removing the location leaves the zone).
+- With JavaScript (`src/client/map.ts`, `data-enhance="map"`), a click on the map is the
+  same POST (`location.x`/`location.y`, from the click's offset scaled to the image's own
+  720 × 360) sent with `fetch()`: the marker moves (or appears), the "Your location" line
+  is drawn again (`LocationStatus` in `src/ui/location.ts`, shared with the server), the
+  time zone select shows the new zone and the page's times are rewritten in it. Removing
+  works the same way. The map takes the keyboard: the arrow keys move a hollow marker one
+  grid cell (Shift: ten), Enter or Space saves it there (the help text is the image's
+  `aria-describedby`). On `/near` (`return=near`) a saved click loads `/near` again, since
+  its blurts depend on the location. One request at a time; of the clicks made meanwhile
+  only the newest is sent.
 - Radius queries use `ST_DWithin` on the profile points, with a GiST index.
 
 ## Avatar
@@ -558,6 +574,12 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
   `<input type="image" name="cut">` 240 × 240: a click sends `cut.x` and `cut.y` (no JS,
   like the location map), and the height becomes the percentage (pulled in to 5–95). A
   keyboard activation (0,0) is an error. API clients send `cut` (a whole number, 5–95).
+- With JavaScript (`src/client/mouth.ts`, `data-enhance="mouth"`) the click is sent with
+  `fetch()`: the picture's `src` (which holds the cut) shows the new line, the talking
+  preview is drawn again with `AvatarView` from the `{ avatar }` answer, and "now N% from
+  the top" follows (`cutHint` in `src/ui/avatar.ts`). From the keyboard, the up and down
+  arrows move the line 1% (Shift 5%), shown at once, and Enter or Space saves it (as
+  `cut`). Uploading and removing a picture stay ordinary form posts.
 - In JSON the avatar gets `photo: { user, version, cut }` while there is a picture.
 - The edit page then hides the cartoon's settings (they would change nothing that shows):
   the picture's panel, with the click for the cut, takes their place, and `#avatar` links
@@ -601,6 +623,15 @@ preview.
   stylesheet links need nothing from the route. `renderDocument` hands it to the
   components through a Preact context (`src/ui/context.ts`, read with `usePageContext()`);
   only the Markdown views read `pageContext()` directly.
+- With JavaScript the theme form saves itself (autosave, see JavaScript in the browser)
+  and `src/client/theme.ts` switches the page without loading it again: it links the new
+  theme's stylesheet after `style.css` and removes the old one once the new one has
+  loaded (no flash of the default), and updates the page context JSON. The critical
+  `<style>` stays the old theme's (its text is allowed by hash, and only the first paint
+  needs it): nothing of it shows, since the stylesheets set everything it does, the
+  root's background and colour too (`:root { background: var(--bg); color: var(--text) }`
+  in `style.css`). Checked by comparing screenshots of a switched page with a fresh load
+  of the same theme: identical apart from the status line.
 
 ## Sign-up limits
 
@@ -704,8 +735,8 @@ error table below.
 | `REBLURT`              | `/api/reblurt`, `/api/unreblurt` | account (one budget) | 60/10m |
 | `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget) | 60/10m  |
 | `LIKE`                 | `/api/like`, `/api/unlike`     | account (one budget) | 120/10m |
-| `PROFILE_EDIT`         | `/:username/edit`              | account              | 30/10m  |
-| `LOCATION`             | `/api/location`                | account              | 30/10m  |
+| `PROFILE_EDIT`         | `/:username/edit`              | account              | 120/10m |
+| `LOCATION`             | `/api/location`                | account              | 60/10m  |
 | `AVATAR`               | `/api/avatar`, `/api/profile-picture/cut` | account (one budget) | 60/10m |
 | `PROFILE_PICTURE`      | `/api/profile-picture`         | account              | 20/10m  |
 | `THEME`                | `/api/theme`                   | account              | 60/10m  |
@@ -733,6 +764,11 @@ error table below.
   slowing down guessing and spam. With several app instances each would count on its
   own; move them to a small `UNLOGGED` table then. Refilled buckets are dropped every
   minute, so memory follows the number of recently active clients.
+- The edit page saves as you go with JavaScript (autosave: after a typing pause of
+  800 ms and on leaving a field, never when nothing changed, one request at a time), so
+  `PROFILE_EDIT` and `LOCATION` allow more than a form posted by hand needs. A 429 is
+  shown in the form's status line ("Too many requests. Please wait …"), and its button
+  comes back to save by hand later.
 - New routes add a name to `defaults` and use
   `rateLimit('name', accountKey)` after `requireAuth`, or `rateLimit('name')` per IP.
 
@@ -838,6 +874,14 @@ responses.
 - Session cookies are `HttpOnly`, `SameSite=Lax`, `Path=/`, and in production `Secure`
   with the `__Host-` prefix (no `Domain`). A test starts the app in production mode to
   check them and HSTS.
+- **Same-origin writes.** `src/middleware/same-origin.ts`, right after the headers:
+  a POST (anything but GET, HEAD, OPTIONS) whose `Origin` header is there and is neither
+  `PUBLIC_URL`'s origin nor the origin it was sent to (its protocol and `Host`) is a 403
+  (`Requests from other sites are not accepted`), before any body is read. `Origin: null`
+  is refused too. No `Origin` passes: old browsers, curl and API clients, which a page on
+  another site can't make a browser send. On top of `SameSite=Lax`, this covers the
+  anonymous `javascript` cookie, sibling subdomains (same site, other origin) and opaque
+  origins. Behind a proxy, set `PUBLIC_URL` (or `TRUST_PROXY` so the protocol is right).
 
 ## Smoother navigation without JavaScript
 
@@ -891,6 +935,8 @@ file's exclude list.
   (beyond the hashed import map): the CSP blocks them (see Security headers).
 - Every page must work without JavaScript. Scripts only enhance what already works (see
   JavaScript in the browser), and a test runs the same flows with it off and on.
+- POSTs from other origins are refused (see Security headers, same-origin writes); a new
+  route needs nothing for that.
 
 ## Shared components
 
@@ -1026,6 +1072,37 @@ that, never on `@media (scripting: enabled)` alone), then hands every element wi
 sends url-encoded bodies unless the form is `multipart/form-data` (the server parses
 multipart only where a file is uploaded). `followLink(link)` does the same for a GET.
 
+### The enhancers there are
+
+| Name       | On                                     | Module                  |
+| ---------- | -------------------------------------- | ----------------------- |
+| `autosave` | the edit page's settings forms: profile and links (with the share card colour), avatar, time zone and language, theme, notifications | `src/client/autosave.ts` |
+| `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
+| `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
+
+Autosave (`<form data-enhance="autosave">`) sends the whole form as its button would
+(fields tied to it with the `form` attribute too) with `submitForm`: a select, radio,
+checkbox or colour when it changes, a text field 800 ms after typing stops and when it is
+left. One request per form at a time; a change made meanwhile is sent when it returns,
+as the form is then, so the last state wins. Nothing is sent when nothing changed; a
+beacon sends what is unsaved when the page is left. The save buttons (submit buttons
+without a `name`) get `data-autosaved` and are hidden by CSS under `[data-js=on]`, with a
+status line in their place (`role=status`: "Saving…", "Saved"); they come back
+(`data-retry`) when a save fails. `{ errors }` are shown at their fields
+(`aria-describedby`, `aria-invalid`), others in the status line; 401, 5xx and network
+errors say so there. Pressing a button (or Enter) is still a real submission if
+`fetch()` fails. Named buttons (the avatar's "Random") save with that button, and the
+fields then show what the server picked. After a save: the theme is switched in place
+(Themes), the times are rewritten (`src/client/times.ts`, with the shared
+`formatTimestamp`, so they read as the server writes them) and the avatar preview is
+drawn again with `AvatarSvg` (`src/client/avatar-preview.ts`). The page context JSON is
+kept up to date (`updatePageContext`). The JavaScript setting on `/settings` stays an
+ordinary form: turning scripts off or on needs a page load anyway.
+
+What is not updated in place: the share card link under the colours, and its "Write a bio
+to get a profile card" note, stay as the page was loaded (an old card link redirects to
+the current card).
+
 ### Turning it off
 
 "Use JavaScript" is on by default. Off, the server sends no `<script>`, import map or
@@ -1042,7 +1119,7 @@ module preload at all (not code that switches itself off), and the response's CS
 
 ### Tests in a browser
 
-`npm run e2e` (part of `npm run qa`, about 10 seconds) runs `test/e2e/*.test.ts`: the app
+`npm run e2e` (part of `npm run qa`, about 20 seconds) runs `test/e2e/*.test.ts`: the app
 on a random port with the test database, driven by Chromium through Playwright (a dev
 dependency pinned to the version whose browser is installed; after changing it, run
 `npx playwright install chromium`). `bothModes()` in `test/e2e/helpers.ts` runs each flow
@@ -1050,7 +1127,10 @@ with the browser's JavaScript off and on and fails on any page error, console er
 failed request. They cover sign-up, blurting and liking, every page of the frame,
 turning JavaScript off and on (anonymous and logged in), importing every client module
 in the page, rendering a shared component with the page context on the bundle's Preact,
-enhancer failures, and the `requests.ts` contract. Contexts use reduced motion, which
+enhancer failures, the `requests.ts` contract, and the edit page (`settings.test.ts`):
+autosave of a select, a checkbox, a text field and the avatar, field errors, the theme
+switch, the map and the picture by click (both modes, checking that no page load
+happened with JavaScript, by a mark on `window`) and by keyboard. Contexts use reduced motion, which
 turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates

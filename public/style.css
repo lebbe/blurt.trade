@@ -24,6 +24,16 @@
   --glow-strong: rgb(127 216 255 / 55%);
   --panel-border: 2px;
   --panel-shadow: 6px 6px 0 var(--line-soft);
+  /* The same as the theme's critical CSS in <head> (src/shared/themes.ts) sets, but from the
+     variables, so a theme switched without a page load (src/client/theme.ts) recolours the
+     page's edges too. */
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Hidden means hidden, whatever display a class gives the element (form.inline, say). */
+[hidden] {
+  display: none !important;
 }
 
 /* A cross-fade between pages on ordinary navigation (cross-document View Transitions).
@@ -1316,6 +1326,36 @@ button.danger,
   top: 0;
   left: 0;
   pointer-events: none;
+}
+
+/* Moved with the arrow keys but not saved yet (src/client/map.ts): hollow. */
+.map-marker-pending circle {
+  fill: #fffdf8;
+  stroke: #a32020;
+  stroke-width: 3;
+}
+
+/* The map and the picture take the arrow keys with JavaScript on; show where focus is. */
+.map-inner input:focus-visible,
+.cut-form input[type='image']:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Autosave (src/client/autosave.ts): once a form saves itself, its save buttons give way
+   to a status line. Keyed on what the script marked, under [data-js=on], so a script that
+   doesn't load leaves the buttons. They come back when a save fails. */
+[data-js='on'] button[data-autosaved]:not([data-retry]) {
+  display: none;
+}
+
+.autosave-status {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.autosave-status[data-state='error'] {
+  color: var(--warn);
 }
 
 /* The theme picker: each choice a card with a strip of its colours. */

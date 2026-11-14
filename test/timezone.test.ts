@@ -58,7 +58,11 @@ test('timestamps follow the time zone picked on the edit page, UTC until then', 
     { cookie: access },
   )
   assert.equal(viaJson.statusCode, 200)
-  assert.deepEqual(JSON.parse(viaJson.body), { timezone: 'America/New_York' })
+  // With how pages show times now: the zone, and the browser's language (none picked).
+  assert.deepEqual(JSON.parse(viaJson.body), {
+    timezone: 'America/New_York',
+    display: { timeZone: 'America/New_York', locale: 'en-GB' },
+  })
   const unknown = await request('POST', '/api/timezone', 'timezone=Mars%2FOlympus', {
     cookie: access,
     ...json,
@@ -102,6 +106,16 @@ test('the language of dates and times is picked on the edit page, else the brows
   const cleared = await request('POST', '/api/timezone', 'locale=', { cookie: access })
   const back = { cookie: `access_token=${cookiesSet(cleared).access_token}`, ...american }
   assert.match(time((await request('GET', '/Lars/', '', back)).body) ?? '', /PM UTC$/)
+  // In JSON, how times are shown now: in the browser's language again.
+  const clearedJson = await request('POST', '/api/timezone', 'locale=', {
+    cookie: access,
+    ...json,
+    ...american,
+  })
+  assert.deepEqual(JSON.parse(clearedJson.body), {
+    locale: null,
+    display: { timeZone: 'UTC', locale: 'en-US' },
+  })
   const unknown = await request('POST', '/api/timezone', 'locale=xx-YY', {
     cookie: access,
     ...json,

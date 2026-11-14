@@ -86,7 +86,9 @@ export function parseLocationInput(body: unknown): LocationInput {
 }
 
 // Sets, moves or clears the viewer's location. Forms go back to the edit page, which shows
-// what is stored; JSON callers get `{ location }`.
+// what is stored; JSON callers get `{ location, timeZone }`: the time zone it set (that of
+// the place), or null when it changed none (removing the location, or a place with no
+// known zone), so the map's script can update the page without loading it again.
 locationRouter.post(
   '/api/location',
   requireAuth,
@@ -123,13 +125,14 @@ locationRouter.post(
 
     // Setting a location also sets the time zone of that place. Removing it leaves the zone.
     const timeZone = location ? timeZoneAt(location) : undefined
-    if (timeZone && (await setTimeSettings(viewer.id, { timeZone }))) {
+    const zoneSet = Boolean(timeZone && (await setTimeSettings(viewer.id, { timeZone })))
+    if (zoneSet) {
       await setSessionTime(request, response, { timeZone })
     }
 
     sendFormSuccess(request, response, {
       redirect: request.body?.return === 'near' ? '/near' : `/${viewer.username}/edit#location`,
-      data: { location },
+      data: { location, timeZone: zoneSet ? timeZone : null },
     })
   },
 )

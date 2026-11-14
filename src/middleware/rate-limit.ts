@@ -25,8 +25,10 @@ const defaults = {
   waitlistIp: '10/1h',
   blurt: '20/10m',
   follow: '60/10m',
-  profileEdit: '30/10m',
-  location: '30/10m',
+  // The edit page saves the profile as you type (after a pause, and on leaving a field),
+  // and the map as you click, so a few edits take several requests.
+  profileEdit: '120/10m',
+  location: '60/10m',
   avatar: '60/10m',
   // Uploading or removing a profile picture: drawing one costs CPU, like a blurt's picture.
   profilePicture: '20/10m',
