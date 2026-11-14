@@ -13,8 +13,8 @@ import {
   mintInviteCodes,
   setSignupLimits,
 } from './state.ts'
-import { renderAdminReportsPage, renderAdminToolsPage } from '../templates/index.ts'
-import { adminReportsMarkdown, adminToolsMarkdown } from '../templates/pages.md.ts'
+import { renderAdminReportsPage, renderAdminToolsPage } from '../pages/admin/admin.html.ts'
+import { adminReportsMarkdown, adminToolsMarkdown } from '../pages/admin/admin.md.ts'
 
 const maxMintedCodes = 1000
 

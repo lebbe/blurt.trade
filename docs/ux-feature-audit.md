@@ -3,7 +3,8 @@
 ## Scope reviewed
 
 - Route handlers in `src/routes/*`
-- Page templates in `src/templates/index.ts` and `src/templates/layout.ts`
+- Page templates in `src/templates/index.ts` and `src/templates/layout.ts` (now one folder per
+  page in `src/pages/`)
 - Route contract docs in `docs/routes.md`
 - Server route wiring in `src/server.ts`
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
-import { stylesheetUrl } from '../src/templates/layout.ts'
+import { stylesheetUrl } from '../src/pages/shared/layout.ts'
 import { themes } from '../src/themes.ts'
 import { cookiesSet, createSession, json, request, sendJson, signUp } from './helpers.ts'
 

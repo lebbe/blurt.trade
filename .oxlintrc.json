@@ -14,7 +14,7 @@
               { "name": "pg", "message": "src/ui, src/shared and src/client must run in a browser." },
               {
                 "name": "preact-render-to-string",
-                "message": "Rendering to a string is the server's job (src/templates/layout.ts)."
+                "message": "Rendering to a string is the server's job (src/pages/shared/layout.ts)."
               }
             ],
             "patterns": [
@@ -29,7 +29,7 @@
                 "allowTypeImports": true
               },
               {
-                "regex": "(^|/)(routes|middleware|templates)/",
+                "regex": "(^|/)(routes|middleware|pages)/",
                 "message": "Server code: only `import type` from here.",
                 "allowTypeImports": true
               }

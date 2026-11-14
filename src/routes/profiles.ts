@@ -27,8 +27,10 @@ import {
 } from './state.ts'
 import { cardColors } from '../card-colors.ts'
 import { bioMaxLength, isWebUrl, linkMaxLength, normalizedWebUrl, text } from '../limits.ts'
-import { renderProfileEditPage, renderProfilePage } from '../templates/index.ts'
-import { profileEditMarkdown, profilePageMarkdown } from '../templates/pages.md.ts'
+import { renderProfileEditPage } from '../pages/profile-edit/profile-edit.html.ts'
+import { renderProfilePage } from '../pages/profile/profile.html.ts'
+import { profileEditMarkdown } from '../pages/profile-edit/profile-edit.md.ts'
+import { profilePageMarkdown } from '../pages/profile/profile.md.ts'
 
 export const profilesRouter = Router()
 

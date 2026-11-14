@@ -122,7 +122,7 @@ test('the login page says there is no password reset and links to /privacy', asy
 })
 
 // The privacy page (/privacy) lists what is stored. If this fails, a migration added or
-// removed a column: update the page in src/templates/index.ts and pages.md.ts, then this.
+// removed a column: update src/pages/info/info.html.ts and info.md.ts, then this.
 test('the privacy page is in step with the database columns', async () => {
   const { rows } = await db().query<{ table_name: string; columns: string }>(
     `SELECT table_name, string_agg(column_name, ' ' ORDER BY column_name) AS columns

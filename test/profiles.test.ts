@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../src/db.ts'
 import { getUserProfileByUsername } from '../src/routes/state.ts'
-import { renderProfilePage } from '../src/templates/index.ts'
+import { renderProfilePage } from '../src/pages/profile/profile.html.ts'
 import { createSession, json, request } from './helpers.ts'
 
 test('shows only one user feed and profile data on profile route', async () => {

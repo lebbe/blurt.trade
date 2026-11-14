@@ -11,9 +11,27 @@ One path per resource. The `Accept` header picks the representation, not the URL
 
 Each GET route fetches its data once and hands it to `represent()` in
 `src/negotiate.ts`, which sends it as JSON or renders it with the page's HTML template
-(`src/templates/index.ts`) or Markdown template (`src/templates/pages.md.ts`). Responses
-carry `Vary: Accept`. The components the pages share and that a browser could run too
-(see Shared components) are in `src/ui/`.
+or Markdown template. Responses carry `Vary: Accept`. The components the pages share and
+that a browser could run too (see Shared components) are in `src/ui/`.
+
+Each page has a folder in `src/pages/` (server only), e.g. `src/pages/feed/`:
+
+| File           | What                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `data.ts`      | The type of the data (what JSON clients get) and its helpers (URLs, texts) |
+| `feed.html.ts` | The HTML page: its components and `renderFeedPage()`                      |
+| `feed.md.ts`   | The Markdown view: `feedMarkdown()`                                       |
+
+The folders are `feed`, `blurt`, `profile`, `profile-edit` (its settings forms in
+`forms.ts`), `notifications`, `search`, `near`, `people`, `settings` (with
+`/settings/delete`), `info` (`/about`, `/terms`, `/privacy`), `admin` (`/admin`,
+`/admin/reports`), `auth` (`/login`, `/signup`, `/waitlist`) and `error` (error pages).
+What more than one page uses is in `src/pages/shared/`: the document and frame
+(`layout.ts`), the `md` template (`markdown.ts`), small components (`components.ts`), the
+blurt form (`composer.ts`) and the Markdown of blurts (`blurts.md.ts`). A component only
+one page uses stays in that page's folder. JavaScript enhancers stay in `src/client/`
+(only `src/ui`, `src/shared` and `src/client` are ever served to the browser), and the
+page marks the elements they enhance with `data-enhance`.
 
 HTML responses carry `Link: <url>; rel="alternate"; type="text/markdown"` for the same
 URL. `/llms.txt` (llmstxt.org format, in `src/routes/crawl.ts`) describes this to
@@ -493,8 +511,8 @@ Opt-in and coarse, for "blurts near you" and nearby discovery. Code in
     location" button.
 - Where `lat` and `lon` are used, outside tests. No page of the site sends them: the edit
   page only sends the map click (`location.x`/`location.y`) and `clear`.
-  - `src/templates/pages.md.ts`: the Markdown version of `/:username/edit` (Location
-    section) and of `/near` (when no location is set) tell API clients to
+  - `src/pages/profile-edit/profile-edit.md.ts` and `src/pages/near/near.md.ts`: the
+    Markdown version of `/:username/edit` (Location section) and of `/near` (when no location is set) tell API clients to
     `POST /api/location` with `lat` and `lon`. This is how an agent sets a location, since
     a map pixel is no use to it.
   - `http/home.http`: the "Set your location from fetch()" example request.
@@ -619,7 +637,7 @@ preview.
   refresh, within 5 minutes. Logged-out visitors get the default.
 - Every request runs in a page context (`src/page-context.ts`, set in `src/server.ts`
   after `authenticate`) with the viewer, the path and the theme, so the frame of every
-  page (`Page` in `src/templates/layout.ts`: header, navigation, footer) and the
+  page (`Page` in `src/pages/shared/layout.ts`: header, navigation, footer) and the
   stylesheet links need nothing from the route. `renderDocument` hands it to the
   components through a Preact context (`src/ui/context.ts`, read with `usePageContext()`);
   only the Markdown views read `pageContext()` directly.
@@ -944,16 +962,16 @@ The components that more than one page uses, and that a browser could run as the
 live in `src/ui/`: the blurt card (`blurt-card.ts`: likes, reblurts, timestamps, quoted
 blurts, delete and report forms), avatars, icons, blurt text with its links, discovery
 sections, notification items, the unread badge and the URL helpers (`urls.ts`). Pages
-stay in `src/templates/`. Everything is written with htm (`html` from `src/ui/html.ts`,
+stay in `src/pages/`. Everything is written with htm (`html` from `src/ui/html.ts`,
 `htm.bind(h)`), so it needs no build step.
 
 `src/ui/` and `src/shared/` (the data those components need: limits, time zones and
 timestamps, themes, avatar parts) must not import anything that only runs on the server:
-no `node:*`, `zod`, `tz-lookup`, `express`, `pg`, `src/config.ts`, `src/page-context.ts`
-or `src/routes/`, except `import type`, which is erased. What they need from the request
-comes in through the page context (`usePageContext()`) or the data; what needs the
+no `node:*`, `zod`, `tz-lookup`, `express`, `pg`, `src/config.ts`, `src/page-context.ts`,
+`src/routes/` or `src/pages/`, except `import type`, which is erased. What they need from
+the request comes in through the page context (`usePageContext()`) or the data; what needs the
 server is worked out before rendering (the share card URL, for example, is made by the
-blurt page in `src/templates/index.ts`). oxlint's `no-restricted-imports`
+blurt page in `src/pages/blurt/blurt.html.ts`). oxlint's `no-restricted-imports`
 (`.oxlintrc.json`) and `test/isomorphic.test.ts` (which walks the import graph) enforce it.
 
 ### Preact in the browser
@@ -1013,8 +1031,8 @@ three client folders once at startup and serves them:
   (`--watch-path`), which recomputes it.
 - Only those three folders. A request gets a module by its exact path from the set read
   at startup, never from the file system, behind a strict pattern (lower-case names,
-  `.ts`, no `..`, no encoded characters). Server code (`src/config.ts`, `src/routes/`, …)
-  can't be fetched; `test/client-modules.test.ts` tries traversal, encoded slashes and
+  `.ts`, no `..`, no encoded characters). Server code (`src/config.ts`, `src/routes/`,
+  `src/pages/`, …) can't be fetched; `test/client-modules.test.ts` tries traversal, encoded slashes and
   the real paths of server files.
 - `src/client` follows the same import rules as `src/ui` and `src/shared` (lint and
   `test/isomorphic.test.ts`), and may use the DOM.
@@ -1024,7 +1042,7 @@ three client folders once at startup and serves them:
 
 ### The page
 
-With JavaScript on, `src/templates/layout.ts` puts this in every page's `<head>`:
+With JavaScript on, `src/pages/shared/layout.ts` puts this in every page's `<head>`:
 
 1. `<script type="importmap">` pointing `preact`, `preact/hooks`, `htm`,
    `@preact/signals` and the versioned URL of `src/ui/html.ts` at the Preact bundle (one
@@ -1135,7 +1153,7 @@ turns the view transitions off: their snapshot takes clicks for a moment.
 
 ## Markdown templates
 
-`src/templates/markdown.ts` is a tagged template for Markdown, like htm for HTML:
+`src/pages/shared/markdown.ts` is a tagged template for Markdown, like htm for HTML:
 
 ```ts
 md`

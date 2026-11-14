@@ -1,7 +1,7 @@
 import { enhanceAll, type Registry } from './enhance.ts'
 import { readPageContext } from './page-context.ts'
 
-// The one script every page with JavaScript on loads (src/templates/layout.ts). JavaScript
+// The one script every page with JavaScript on loads (src/pages/shared/layout.ts). JavaScript
 // is progressive enhancement here: every page works without it, and each enhancer only
 // makes an element that already works a little nicer.
 //

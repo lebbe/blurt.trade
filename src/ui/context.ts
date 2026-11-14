@@ -10,7 +10,7 @@ export type Viewer = AuthenticatedUser | null
 // What every page's frame needs from the request, whatever the route: who is looking (for
 // the navigation), which page they are on (to mark it in the navigation) and their theme.
 // On the server it is filled per request (src/page-context.ts) and handed to the components
-// by the Provider renderDocument puts at the root of every page (src/templates/layout.ts),
+// by the Provider renderDocument puts at the root of every page (src/pages/shared/layout.ts),
 // so the components themselves never touch the request and can run in a browser too.
 export type PageContext = {
   viewer: Viewer
@@ -42,7 +42,7 @@ export const outsidePageContext: PageContext = {
 }
 
 // The page context also goes into every page with JavaScript on, as JSON in
-// <script type="application/json" id="page-context"> (src/templates/layout.ts), so
+// <script type="application/json" id="page-context"> (src/pages/shared/layout.ts), so
 // components rendered in the browser see the same context (src/client/page-context.ts).
 export const pageContextElementId = 'page-context'
 

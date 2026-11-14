@@ -1,20 +1,20 @@
-import { h, type ComponentChildren, type VNode } from 'preact'
+import type { ComponentChildren, VNode } from 'preact'
 import { renderToString } from 'preact-render-to-string'
-import { publicUrl } from '../config.ts'
-import { pageContext } from '../page-context.ts'
-import { searchQueryMaxLength } from '../shared/limits.ts'
-import { criticalCss, themeStylesheetUrl } from '../shared/themes.ts'
-import { importMapJson, mainModulePreloads, mainModuleUrl } from '../client-modules.ts'
+import { publicUrl } from '../../config.ts'
+import { pageContext } from '../../page-context.ts'
+import { searchQueryMaxLength } from '../../shared/limits.ts'
+import { criticalCss, themeStylesheetUrl } from '../../shared/themes.ts'
+import { importMapJson, mainModulePreloads, mainModuleUrl } from '../../client-modules.ts'
 import {
   pageContextElementId,
   PageContextValue,
   usePageContext,
   type PageContext,
-} from '../ui/context.ts'
-import { html } from '../ui/html.ts'
-import { Icon, type IconName } from '../ui/icons.ts'
-import { UnreadBadge } from '../ui/notifications.ts'
-import { javascriptSettingPath } from '../ui/urls.ts'
+} from '../../ui/context.ts'
+import { html } from '../../ui/html.ts'
+import { Icon, type IconName } from '../../ui/icons.ts'
+import { UnreadBadge } from '../../ui/notifications.ts'
+import { javascriptSettingPath } from '../../ui/urls.ts'
 
 // The document every HTML page shares: <head> with the title, meta description, share
 // preview tags, canonical link and stylesheets, then the page (framed by Page) and the footer.
@@ -51,6 +51,9 @@ export type PageMeta = {
     themeColor?: string
   }
 }
+
+// The longest title a share preview gets (user text is trimmed with preview()).
+export const shareTitleMax = 70
 
 function Head({ meta }: { meta: PageMeta }) {
   const origin = publicUrl()
@@ -318,48 +321,4 @@ export function renderDocument(page: ComponentChildren, meta: PageMeta = {}): st
       ` as VNode,
     ) // one root element, so never an array
   )
-}
-
-// --- Error pages --------------------------------------------------------------------------
-
-const errorTitles: Record<number, string> = {
-  400: 'Bad request',
-  401: 'Log in first',
-  403: 'Not allowed',
-  404: 'Not found',
-  406: 'Not acceptable',
-  409: 'Conflict',
-  413: 'Too large',
-  429: 'Too many requests',
-  500: 'Something went wrong',
-}
-
-export type ErrorPageData = { status: number; message: string; requestId?: string }
-
-function ErrorPage({ status, message, requestId }: ErrorPageData) {
-  const title = errorTitles[status] ?? (status >= 500 ? errorTitles[500] : 'Error')
-  return html`
-    <${Page} title=${title} tagline=${`Error ${status}`}>
-      <section class="panel error-page">
-        <p>${message}</p>
-        ${requestId && html`<p class="tiny">Request id: <code>${requestId}</code></p>`}
-        <div class="actions">
-          <a class="button secondary" href="/"
-            ><${Icon} name="back" /><span>Back to blurt.trade</span></a
-          >
-          ${
-            status === 401 &&
-            html`<a class="button" href="/login"><${Icon} name="login" /><span>Log in</span></a>`
-          }
-        </div>
-      </section>
-    <//>
-  `
-}
-
-// The styled page for an error status. `message` must be safe to show: for a 500 it is
-// the generic one, never the error itself.
-export function renderErrorPage(data: ErrorPageData): string {
-  const title = errorTitles[data.status] ?? 'Error'
-  return renderDocument(h(ErrorPage, data), { title, noindex: true })
 }

@@ -38,9 +38,11 @@ import {
   type Blurt,
   type Cursor,
 } from './state.ts'
-import { renderBlurtPage, renderFeedPage, type BlurtPageData } from '../templates/index.ts'
+import { renderBlurtPage } from '../pages/blurt/blurt.html.ts'
+import type { BlurtPageData } from '../pages/blurt/data.ts'
+import { renderFeedPage } from '../pages/feed/feed.html.ts'
 import { blurtAnchor, blurtUrl } from '../ui/urls.ts'
-import { blurtPageMarkdown } from '../templates/pages.md.ts'
+import { blurtPageMarkdown } from '../pages/blurt/blurt.md.ts'
 
 export const blurtsRouter = Router()
 
