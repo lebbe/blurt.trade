@@ -1,5 +1,18 @@
 # JavaScript i nettleseren for blurt.trade – evaluering
 
+## Oppgaver
+
+| Steg | Oppgave |
+| --- | --- |
+| 1 | #32 Mykere navigering uten JS (View Transitions, Speculation Rules) |
+| 2 | #33 Refaktorering: isomorfe maler skilt fra server-only |
+| 3 | #34 Ta i bruk preact-hook-signal-htm-bundle v3 (avhenger av lebbe/preact-hook-signal-htm-bundle#3) |
+| 4 | #35 Infrastruktur: type-stripping, import map, CSP, opt-out, tester |
+| 5 | #36 Autosave i innstillinger, kart og munn uten navigering |
+| 6 | #37 Refaktorering: én mappe per side og komponent |
+| 7 | #38 Blurten inn i feeden, evig scroll, likes og reblurts uten reload |
+| 8 | #39 Notifikasjoner i sanntid (SSE) og Web Push |
+
 Ingen kode er endret. Dette er en vurdering av hvordan JS kan legges på som progressiv
 forbedring (opt-out), der alt fortsatt skal fungere uten JS.
 
