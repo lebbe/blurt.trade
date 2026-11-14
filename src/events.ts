@@ -81,6 +81,13 @@ export function openEventStream(userId: number, response: Response, expiresAt: n
   if (own.size >= maxStreamsPerUser) {
     return false
   }
+  // The browser can give up while the route is still checking the login and the rate
+  // limit (the page navigated away at once). Its 'close' has been and gone then, so a
+  // stream opened now would never be let go, and would count against the limit until
+  // its token ran out.
+  if (response.req.socket.destroyed || response.closed) {
+    return true
+  }
   startListening()
   response.status(200)
   response.set({
