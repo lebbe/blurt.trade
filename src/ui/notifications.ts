@@ -14,7 +14,7 @@ export const notificationVerbs: Record<NotificationKind, string> = {
   quote: 'quoted your blurt',
 }
 
-// "32", or "99+" past the cap (unreadCap in src/routes/state.ts): the notification count.
+// "32", or "99+" past the cap (unreadCap in src/routes/state/notifications.ts): the notification count.
 export function unreadLabel(unread: number): string {
   return unread > 99 ? '99+' : String(unread)
 }

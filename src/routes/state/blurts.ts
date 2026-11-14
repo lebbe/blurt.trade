@@ -170,7 +170,7 @@ function toBlurt(row: ShownRow): Blurt {
   return { ...blurt, quoted, picture }
 }
 
-async function queryShown(
+export async function queryShown(
   pool: Pick<pg.Pool, 'query'>,
   sql: string,
   params: unknown[],
@@ -211,7 +211,7 @@ export function parseCursor(value: unknown): Cursor | null | undefined {
 // and don't shift as new blurts arrive. The indexes on (..., created_at DESC, id DESC)
 // serve both orders. Fetches one extra row to know whether there is a next page.
 // `placeholders`: see shownWhere.
-async function listPage(
+export async function listPage(
   where: string,
   params: unknown[],
   cursor: Cursor | null,
@@ -330,7 +330,7 @@ export async function addBlurt(
 }
 
 // Runs `work` in a transaction on a client of its own.
-async function inTransaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+export async function inTransaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const client = await db().connect()
   try {
     await client.query('BEGIN')

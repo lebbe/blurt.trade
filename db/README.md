@@ -73,7 +73,7 @@ one transaction, then goes back to the pool. Code that uses `db()` must therefor
 rely on session state between transactions: no session-level advisory locks,
 `LISTEN`/`NOTIFY`, plain `SET` (use `SET LOCAL` inside a transaction), or temporary
 tables. Several statements that belong together go on one client from `db().connect()`
-inside `BEGIN`…`COMMIT`, as `addUser` in `src/routes/state.ts` does. Parameterised queries are fine, and so are
+inside `BEGIN`…`COMMIT`, as `addUser` in `src/routes/state/accounts.ts` does. Parameterised queries are fine, and so are
 named prepared statements (`max_prepared_statements` is on).
 
 Pool sizes: PgBouncer opens at most `default_pool_size` = 20 PostgreSQL connections per
@@ -99,7 +99,7 @@ from the primary. It follows the primary's WAL over a physical replication slot
 serves it as `blurt_read` and `blurt_test_read`.
 
 In code, `dbRead()` in `src/db.ts` is a second pool from `DATABASE_READ_URL`; unset, it is
-just `db()`, so one database is enough. Queries in `src/routes/state.ts` that may be a
+just `db()`, so one database is enough. Queries in `src/routes/state/` that may be a
 moment stale use `dbRead()`. Everything else, and anything that decides a write, stays on
 `db()`: auth and sessions, sign-up limits and invite codes, single blurts by id, profile
 data, follow counts and locations.
@@ -216,7 +216,7 @@ UPDATE signup_counter SET soft_limit = 2000, hard_limit = 20000;
 `current_count` counts sign-ups, not current users: it never goes down, also not when
 an account is deleted.
 
-Deleting an account (`deleteAccount` in `src/routes/state.ts`, docs/routes.md, Deleting an
+Deleting an account (`deleteAccount` in `src/routes/state/accounts.ts`, docs/routes.md, Deleting an
 account) removes every row that refers to the user, in one transaction, except a stub
 `users` row (`deleted_at` set, no username or password hash) and their emptied blurt
 rows, which keep `user_id` as the sharding key. It puts the
@@ -246,6 +246,6 @@ any it missed at startup. An HNSW index backs the "related blurts" lookup.
 
 Search (`/search`) uses a GIN index on `to_tsvector('simple', text)`, an expression index,
 not a stored column. The query must repeat that expression exactly (`blurtSearchWhere` in
-`src/routes/state.ts`); a test checks with `EXPLAIN` that the index is used. Username
+`src/routes/state/feeds.ts`); a test checks with `EXPLAIN` that the index is used. Username
 search is a substring match (`strpos`) that scans `users`; add a `pg_trgm` index if that
 ever gets slow.

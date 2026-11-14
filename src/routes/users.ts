@@ -311,7 +311,7 @@ usersRouter.post('/api/logout-everywhere', requireAuth, async (request, response
 
 // Account deletion: a confirmation page that asks for the password again, since there is
 // no other way to be sure it's the owner (no email, no password reset). The deletion
-// itself is deleteAccount in src/routes/state.ts.
+// itself is deleteAccount in src/routes/state/accounts.ts.
 const deleteAccountSchema = z.object({
   password: z
     .string()

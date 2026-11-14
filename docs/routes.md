@@ -257,7 +257,7 @@ redirects (302) like a stale hash.
 
 Every blurt shows its like count, and to logged-in viewers a Like (or Unlike) button: a
 plain form with `blurtId`, so it works without JS, on the feeds, profiles, `/near` and
-blurt pages. Code: `setLike` and `markViewerFlags` in `src/routes/state.ts`, the routes
+blurt pages. Code: `setLike` in `src/routes/state/reactions.ts` and `markViewerFlags` in `src/routes/state/blurts.ts`, the routes
 in `src/routes/blurts.ts`.
 
 - `POST /api/like` and `POST /api/unlike`, the same shape as follow and unfollow.
@@ -284,7 +284,7 @@ A reblurt is a row in `blurts` that points at another blurt (`reblurt_of_id`, pl
 `reblurt_of_user_id`, the original's author, so a sharded lookup of the original goes to
 one shard). So feeds, profiles and their cursors stay single-table queries, and reblurts
 reach followers' feeds with no extra work. Code: `setReblurt`, `addBlurt` and the shown
-blurt query (`shownFrom`) in `src/routes/state.ts`, the routes in `src/routes/blurts.ts`.
+blurt query (`shownFrom`) in `src/routes/state/blurts.ts`, the routes in `src/routes/blurts.ts`.
 
 | Row           | `reblurt_of_id` | `text` | Shown as                                       |
 | ------------- | --------------- | ------ | ---------------------------------------------- |
@@ -331,7 +331,7 @@ blurt query (`shownFrom`) in `src/routes/state.ts`, the routes in `src/routes/bl
 ### The shown blurt query
 
 What a row shows is decided in one place, `shownFrom` / `shownWhere` / `selectShown` in
-`src/routes/state.ts`, and every list, thread, search and single-blurt query uses it. It
+`src/routes/state/blurts.ts`, and every list, thread, search and single-blurt query uses it. It
 follows a plain reblurt to its original, hides stale references, hides deleted authors,
 and joins the counters. Each query writing its own join is how a `deleted_at IS NULL`
 gets forgotten. `r` is the row in the list (filtered and ordered on), `b` the blurt it
@@ -347,7 +347,7 @@ shows.
 ## Deleting and reporting
 
 Plain forms, so all of it works without JS. Code in `src/routes/blurts.ts`,
-`src/routes/admin.ts` and `deleteBlurts` in `src/routes/state.ts`.
+`src/routes/admin.ts` and `deleteBlurts` in `src/routes/state/blurts.ts`.
 
 - Your own blurts have a "Delete" `<details>` on them, which opens a "Delete" button:
   two clicks, no JS. `POST /api/blurts/:id/delete` deletes it. Anyone else's blurt is a
@@ -401,7 +401,7 @@ asks for the password again (there is no other proof it's the owner: no email, n
 `POST /settings/delete` with the right `password` deletes the account; a wrong or
 missing one is a 400 on `password` and deletes nothing. It is rate limited per account
 (`DELETE_ACCOUNT`), since it runs Argon2 like login. Code: `deleteAccount` in
-`src/routes/state.ts`, the route in `src/routes/users.ts`.
+`src/routes/state/accounts.ts`, the route in `src/routes/users.ts`.
 
 - One transaction. The user's content goes through `deleteBlurts`: the rows stay,
   emptied, and nothing shows them as the user's; one that others replied to reads as a

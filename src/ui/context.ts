@@ -15,7 +15,7 @@ export type Viewer = AuthenticatedUser | null
 export type PageContext = {
   viewer: Viewer
   isAdmin: boolean // only looked up for logged-in viewers; shows the Admin link
-  // Their unread notifications, at most unreadCap (src/routes/state.ts); 0 when logged out.
+  // Their unread notifications, at most unreadCap (src/routes/state/notifications.ts); 0 when logged out.
   unreadNotifications: number
   path: string
   theme: ThemeId
