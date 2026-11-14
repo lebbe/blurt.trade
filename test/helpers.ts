@@ -354,6 +354,33 @@ export function samplePng(width = 800, height = 400): Buffer {
   return canvas.toBuffer('image/png')
 }
 
+// A busier picture than samplePng: overlapping circles in many colours under a gradient,
+// so the drawing has many areas and outlines (test/picture-shared.test.ts pins what the
+// server draws of it). `type` 'image/jpeg' for a photo-like upload.
+export function busyPicture(
+  width = 1200,
+  height = 900,
+  {
+    circles = 60,
+    type = 'image/png',
+  }: { circles?: number; type?: 'image/png' | 'image/jpeg' } = {},
+): Buffer {
+  const canvas = createCanvas(width, height)
+  const context = canvas.getContext('2d')
+  for (let i = 0; i < circles; i++) {
+    context.fillStyle = `hsl(${(i * 47) % 360} ${40 + ((i * 13) % 60)}% ${20 + ((i * 29) % 70)}%)`
+    context.beginPath()
+    context.arc((i * 97) % width, (i * 61) % height, 10 + ((i * 37) % 120), 0, 7)
+    context.fill()
+  }
+  const gradient = context.createLinearGradient(0, 0, width, height)
+  gradient.addColorStop(0, 'rgba(255,200,0,.4)')
+  gradient.addColorStop(1, 'rgba(0,50,255,.4)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, width, height)
+  return type === 'image/png' ? canvas.toBuffer('image/png') : canvas.toBuffer('image/jpeg')
+}
+
 // A page without the scripts every page with JavaScript on carries (src/pages/shared/layout.ts):
 // the import map, main.ts and the page context JSON. Only exactly those are removed, so a
 // test looking for injected scripts still sees any other.

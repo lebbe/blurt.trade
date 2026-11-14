@@ -216,12 +216,14 @@ bothModes('a blurt with a picture', async ({ page }, javaScriptEnabled) => {
   await page.setInputFiles(`${composer} input[name=picture]`, file)
   await page.fill(`${composer} textarea[name=text]`, 'With a picture')
   if (javaScriptEnabled) {
-    // The file itself as a thumbnail, from a blob: URL the scripting CSP allows.
-    const preview = page.locator(`${composer} .picture-preview img`)
+    // The drawing, made in the browser, from a blob: URL the scripting CSP allows
+    // (more in test/e2e/picture.test.ts).
+    const preview = page.locator(`${composer} .picture-preview img:not([hidden])`)
     await preview.waitFor()
     assert.match((await preview.getAttribute('src')) ?? '', /^blob:/)
     await page.waitForFunction(
-      () => document.querySelector<HTMLImageElement>('.picture-preview img')?.naturalWidth === 400,
+      () =>
+        (document.querySelector<HTMLImageElement>('.picture-preview img')?.naturalWidth ?? 0) > 0,
     )
     // While the server draws it, the form says so.
     const held = await holdRequests(page, '/api/blurts')

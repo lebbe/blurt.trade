@@ -289,14 +289,21 @@ function safePhoto(photo: unknown): AvatarPhoto | undefined {
 // style is needed (the CSP allows none). On hover the same CSS as the
 // cartoon's flaps the top up around the back of the head and bobs the jaw, showing the
 // dark mouth behind them (public/style.css, .avatar-photo).
+//
+// `parts` gives the halves' URLs instead of the stored picture's: the preview of a picture
+// not uploaded yet, drawn in the browser (src/client/picture-upload.ts, blob: URLs).
+type PhotoParts = { top: string; jaw: string }
+
 function AvatarPhotoView({
   photo,
   label,
   size,
+  parts,
 }: {
   photo: AvatarPhoto
   label?: string
   size: 'small' | 'large'
+  parts?: PhotoParts
 }) {
   const line = Math.round((photoSize * photo.cut) / 100)
   return html`<span
@@ -307,13 +314,13 @@ function AvatarPhotoView({
     ><span class="avatar-mouth"
       ><img
         class="avatar-top"
-        src=${photoUrl(photo, 'top')}
+        src=${parts?.top ?? photoUrl(photo, 'top')}
         width=${photoSize}
         height=${line + photoOverlap}
         alt=""
         decoding="async" /><img
         class="avatar-jaw"
-        src=${photoUrl(photo, 'jaw')}
+        src=${parts?.jaw ?? photoUrl(photo, 'jaw')}
         width=${photoSize}
         height=${photoSize - line}
         alt=""
@@ -327,10 +334,16 @@ export function AvatarView(props: {
   avatar: Avatar | null
   label?: string
   size?: 'small' | 'large'
+  parts?: PhotoParts
 }) {
   const photo = safePhoto(props.avatar?.photo)
   return photo
-    ? html`<${AvatarPhotoView} photo=${photo} label=${props.label} size=${props.size ?? 'small'} />`
+    ? html`<${AvatarPhotoView}
+        photo=${photo}
+        label=${props.label}
+        size=${props.size ?? 'small'}
+        parts=${props.parts}
+      />`
     : html`<${AvatarSvg}
         avatar=${props.avatar as Avatar}
         label=${props.label}

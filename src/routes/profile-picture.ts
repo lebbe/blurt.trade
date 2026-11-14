@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { cutImageSize, maxPictureCut, minPictureCut, photoOverlap } from '../avatar.ts'
+import { cutImageSize, maxPictureCut, minPictureCut } from '../avatar.ts'
 import { clearSessionCookies, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import {
@@ -9,7 +9,8 @@ import {
   sendFormSuccess,
   wantsJson,
 } from '../negotiate.ts'
-import { decodeShapes, pictureSvg } from '../picture.ts'
+import type { PicturePart } from '../shared/avatar.ts'
+import { photoPartSvg } from '../shared/picture/svg.ts'
 import { drawUpload, uploadPicture } from './picture-upload.ts'
 import { getNotificationSettings } from './state/notifications.ts'
 import {
@@ -111,9 +112,11 @@ async function sendPictureSuccess(request: Request, response: Response, saved: b
   })
 }
 
-// Uploads a profile picture (multipart, the file in `picture`), or removes it (`remove`).
-// The upload is cropped square and redrawn like a blurt's picture; only the drawing is
-// kept. While there is one, it is shown instead of the cartoon avatar.
+// Uploads a profile picture (multipart, the file in `picture`, and optionally `cut`, where
+// its mouth opens), or removes it (`remove`). The upload is cropped square (its middle;
+// with JavaScript the browser crops it where the person chose and uploads that square)
+// and redrawn like a blurt's picture; only the drawing is kept. While there is one, it is
+// shown instead of the cartoon avatar.
 profilePictureRouter.post(
   '/api/profile-picture',
   requireAuth,
@@ -131,6 +134,18 @@ profilePictureRouter.post(
       ])
       return
     }
+    // Where its mouth opens, chosen before the upload (with JavaScript, the picture is
+    // previewed in the browser first, src/client/picture-upload.ts). Without it, the cut
+    // stays where it was, and is set by clicking the picture afterwards.
+    let cut: number | undefined
+    if (isGiven(request.body?.cut)) {
+      const input = parseCutInput({ cut: request.body.cut })
+      if ('error' in input) {
+        await sendPictureErrors(request, response, [input.error])
+        return
+      }
+      cut = input.cut
+    }
     const drawn = await drawUpload(request, response, request.file, { square: true })
     if (!drawn) {
       return
@@ -142,7 +157,7 @@ profilePictureRouter.post(
     await sendPictureSuccess(
       request,
       response,
-      await setProfilePicture(viewer.id, drawn.picture.shapes),
+      await setProfilePicture(viewer.id, drawn.picture.shapes, cut),
     )
   },
 )
@@ -180,14 +195,7 @@ profilePictureRouter.get('/profile-pictures/:file', async (request, response) =>
     sendError(request, response, 404, 'Not found')
     return
   }
-  const line = Math.round((decodeShapes(shapes).height * cut) / 100)
-  const part = match[4]
-  const svg =
-    part === 'top'
-      ? pictureSvg(shapes, { top: 0, bottom: line + photoOverlap })
-      : part === 'jaw'
-        ? pictureSvg(shapes, { top: line })
-        : pictureSvg(shapes, { line })
+  const svg = photoPartSvg(shapes, cut, match[4] as PicturePart)
   response
     .set('Cache-Control', 'public, max-age=31536000, immutable')
     .type('image/svg+xml')

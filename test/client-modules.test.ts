@@ -40,6 +40,12 @@ test('serves every client module type-stripped, versioned and immutable', async 
     assert.equal(response.headers['cache-control'], 'public, max-age=31536000, immutable', path)
     assert.equal(response.headers['x-content-type-options'], 'nosniff', path)
     assert.match(String(response.headers.etag), /^"[\w-]+"$/, path)
+    // Its own policy, which is the one a worker started from it runs under.
+    assert.equal(
+      response.headers['content-security-policy'],
+      "default-src 'none'; script-src 'self'",
+      path,
+    )
     // Types are blanked out, not removed, so every line and column stays where it was.
     assert.equal(response.body, stripTypeScriptTypes(source, { mode: 'strip' }), path)
     assert.equal(response.body.length, source.length, path)

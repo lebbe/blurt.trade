@@ -119,7 +119,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
     - Only if you set it: a coarse location, ${gridDescription}. Only you see it, but it puts your blurts in "Near you" for people nearby.
     - Your blurts and replies, with when you posted them, and for each one an embedding: numbers describing what it's about, for related blurts and "You might like". It's computed on our own server; your text isn't sent anywhere.
     - If you attach one, a blurt's picture: only a rough drawing of it, made on our own server. The photo you upload is never stored.
-    - If you upload one, your profile picture: likewise only a rough drawing, and where you clicked for its mouth. It's public, like the avatar.
+    - If you upload one, your profile picture: likewise only a rough drawing, and where you clicked for its mouth. It's public, like the avatar. With JavaScript on, both kinds of picture are first drawn as a preview in your browser: the picture doesn't leave your device until you post the blurt or upload it, and what is sent then is scaled down (a profile picture also cropped as you chose).
     - Who you follow.
     - Your notifications: a row per reply, reblurt, quote or (if you switched it on) new blurt from someone you follow, with who did it, which blurt and when, and whether you've read it. Read ones are deleted after 90 days. Which kinds you want is stored with your profile. Only you see them.
     - Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees who liked it.

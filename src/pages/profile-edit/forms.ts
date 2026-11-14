@@ -6,18 +6,16 @@ import type { UserProfile } from '../../routes/state/profiles.ts'
 import {
   type Avatar,
   avatarLabels,
-  cutImageSize,
   eyeTypes,
   hairTypes,
   headWidths,
-  photoUrl,
   toothTypes,
 } from '../../shared/avatar.ts'
 import type { GeoPoint } from '../../shared/geo.ts'
 import { blurtMaxLength } from '../../shared/limits.ts'
 import { themes } from '../../shared/themes.ts'
 import { localeLabel, locales, timeZones } from '../../shared/time-zones.ts'
-import { AvatarSvg, AvatarView, cutHint } from '../../ui/avatar.ts'
+import { AvatarSvg } from '../../ui/avatar.ts'
 import { usePageContext } from '../../ui/context.ts'
 import { SubmitButton, ValidationError } from '../../ui/forms.ts'
 import { html } from '../../ui/html.ts'
@@ -121,78 +119,6 @@ export function AvatarForm({ avatar, error }: { avatar: Avatar; error?: string }
         <div class="actions avatar-buttons">
           <button type="submit"><${Icon} name="save" /><span>Save avatar</span></button>
           <button type="submit" name="random" value="1" formnovalidate>Random</button>
-        </div>
-      </form>
-    </section>
-  `
-}
-
-// The profile picture: upload one (redrawn on the server like a blurt's picture, cropped
-// square), set where it opens its mouth by clicking the picture (cut.x/cut.y, no JS, like
-// the location map; the dashed line is the stored cut, drawn into the image), or remove
-// it. While there is one it is shown instead of the cartoon above.
-export function ProfilePictureForm({ avatar, error }: { avatar: Avatar; error?: string }) {
-  const photo = avatar.photo
-  return html`
-    <section class="panel" aria-label="Profile picture" id="picture">
-      <h2>Profile picture</h2>
-      <p>
-        ${
-          photo
-            ? 'Shown instead of the cartoon avatar, also on your share cards. Remove it to get the cartoon back.'
-            : "Optional. Instead of the cartoon, your own picture: we redraw it as a rough drawing, like a blurt's picture, and keep only that. It talks by flapping open where you click."
-        }
-      </p>
-      <${ValidationError} message=${error} />
-      ${
-        photo &&
-        html`<div class="picture-editor">
-          <form
-            method="post"
-            action="/api/profile-picture/cut"
-            class="cut-form"
-            data-enhance="mouth"
-          >
-            <input
-              type="image"
-              name="cut"
-              src=${photoUrl(photo, 'edit')}
-              width=${cutImageSize}
-              height=${cutImageSize}
-              alt="Your profile picture: click where the mouth should open"
-            />
-            <p class="tiny cut-hint">${cutHint(photo.cut)}</p>
-          </form>
-          <div class="avatar-preview">
-            <${AvatarView} avatar=${avatar} label="Your profile picture" size="large" />
-            <p class="empty">Hover it to hear it talk.</p>
-          </div>
-        </div>`
-      }
-      <form
-        method="post"
-        action="/api/profile-picture"
-        enctype="multipart/form-data"
-        class="picture-upload"
-      >
-        <label
-          >${photo ? 'New picture' : 'Picture'}
-          <input
-            type="file"
-            name="picture"
-            class="picture-field"
-            accept="image/jpeg,image/png,image/webp"
-            required
-          />
-        </label>
-        <div class="actions">
-          <${SubmitButton} icon="save" label="Upload picture" />
-          ${
-            photo &&
-            html`<button type="submit" name="remove" value="1" class="secondary" formnovalidate>
-              <${Icon} name="trash" /><span>Remove picture</span>
-            </button>`
-          }
         </div>
       </form>
     </section>

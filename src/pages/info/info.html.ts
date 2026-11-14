@@ -186,7 +186,10 @@ function PrivacyPage({ contact, inviteOnly }: InfoPageData) {
         </li>
         <li>
           If you upload one, your profile picture: likewise only a rough drawing, and where you
-          clicked for its mouth. It's public, like the avatar.
+          clicked for its mouth. It's public, like the avatar. With JavaScript on, both kinds of
+          picture are first drawn as a preview in your browser: the picture doesn't leave your
+          device until you post the blurt or upload it, and what is sent then is scaled down (a
+          profile picture also cropped as you chose).
         </li>
         <li>Who you follow.</li>
         <li>
