@@ -238,3 +238,19 @@ export async function followLink<T = unknown>(
   location.assign(href)
   return { kind: 'fallback' }
 }
+
+// Marks a form rendered optimistically, before the answer to the request it stands for is
+// in: its button stays focusable (the focus is on it) but says it is unavailable, and
+// isAwaitingAnswer() tells its submit handler to ignore it. Its opposite action sent
+// meanwhile could reach the server first, or be answered first, and leave the page
+// showing one state with the other stored. The form is rendered anew from the answer.
+export function awaitAnswer(form: HTMLFormElement): void {
+  form.setAttribute('aria-busy', 'true')
+  for (const button of form.querySelectorAll('button')) {
+    button.setAttribute('aria-disabled', 'true')
+  }
+}
+
+export function isAwaitingAnswer(form: HTMLFormElement): boolean {
+  return form.getAttribute('aria-busy') === 'true'
+}

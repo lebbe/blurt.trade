@@ -4,18 +4,22 @@ import { html } from '../ui/html.ts'
 import { announce } from './announce.ts'
 import type { EnhancerContext } from './enhance.ts'
 import { replaceRendered } from './render.ts'
-import { submitForm, submitForReal } from './requests.ts'
+import { awaitAnswer, isAwaitingAnswer, submitForm, submitForReal } from './requests.ts'
 
 // <form data-enhance="follow">: Follow / Unfollow on a profile (FollowForm, src/ui/follow.ts)
 // without a page load. The button changes at once, then the form and the profile's
 // follower count are rendered from the answer (the new follow stats). Refused, it goes
 // back and the live region says why; the server out of reach, it goes back and the form
-// is submitted for real.
+// is submitted for real. Until the answer is in, the changed button does nothing
+// (awaitAnswer): an Unfollow sent meanwhile could be answered first, and the Follow's late
+// answer would then show the follower count and say "You follow" after all.
 
 export function enhance(form: HTMLFormElement, context: EnhancerContext): void {
   form.addEventListener('submit', (event) => {
     event.preventDefault()
-    void send(form, event.submitter, context)
+    if (!isAwaitingAnswer(form)) {
+      void send(form, event.submitter, context)
+    }
   })
 }
 
@@ -39,6 +43,7 @@ async function send(
   const follow = new URL(form.action).pathname === '/api/follow'
   const pending = submitForm<FollowStats>(form, { submitter, fallback: false })
   const optimistic = show(form, follow, context)
+  awaitAnswer(optimistic)
   const outcome = await pending
   if (outcome.kind === 'success' && outcome.data) {
     show(optimistic, outcome.data.viewerFollows, context)

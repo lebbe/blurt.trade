@@ -5,7 +5,13 @@ import { html } from '../ui/html.ts'
 import { announce } from './announce.ts'
 import type { EnhancerContext } from './enhance.ts'
 import { renderElement, replaceRendered } from './render.ts'
-import { type FieldError, submitForm, submitForReal } from './requests.ts'
+import {
+  awaitAnswer,
+  type FieldError,
+  isAwaitingAnswer,
+  submitForm,
+  submitForReal,
+} from './requests.ts'
 
 // <article class="blurt" data-enhance="blurt-actions">: a card's buttons (BlurtCard,
 // src/ui/blurt-card.ts) without a page load. Each is the card's own form, sent with
@@ -15,7 +21,9 @@ import { type FieldError, submitForm, submitForReal } from './requests.ts'
 //     same Likes / Reblurts components, rendered with the new state), on every card of
 //     that blurt on the page, then again from the server's answer. If the server refuses,
 //     they go back and the live region says why; if it can't be reached, they go back and
-//     the form is submitted for real.
+//     the form is submitted for real. Until the answer is in, the changed buttons do
+//     nothing (awaitAnswer): an Unlike sent meanwhile could reach the server first, and
+//     the page would show the blurt unliked with the like stored.
 //   - Delete opens a <dialog> to confirm (instead of the <details> it is without
 //     JavaScript). Deleted, every card of the blurt leaves the page, as on the next load.
 //     On the blurt's own page it is the ordinary submission: the server picks where to go.
@@ -95,7 +103,8 @@ function answered(kind: Toggle, data: Record<string, unknown>): Partial<Blurt> {
 }
 
 // Only the latest click on a blurt's button decides what it finally shows: an older answer
-// arriving late is ignored.
+// arriving late is ignored (a card of the blurt loaded meanwhile, with endless scrolling,
+// was not marked as awaiting the answer).
 const latest = new Map<string, number>()
 let clicks = 0
 
@@ -117,7 +126,7 @@ async function toggle(form: HTMLFormElement, submitter: HTMLElement | null, page
   const pending = submitForm<Record<string, unknown>>(form, { submitter, fallback: false })
   const index = togglesOf(blurtId, kind).indexOf(form)
   for (const other of togglesOf(blurtId, kind)) {
-    renderToggle(other, kind, optimistic, page)
+    awaitAnswer(renderToggle(other, kind, optimistic, page))
   }
   const outcome = await pending
   if (latest.get(key) !== click) {
@@ -243,7 +252,9 @@ export function enhance(article: HTMLElement, { page }: EnhancerContext): void {
     const path = pathOf(form)
     if (Object.hasOwn(toggles, path)) {
       event.preventDefault()
-      void toggle(form, event.submitter, page)
+      if (!isAwaitingAnswer(form)) {
+        void toggle(form, event.submitter, page)
+      }
     } else if (path === '/api/report') {
       event.preventDefault()
       void report(form, event.submitter, page)

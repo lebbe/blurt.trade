@@ -1332,15 +1332,17 @@ happened.
   ordinary link again.
 - **Card buttons** (`blurt-actions`, on each card for logged-in viewers). Like and
   Reblurt change at once on every card of that blurt on the page, then again from the
-  server's answer (only the latest click counts); a refusal (a 429, say) puts them back
+  server's answer. Until it is in, the changed buttons are `aria-disabled` and a click on
+  them does nothing, so an Unlike can't overtake the Like it undoes; a refusal (a 429, say) puts them back
   and is announced, and an unreachable server puts them back and submits the form for
   real. Delete opens a `<dialog>` ("Delete this blurt for good?", Cancel by default)
   instead of its `<details>`; deleted, every card of the blurt leaves the page (a reply
   in a thread too, though the next load shows its placeholder when it has replies), and
   on the blurt's own page it is the ordinary submission. Report sends its reason and the
   form becomes "You reported this blurt.", or shows the error.
-- **Follow** (`follow`): the button changes at once, then the form and the profile's
-  follower count are rendered from `{ followerCount, followingCount, viewerFollows }`.
+- **Follow** (`follow`): the button changes at once (`aria-disabled`, doing nothing until
+  the answer is in, like Like), then the form and the profile's follower count are
+  rendered from `{ followerCount, followingCount, viewerFollows }`.
 - **Share** (`share`, for everyone, logged in or not). Without JavaScript Share is a link:
   to the blurt's page in lists, to its share card image on the blurt's own page, and to
   the profile's card image on a profile. With it, every Share shares the page itself
