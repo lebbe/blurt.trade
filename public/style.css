@@ -141,16 +141,13 @@ code {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
+  margin-top: 26px;
   margin-bottom: 18px;
 }
 
 .page-title-text {
   flex: 1;
   min-width: 0;
-}
-
-.page-title {
-  margin-top: 26px;
 }
 
 .page-title h1 {
@@ -249,7 +246,7 @@ code {
   letter-spacing: 0.04em;
 }
 
-.top-nav a[aria-current='page'] {
+.top-nav a[aria-current="page"] {
   background: var(--signal);
   color: #0f1a1a;
   font-weight: 700;
@@ -412,7 +409,7 @@ label.check {
   cursor: pointer;
 }
 
-label.check input[type='checkbox'] {
+label.check input[type="checkbox"] {
   appearance: none;
   flex: none;
   width: 36px;
@@ -425,7 +422,7 @@ label.check input[type='checkbox'] {
   cursor: pointer;
 }
 
-label.check input[type='checkbox']:checked {
+label.check input[type="checkbox"]:checked {
   /* A filled inner square: pure CSS, since the CSP allows no data: images. */
   background:
     linear-gradient(#0f1a1a, #0f1a1a) center / 55% 55% no-repeat,
@@ -440,7 +437,7 @@ label.check input[type='checkbox']:checked {
   margin: 0.5em;
 }
 
-input[type='radio'] {
+input[type="radio"] {
   width: auto;
   accent-color: var(--accent);
 }
@@ -551,7 +548,7 @@ summary:focus-visible {
 
 button.secondary,
 .button.secondary,
-.avatar-buttons button[name='random'] {
+.avatar-buttons button[name="random"] {
   background: var(--panel-alt);
   color: var(--text);
   box-shadow: 2px 2px 0 var(--line-soft);
@@ -559,7 +556,7 @@ button.secondary,
 
 button.secondary:hover,
 .button.secondary:hover,
-.avatar-buttons button[name='random']:hover {
+.avatar-buttons button[name="random"]:hover {
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
@@ -576,24 +573,34 @@ button.danger,
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(130deg, var(--pop) 0%, var(--accent) 55%, var(--pop-strong) 100%);
+  background: linear-gradient(
+    130deg,
+    var(--pop) 0%,
+    var(--accent) 55%,
+    var(--pop-strong) 100%
+  );
   box-shadow:
     2px 2px 0 var(--line),
     0 0 8px color-mix(in srgb, var(--glow-soft), transparent 30%);
 }
 
 .blurt-button::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 16%, rgb(255 255 255 / 28%) 44%, transparent 70%);
+  background: linear-gradient(
+    100deg,
+    transparent 16%,
+    rgb(255 255 255 / 28%) 44%,
+    transparent 70%
+  );
   transform: translateX(-125%);
   opacity: 0;
   pointer-events: none;
 }
 
 .blurt-button::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -2px;
   border: 1px solid var(--pop-strong);
@@ -673,7 +680,7 @@ button.danger,
   letter-spacing: 0.04em;
 }
 
-.tabs a[aria-current='page'] {
+.tabs a[aria-current="page"] {
   border-color: var(--line);
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -837,11 +844,11 @@ button.danger,
   text-decoration: underline;
 }
 
-.blurt-actions .action[aria-pressed='true'] {
+.blurt-actions .action[aria-pressed="true"] {
   color: var(--pop);
 }
 
-.blurt-actions .action[aria-pressed='true'] .icon {
+.blurt-actions .action[aria-pressed="true"] .icon {
   fill: currentColor;
 }
 
@@ -1271,7 +1278,7 @@ button.danger,
 }
 
 /* Exactly cutImageSize (src/avatar.ts): the click is in these pixels. */
-.cut-form input[type='image'] {
+.cut-form input[type="image"] {
   display: block;
   width: 240px;
   height: 240px;
@@ -1338,7 +1345,7 @@ button.danger,
 
 /* The map and the picture take the arrow keys with JavaScript on; show where focus is. */
 .map-inner input:focus-visible,
-.cut-form input[type='image']:focus-visible {
+.cut-form input[type="image"]:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
@@ -1346,7 +1353,7 @@ button.danger,
 /* Autosave (src/client/autosave.ts): once a form saves itself, its save buttons give way
    to a status line. Keyed on what the script marked, under [data-js=on], so a script that
    doesn't load leaves the buttons. They come back when a save fails. */
-[data-js='on'] button[data-autosaved]:not([data-retry]) {
+[data-js="on"] button[data-autosaved]:not([data-retry]) {
   display: none;
 }
 
@@ -1355,7 +1362,7 @@ button.danger,
   font-size: 0.9em;
 }
 
-.autosave-status[data-state='error'] {
+.autosave-status[data-state="error"] {
   color: var(--warn);
 }
 
@@ -1401,32 +1408,82 @@ button.danger,
   grid-column: 1 / -1;
 }
 
-.swatch-midnight-clay span:nth-child(1) { background: #121416; }
-.swatch-midnight-clay span:nth-child(2) { background: #d08c5e; }
-.swatch-midnight-clay span:nth-child(3) { background: #e0694d; }
-.swatch-midnight-clay span:nth-child(4) { background: #7baea0; }
-.swatch-cobalt-quietude span:nth-child(1) { background: #0a1323; }
-.swatch-cobalt-quietude span:nth-child(2) { background: #6d9adf; }
-.swatch-cobalt-quietude span:nth-child(3) { background: #43a7ff; }
-.swatch-cobalt-quietude span:nth-child(4) { background: #7dc2e4; }
-.swatch-forest-alloy span:nth-child(1) { background: #121a17; }
-.swatch-forest-alloy span:nth-child(2) { background: #b99a63; }
-.swatch-forest-alloy span:nth-child(3) { background: #8faf7b; }
-.swatch-forest-alloy span:nth-child(4) { background: #9db8a0; }
-.swatch-plum-steel span:nth-child(1) { background: #17121f; }
-.swatch-plum-steel span:nth-child(2) { background: #b69ad7; }
-.swatch-plum-steel span:nth-child(3) { background: #b58adf; }
-.swatch-plum-steel span:nth-child(4) { background: #b9a8d5; }
-.swatch-tarnished-teal span:nth-child(1) { background: #191615; }
-.swatch-tarnished-teal span:nth-child(2) { background: #7fa6a0; }
-.swatch-tarnished-teal span:nth-child(3) { background: #d48a62; }
-.swatch-tarnished-teal span:nth-child(4) { background: #8eb5ac; }
+.swatch-midnight-clay span:nth-child(1) {
+  background: #121416;
+}
+.swatch-midnight-clay span:nth-child(2) {
+  background: #d08c5e;
+}
+.swatch-midnight-clay span:nth-child(3) {
+  background: #e0694d;
+}
+.swatch-midnight-clay span:nth-child(4) {
+  background: #7baea0;
+}
+.swatch-cobalt-quietude span:nth-child(1) {
+  background: #0a1323;
+}
+.swatch-cobalt-quietude span:nth-child(2) {
+  background: #6d9adf;
+}
+.swatch-cobalt-quietude span:nth-child(3) {
+  background: #43a7ff;
+}
+.swatch-cobalt-quietude span:nth-child(4) {
+  background: #7dc2e4;
+}
+.swatch-forest-alloy span:nth-child(1) {
+  background: #121a17;
+}
+.swatch-forest-alloy span:nth-child(2) {
+  background: #b99a63;
+}
+.swatch-forest-alloy span:nth-child(3) {
+  background: #8faf7b;
+}
+.swatch-forest-alloy span:nth-child(4) {
+  background: #9db8a0;
+}
+.swatch-plum-steel span:nth-child(1) {
+  background: #17121f;
+}
+.swatch-plum-steel span:nth-child(2) {
+  background: #b69ad7;
+}
+.swatch-plum-steel span:nth-child(3) {
+  background: #b58adf;
+}
+.swatch-plum-steel span:nth-child(4) {
+  background: #b9a8d5;
+}
+.swatch-tarnished-teal span:nth-child(1) {
+  background: #191615;
+}
+.swatch-tarnished-teal span:nth-child(2) {
+  background: #7fa6a0;
+}
+.swatch-tarnished-teal span:nth-child(3) {
+  background: #d48a62;
+}
+.swatch-tarnished-teal span:nth-child(4) {
+  background: #8eb5ac;
+}
 
-.card-swatch-navy span { background: linear-gradient(135deg, #11152c, #242b4a); }
-.card-swatch-forest span { background: linear-gradient(135deg, #0f2a1f, #1f4a37); }
-.card-swatch-plum span { background: linear-gradient(135deg, #231436, #4a2a6a); }
-.card-swatch-clay span { background: linear-gradient(135deg, #2a1a12, #5a3422); }
-.card-swatch-teal span { background: linear-gradient(135deg, #0d2a2c, #1c5256); }
+.card-swatch-navy span {
+  background: linear-gradient(135deg, #11152c, #242b4a);
+}
+.card-swatch-forest span {
+  background: linear-gradient(135deg, #0f2a1f, #1f4a37);
+}
+.card-swatch-plum span {
+  background: linear-gradient(135deg, #231436, #4a2a6a);
+}
+.card-swatch-clay span {
+  background: linear-gradient(135deg, #2a1a12, #5a3422);
+}
+.card-swatch-teal span {
+  background: linear-gradient(135deg, #0d2a2c, #1c5256);
+}
 
 /* --- Narrow screens ---------------------------------------------------------------------- */
 
@@ -1523,6 +1580,10 @@ button.danger,
   .panel .avatar-form {
     grid-template-columns: 1fr;
   }
+
+  .page-title {
+    padding: 0 16px;
+  }
 }
 
 /* Edge to edge in the card: undo .blurt-main's padding on the sides and at the bottom. */
@@ -1575,11 +1636,11 @@ td {
 /* --- With JavaScript (src/client/) ------------------------------------------------------------- */
 
 /* The composer (composer.ts): the count turns warning colours near and past the limit. */
-.composer-hint[data-state='low'] {
+.composer-hint[data-state="low"] {
   color: var(--signal);
 }
 
-.composer-hint[data-state='over'] {
+.composer-hint[data-state="over"] {
   color: var(--warn);
   font-weight: 700;
 }
@@ -1652,7 +1713,7 @@ td {
   touch-action: none;
 }
 
-.crop-canvas[data-cursor='resize'] {
+.crop-canvas[data-cursor="resize"] {
   cursor: nwse-resize;
 }
 
@@ -1678,12 +1739,12 @@ td {
 }
 
 /* Items the focus is moved to (a new blurt, the first of a loaded page): a quiet ring. */
-[tabindex='-1']:focus-visible {
+[tabindex="-1"]:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--focus), transparent 56%);
   outline-offset: 2px;
 }
 
-[tabindex='-1']:focus:not(:focus-visible) {
+[tabindex="-1"]:focus:not(:focus-visible) {
   outline: none;
 }
 
