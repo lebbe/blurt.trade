@@ -2,6 +2,7 @@ import type pg from 'pg'
 import type { Avatar } from '../../avatar.ts'
 import { db, dbRead } from '../../db.ts'
 import { cursorMaxLength } from '../../limits.ts'
+import { hiddenBot, withoutHiddenBots } from './bots.ts'
 
 // A deleted blurt stays in its thread as a placeholder: `deleted` is true and `username`,
 // `text`, `avatar` and `quoted` are null (see deleteBlurts).
@@ -60,8 +61,11 @@ export const pageSize = 100
 // The avatar of a user_profiles row (by its alias) as it is shown: the stored JSON, plus
 // `photo` when they have a profile picture (AvatarPhoto in src/avatar.ts). The picture
 // itself is never read here: IS NULL doesn't fetch it.
+// A bot's gets `robot: true` instead, and never a photo: the robot is its label.
 export function avatarColumn(profile: string): string {
-  return `(${profile}.avatar || CASE WHEN ${profile}.picture IS NULL THEN '{}'::jsonb
+  return `(${profile}.avatar || CASE
+    WHEN (SELECT is_bot FROM users WHERE id = ${profile}.user_id) THEN '{"robot": true}'::jsonb
+    WHEN ${profile}.picture IS NULL THEN '{}'::jsonb
     ELSE jsonb_build_object('photo', jsonb_build_object('user', ${profile}.user_id,
       'version', ${profile}.picture_version, 'cut', ${profile}.picture_cut)) END)`
 }
@@ -254,8 +258,21 @@ export async function getBlurt(id: number): Promise<Blurt | undefined> {
 }
 
 // Direct replies after `after`, oldest first so the thread reads top to bottom.
-export function listReplies(parentId: number, after: Cursor | null = null): Promise<Page<Blurt>> {
-  return listPage('r.parent_id = $1', [parentId], after, 'oldest first', { placeholders: true })
+// Leaves out the bots `viewerId` hides.
+export function listReplies(
+  parentId: number,
+  after: Cursor | null = null,
+  viewerId: number | null = null,
+): Promise<Page<Blurt>> {
+  return listPage(
+    `r.parent_id = $1 AND ${withoutHiddenBots(viewerId)}`,
+    [parentId],
+    after,
+    'oldest first',
+    {
+      placeholders: true,
+    },
+  )
 }
 
 // A live (not deleted) account, locked against deletion until the transaction ends:
@@ -315,7 +332,8 @@ export async function addBlurt(
            -- Quoted already gets the quote notification.
            AND NOT EXISTS (SELECT 1 FROM blurts o WHERE o.id = $4::bigint AND o.user_id = f.user_id)
        ) n
-       WHERE n.user_id <> blurt.user_id
+       -- Not to people who hide this bot (src/routes/state/bots.ts).
+       WHERE n.user_id <> blurt.user_id AND NOT ${hiddenBot('blurt.user_id', 'n.user_id')}
        ON CONFLICT DO NOTHING
        RETURNING user_id
      )

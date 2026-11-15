@@ -5,6 +5,7 @@ import { db } from '../db.ts'
 import { sendError } from '../negotiate.ts'
 import { isSpeculative, refuseSpeculation } from '../speculation.ts'
 import { isAdmin } from '../routes/state/accounts.ts'
+import { userForToken } from '../routes/state/bots.ts'
 import { defaultTheme, isTheme, type ThemeId } from '../themes.ts'
 import { defaultTimeZone, isLocale, timeZoneOrDefault } from '../timezones.ts'
 
@@ -341,12 +342,37 @@ async function refreshSession(claims: RefreshClaims): Promise<
   return undefined
 }
 
+// The bot API (src/routes/api-v1.ts) logs in with `Authorization: Bearer <token>` only, and
+// everything else with the cookies only: a bearer token never works on a page or a form
+// route, and a browser's cookies never work on /api/v1/.
+export function isBotApi(request: Request): boolean {
+  return request.path === '/api/v1' || request.path.startsWith('/api/v1/')
+}
+
+async function resolveBearer(request: Request): Promise<Session | undefined> {
+  const match = /^Bearer\s+(\S+)$/i.exec(request.get('Authorization') ?? '')
+  const user = match ? await userForToken(match[1]) : undefined
+  return (
+    user && {
+      user,
+      sessionId: '', // no row in `sessions`: the token is its own login
+      theme: defaultTheme,
+      timeZone: defaultTimeZone,
+      locale: null,
+      javascript: false,
+    }
+  )
+}
+
 // 'refused': a prefetch that would have to rotate the tokens. It isn't served, so the
 // rotation happens on the real navigation (see src/speculation.ts).
 async function resolveSession(
   request: Request,
   response: Response,
 ): Promise<Session | undefined | 'refused'> {
+  if (isBotApi(request)) {
+    return resolveBearer(request)
+  }
   const cookies = (request.cookies ?? {}) as Record<string, unknown>
   const verified = await verifyAccessToken(cookies[accessTokenCookie])
   if (verified) {

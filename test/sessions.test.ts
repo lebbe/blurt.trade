@@ -212,6 +212,8 @@ test('logs out every browser and device from settings', async () => {
   assert.deepEqual(JSON.parse(settings.body), {
     viewer: { id: 1, username: 'Lars' },
     activeSessions: 2,
+    hideBots: false,
+    bots: 0,
   })
   const page = await request('GET', '/settings', '', { cookie: laptopCookie })
   assert.match(page.body, /logged in on 2 browsers or devices/)

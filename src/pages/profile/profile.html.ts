@@ -112,8 +112,10 @@ function ProfilePage({
   follows,
   blurts,
   next,
+  botOwners,
 }: ProfilePageData) {
   const own = viewer?.id === profile.userId
+  const ownsBot = viewer !== null && (botOwners ?? []).includes(viewer.username)
   const feed = blurts.map((blurt) => html`<${BlurtCard} blurt=${blurt} viewer=${viewer} />`)
   const cardPath = profileCardPath(profile)
   const actions =
@@ -128,10 +130,17 @@ function ProfilePage({
                   label="Edit profile"
                 />`
               : viewer &&
-                html`<${FollowForm}
-                  username=${profile.username}
-                  following=${follows.viewerFollows}
-                />`
+                html`${
+                    ownsBot &&
+                    html`<${ButtonLink}
+                      href="/settings/bots/${profile.username}"
+                      icon="robot"
+                      label="Manage bot"
+                    />`
+                  }<${FollowForm}
+                    username=${profile.username}
+                    following=${follows.viewerFollows}
+                  />`
           }
         `
       : undefined
@@ -158,6 +167,7 @@ function ProfilePage({
       <section class="panel" aria-label="Profile">
         <h2>Profile</h2>
         ${invitedBy && html`<p class="invited-by">Invited by <a href="/${invitedBy}/">${invitedBy}</a></p>`}
+        ${botOwners && html`<p class="invited-by"><span class="bot-label">Bot</span> run by ${botOwners.map((owner, i) => html`${i > 0 && ', '}<a href="/${owner}/">${owner}</a>`)}</p>`}
         <p class="bio">${profile.bio || html`<span class="empty">No bio yet.</span>`}</p>
       </section>
       <section class="panel" aria-label="${profile.username} blurts">

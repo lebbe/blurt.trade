@@ -42,6 +42,7 @@ export function profilePageMarkdown({
   viewer,
   profile,
   invitedBy,
+  botOwners,
   inviteCodes,
   follows,
   blurts,
@@ -61,6 +62,8 @@ export function profilePageMarkdown({
     ${plural(follows.followerCount, 'follower')} · ${follows.followingCount} following
 
     ${invitedBy && md`Invited by ${link(invitedBy, `/${invitedBy}/`)}`}
+
+    ${botOwners && md`A bot, run by ${botOwners.map((owner, i) => md`${i > 0 ? ', ' : ''}${link(owner, `/${owner}/`)}`)}`}
 
     ${
       viewer &&

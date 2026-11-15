@@ -1,5 +1,6 @@
 import type pg from 'pg'
 import { inTransaction, liveUser, plainReblurt } from './blurts.ts'
+import { hiddenBot } from './bots.ts'
 
 // Adds `delta` to a counter in blurt_stats. Only the narrow stats row is locked, never the
 // blurt, so concurrent likes and reblurts queue there briefly and each counts. A decrement
@@ -132,6 +133,7 @@ export async function setReblurt(
         ? client.query(
             `INSERT INTO notifications (user_id, kind, actor_user_id, blurt_id)
              SELECT $1, 'reblurt', $2, $3 FROM user_profiles WHERE user_id = $1 AND notify_reblurts
+               AND NOT ${hiddenBot('$2::bigint', '$1::bigint')}
              ON CONFLICT DO NOTHING`,
             [locked.authorId, userId, blurtId],
           )

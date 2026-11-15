@@ -341,6 +341,7 @@ function pages(): Snapshot[] {
   }
   const profilePage = {
     viewer: ada,
+    botOwners: null,
     profile,
     invitedBy: 'grace',
     inviteCodes: [
@@ -470,7 +471,7 @@ function pages(): Snapshot[] {
       },
     ],
   }
-  const settings = { viewer: ada, activeSessions: 2 }
+  const settings = { viewer: ada, activeSessions: 2, hideBots: false, bots: 0 }
   const deleteAccount = { viewer: ada, inviteOnly: true }
 
   return [

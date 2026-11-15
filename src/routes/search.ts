@@ -47,7 +47,9 @@ searchRouter.get('/search', rateLimit('search'), async (request, response) => {
   const username = query.replace(/^@/, '')
   const [users, { items: blurts, next }] = await Promise.all([
     username !== '' && before === null ? searchUsers(username) : [],
-    query !== '' ? searchBlurts(query, before) : { items: [], next: null },
+    query !== ''
+      ? searchBlurts(query, before, getViewer(request)?.id ?? null)
+      : { items: [], next: null },
   ])
   await markViewerFlags(viewer?.id ?? null, blurts)
   const data: SearchData = { viewer, query, users, blurts, next }

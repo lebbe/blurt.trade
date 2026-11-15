@@ -20,6 +20,9 @@ export type AvatarPhoto = { user: number; version: number; cut: number }
 
 export type Avatar = {
   photo?: AvatarPhoto | null
+  // A bot's: drawn as a robot from the same fields, and never as a photo. Like `photo`,
+  // never stored in the avatar JSON: the queries add it (avatarColumn).
+  robot?: boolean
   headWidth: HeadWidth
   skin: string
   hairType: HairType

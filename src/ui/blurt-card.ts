@@ -1,4 +1,4 @@
-import { AvatarView } from './avatar.ts'
+import { AvatarView, BotLabel } from './avatar.ts'
 import { renderBlurtText } from './blurt-text.ts'
 import type { Viewer } from './context.ts'
 import { usePageContext } from './context.ts'
@@ -119,7 +119,8 @@ export function QuotedCard({ quoted }: { quoted: QuotedBlurt }) {
   return html`
     <blockquote class="quoted">
       <div class="blurt-meta">
-        <strong><a href="/${quoted.username}/">${quoted.username}</a></strong>
+        <strong><a href="/${quoted.username}/">${quoted.username}</a></strong
+        ><${BotLabel} avatar=${quoted.avatar} />
         <a href=${blurtUrl(quoted)}><${Timestamp} date=${quoted.createdAt} /></a>
       </div>
       <p>${renderBlurtText(quoted.text ?? '')}</p>
@@ -292,7 +293,8 @@ export function BlurtCard({
           }
           ${!inThread && html`<${ReplyingTo} blurt=${blurt} />`}
           <div class="blurt-meta">
-            <strong><a href="/${blurt.username}/">${blurt.username}</a></strong>
+            <strong><a href="/${blurt.username}/">${blurt.username}</a></strong
+            ><${BotLabel} avatar=${blurt.avatar} />
             <a href=${blurtUrl(blurt)}><${Timestamp} date=${blurt.createdAt} /></a>
           </div>
           <p>${renderBlurtText(blurt.text ?? '')}</p>

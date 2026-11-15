@@ -199,6 +199,168 @@ function LowerTeeth({ type, color }: { type: string; color: string }) {
     : null
 }
 
+// --- The robot: a bot's avatar (avatar.robot) ------------------------------------------
+//
+// The same nine fields and the same drawing order as the cartoon, so it talks with the same
+// CSS: a metal box whose lid flaps open at the cut. Each field picks a robot part instead
+// (docs/routes.md, Avatar): the hair is what sits on top, the eyes are lenses, the teeth a
+// grille, the skin the plating. `avatar-robot` makes the flapping mechanical, and the
+// `avatar-led` parts blink while it talks (public/style.css).
+
+const robotTopPath = `M14 ${cut} V22 Q14 16 20 16 H80 Q86 16 86 22 V${cut} Z`
+const robotMouthPath = `M14 ${cut} V22 Q14 16 20 16 H80 Q86 16 86 22 V${cut + 6} H14 Z`
+const robotJawPath = `M14 ${cut} H86 V80 Q86 88 78 88 H22 Q14 88 14 80 Z`
+
+function RobotTopPart({ type, color }: { type: string; color: string }) {
+  switch (type) {
+    case 'tuft': // one antenna
+      return html`<g>
+        <path d="M50 16 V6" stroke=${outline} stroke-width="2" />
+        <circle class="avatar-led" cx="50" cy="5" r="3.5" fill=${color} ...${stroke} />
+      </g>`
+    case 'flat': // a flat lid
+      return html`<rect x="10" y="10" width="80" height="7" rx="2" fill=${color} ...${stroke} />`
+    case 'spiky': // bolts
+      return [30, 50, 70].map(
+        (x) => html`<rect x=${x - 3} y="9" width="6" height="7" fill=${color} ...${stroke} />`,
+      )
+    case 'mohawk': // a fin
+      return html`<path d="M40 16 L44 4 H56 L60 16 Z" fill=${color} ...${stroke} />`
+    case 'afro': // a satellite dish
+      return html`<g>
+        <path d="M66 16 L72 8" stroke=${outline} stroke-width="2" />
+        <ellipse
+          cx="74"
+          cy="6"
+          rx="11"
+          ry="4"
+          transform="rotate(-20 74 6)"
+          fill=${color}
+          ...${stroke}
+        />
+        <circle class="avatar-led" cx="74" cy="6" r="1.8" fill=${outline} />
+      </g>`
+    default: // bald: a dome
+      return html`<path d="M38 16 A12 9 0 0 1 62 16 Z" fill=${color} ...${stroke} />`
+  }
+}
+
+const lensY = 36
+
+function RobotLenses({
+  type,
+  white,
+  glow,
+  plating,
+  spread,
+}: {
+  type: string
+  white: string
+  glow: string
+  plating: string
+  spread: number
+}) {
+  if (type === 'wide') {
+    // One visor across both eyes.
+    return html`<g>
+      <rect
+        x=${50 - spread - 11}
+        y=${lensY - 7}
+        width=${2 * spread + 22}
+        height="14"
+        rx="3"
+        fill=${white}
+        ...${stroke}
+      />
+      ${[50 - spread, 50 + spread].map(
+        (x) => html`<circle class="avatar-led" cx=${x} cy=${lensY} r="3" fill=${glow} />`,
+      )}
+    </g>`
+  }
+  return [50 - spread, 50 + spread].map((x) => {
+    switch (type) {
+      case 'dots': // LEDs
+        return html`<circle
+          class="avatar-led"
+          cx=${x}
+          cy=${lensY}
+          r="3.5"
+          fill=${glow}
+          ...${stroke}
+        />`
+      case 'round': // portholes
+        return html`<g>
+          <circle cx=${x} cy=${lensY} r="10" fill=${white} stroke=${outline} stroke-width="3" />
+          <circle class="avatar-led" cx=${x} cy=${lensY} r="4" fill=${glow} />
+        </g>`
+      case 'sleepy': // half-shut shutters
+        return html`<g>
+          <circle cx=${x} cy=${lensY} r="8" fill=${white} ...${stroke} />
+          <circle cx=${x} cy=${lensY + 3} r="2.5" fill=${glow} />
+          <rect x=${x - 9} y=${lensY - 9} width="18" height="9" fill=${plating} ...${stroke} />
+        </g>`
+      case 'angry': {
+        // Slanted visor halves, low at the nose.
+        const inner = x < 50 ? 1 : -1
+        const outer = x - 9 * inner
+        const near = x + 9 * inner
+        return html`<g>
+          <path
+            d="M${outer} ${lensY - 7} L${near} ${lensY - 2} L${near} ${lensY + 6} L${outer} ${lensY + 6} Z"
+            fill=${white}
+            ...${stroke}
+          />
+          <circle class="avatar-led" cx=${x} cy=${lensY + 2} r="2.5" fill=${glow} />
+        </g>`
+      }
+      default: // classic: round lenses
+        return html`<g>
+          <circle cx=${x} cy=${lensY} r="8" fill=${white} ...${stroke} />
+          <circle class="avatar-led" cx=${x} cy=${lensY} r="3" fill=${glow} />
+        </g>`
+    }
+  })
+}
+
+// The grille's upper bars hang below the cut like the cartoon's upper teeth: hidden behind
+// the jaw until the lid opens.
+function RobotUpperGrille({ type, color }: { type: string; color: string }) {
+  const bar = (x: number, width: number, height: number) =>
+    html`<rect x=${x} y=${cut} width=${width} height=${height} fill=${color} ...${toothStroke} />`
+  switch (type) {
+    case 'two':
+      return [bar(42, 7, 6), bar(51, 7, 6)]
+    case 'buck':
+      return [bar(42, 16, 8)]
+    case 'gap':
+      return [bar(30, 12, 5), bar(58, 12, 5)]
+    case 'full': // a speaker grille
+      return [24, 30, 36, 42, 48, 54, 60, 66, 72].map((x) => bar(x, 3, 6))
+    default: // none: just the slot
+      return null
+  }
+}
+
+function RobotLowerGrille({ type, color }: { type: string; color: string }) {
+  return type === 'full'
+    ? [27, 33, 39, 45, 51, 57, 63, 69].map(
+        (x) =>
+          html`<rect x=${x} y=${cut - 4} width="3" height="4" fill=${color} ...${toothStroke} />`,
+      )
+    : null
+}
+
+// Rivets on the jaw's corners, and the side bolts that hold the lid.
+function RobotJawDetails() {
+  return [20, 80].map((x) => html`<circle cx=${x} cy="81" r="1.6" fill=${outline} />`)
+}
+
+function RobotSideBolts({ color }: { color: string }) {
+  return [8, 86].map(
+    (x) => html`<rect x=${x} y="30" width="6" height="14" rx="1.5" fill=${color} ...${stroke} />`,
+  )
+}
+
 export function AvatarSvg({
   avatar,
   label,
@@ -231,6 +393,48 @@ export function AvatarSvg({
     ? `${round(50 - box / 2 - 24)} -32 ${box + 36} 132`
     : `${round(50 - box / 2)} ${round(50 - box / 2)} ${box} ${box}`
 
+  const spread = round(15 * Math.sqrt(scale))
+
+  if (avatar?.robot === true) {
+    return html`<svg
+      class="avatar avatar-${size} avatar-robot"
+      viewBox=${viewBox}
+      xmlns="http://www.w3.org/2000/svg"
+      role=${label ? 'img' : undefined}
+      aria-label=${label}
+      aria-hidden=${label ? undefined : 'true'}
+      focusable="false"
+    >
+      <g transform=${scale === 1 ? undefined : stretch}>
+        <path d=${robotMouthPath} fill=${mouthColor} />
+        <g class="avatar-jaw" transform=${jawFlop}>
+          <${RobotLowerGrille} type=${toothType} color=${toothColor} />
+        </g>
+        <g class="avatar-top" transform=${topFlap}>
+          <${RobotUpperGrille} type=${toothType} color=${toothColor} />
+        </g>
+        <g class="avatar-jaw" transform=${jawFlop}>
+          <path d=${robotJawPath} fill=${skin} ...${stroke} />
+          <${RobotJawDetails} />
+        </g>
+        <g class="avatar-top" transform=${topFlap}>
+          <${RobotSideBolts} color=${hairColor} />
+          <path d=${robotTopPath} fill=${skin} ...${stroke} />
+          <${RobotTopPart} type=${hairType} color=${hairColor} />
+          <g transform=${scale === 1 ? undefined : unstretch}>
+            <${RobotLenses}
+              type=${eyeType}
+              white=${eyeColor}
+              glow=${pupilColor}
+              plating=${skin}
+              spread=${spread}
+            />
+          </g>
+        </g>
+      </g>
+    </svg>`
+  }
+
   return html`<svg
     class="avatar avatar-${size}"
     viewBox=${viewBox}
@@ -259,7 +463,7 @@ export function AvatarSvg({
             white=${eyeColor}
             pupil=${pupilColor}
             skin=${skin}
-            spread=${round(15 * Math.sqrt(scale))}
+            spread=${spread}
           />
         </g>
       </g>
@@ -336,7 +540,8 @@ export function AvatarView(props: {
   size?: 'small' | 'large'
   parts?: PhotoParts
 }) {
-  const photo = safePhoto(props.avatar?.photo)
+  // A bot is always the robot, never a photo.
+  const photo = props.avatar?.robot === true ? undefined : safePhoto(props.avatar?.photo)
   return photo
     ? html`<${AvatarPhotoView}
         photo=${photo}
@@ -349,6 +554,12 @@ export function AvatarView(props: {
         label=${props.label}
         size=${props.size}
       />`
+}
+
+// "Bot", next to a bot's name wherever it is shown, so it is in the text and not only in
+// the drawing.
+export function BotLabel({ avatar }: { avatar: Avatar | null | undefined }) {
+  return avatar?.robot === true ? html`<span class="bot-label">Bot</span>` : null
 }
 
 // Under the picture on the edit page: where its mouth opens now. Also rewritten by the

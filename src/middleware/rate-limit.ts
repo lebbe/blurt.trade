@@ -54,6 +54,11 @@ const defaults = {
   deleteAccount: '5/10m',
   // Per IP, logged in or not: a text search costs more than a feed page.
   search: '60/1m',
+  // Making bots, sharing them and taking owners off (/settings/bots).
+  bots: '30/10m',
+  // Minting and revoking a bot's API tokens.
+  tokens: '30/10m',
+  hideBots: '60/10m',
 } satisfies Record<string, string>
 
 export type LimitName = keyof typeof defaults

@@ -8,6 +8,7 @@ import { closeDb } from './db.ts'
 import { errorFields, handleCrashes, log, requestLogger, serverErrorHandler } from './logging.ts'
 import {
   authenticate,
+  isBotApi,
   deleteDeadSessions,
   getLocale,
   getTheme,
@@ -35,6 +36,7 @@ import { healthRouter } from './routes/health.ts'
 import { closePicturePool } from './picture-pool.ts'
 import { embedPendingBlurts } from './embeddings.ts'
 import { homeRouter } from './routes/home.ts'
+import { apiV1Router } from './routes/api-v1.ts'
 import { javascriptRouter } from './routes/javascript.ts'
 import { infoRouter } from './routes/info.ts'
 import { locationRouter } from './routes/location.ts'
@@ -47,6 +49,7 @@ import { searchRouter } from './routes/search.ts'
 import { themeRouter } from './routes/theme.ts'
 import { timeZoneRouter } from './routes/timezone.ts'
 import { usersRouter } from './routes/users.ts'
+import { botsRouter } from './routes/bots.ts'
 import { crawlRouter } from './routes/crawl.ts'
 import { ogRouter } from './routes/og.ts'
 import { eventsRouter } from './routes/events.ts'
@@ -61,6 +64,13 @@ app.set('trust proxy', trustProxySetting())
 app.disable('x-powered-by')
 // First: a request id and one log line per request (src/logging.ts).
 app.use(requestLogger)
+// The bot API answers JSON only, errors included, whatever the client asked for.
+app.use((request, _response, next) => {
+  if (isBotApi(request)) {
+    request.headers.accept = 'application/json'
+  }
+  next()
+})
 // Next, so every response has them, errors included.
 app.use(securityHeaders)
 // Before anything reads a body or changes anything: POSTs from other sites are refused.
@@ -132,6 +142,8 @@ app.use((request, response, next) => {
     })
     .catch(next)
 })
+// Before the others: its routes rewrite requests into theirs (src/routes/api-v1.ts).
+app.use(apiV1Router)
 app.use(homeRouter)
 app.use(eventsRouter)
 app.use(pushRouter) // before profilesRouter, whose /:username/ would match /notifications/
@@ -140,6 +152,7 @@ app.use(picturesRouter)
 app.use(profilePictureRouter)
 app.use(blurtsRouter)
 app.use(usersRouter)
+app.use(botsRouter)
 app.use(avatarRouter)
 app.use(adminRouter)
 app.use(searchRouter)

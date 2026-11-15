@@ -6,7 +6,7 @@ import { invitesPerUser, mintInviteCodes } from './signup.ts'
 export type User = {
   id: number
   username: string
-  passwordHash: string
+  passwordHash: string | null // null for a bot: nobody logs in as one
 }
 
 // Deletes the account, in one transaction. The users row stays as a stub: deleted_at set,
@@ -74,6 +74,10 @@ export async function deleteAccount(userId: number): Promise<string[] | undefine
     // Deleting the sessions would take these with them; said out loud, since a missed
     // one would keep pushing to a device of a deleted account.
     await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
+    await client.query('DELETE FROM api_tokens WHERE user_id = $1', [userId])
+    // A deleted bot loses its owners; a deleted person stops owning bots (their bots nobody
+    // else owns are deleted first, see /settings/delete).
+    await client.query('DELETE FROM bot_owners WHERE user_id = $1 OR bot_user_id = $1', [userId])
     const sessions = await client.query<{ id: string }>(
       'DELETE FROM sessions WHERE user_id = $1 RETURNING id',
       [userId],
@@ -90,7 +94,8 @@ export async function deleteAccount(userId: number): Promise<string[] | undefine
     )
     await client.query('DELETE FROM user_profiles WHERE user_id = $1', [userId])
     await client.query(
-      `UPDATE users SET deleted_at = now(), username = NULL, password_hash = NULL, is_admin = false
+      `UPDATE users SET deleted_at = now(), username = NULL, password_hash = NULL, is_admin = false,
+         is_bot = false
        WHERE id = $1`,
       [userId],
     )

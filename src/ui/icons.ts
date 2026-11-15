@@ -66,6 +66,16 @@ const paths = {
   ],
   bell: ['M6 17V11a6 6 0 0 1 12 0v6l2 2H4z', 'M10 21h4'],
   check: ['m5 12.5 4.5 4.5L19 7.5'],
+  robot: [
+    'M5 8h14v11H5z',
+    'M12 8V5',
+    circle(12, 4, 1),
+    circle(9, 12.5, 1.5),
+    circle(15, 12.5, 1.5),
+    'M9 16h6',
+    'M3 12v3',
+    'M21 12v3',
+  ],
   save: ['M5 4h11l3 3v13H5z', 'M8 4v5h7V4', 'M8 20v-6h8v6'],
   hourglass: [
     'M6 3h12',

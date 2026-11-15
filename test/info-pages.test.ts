@@ -132,10 +132,12 @@ test('the privacy page is in step with the database columns', async () => {
      GROUP BY table_name ORDER BY table_name`,
   )
   assert.deepEqual(Object.fromEntries(rows.map((row) => [row.table_name, row.columns])), {
+    api_tokens: 'created_at id last_used_at name token_hash user_id',
     blurt_pictures: 'blurt_id height shapes width',
     blurt_stats: 'blurt_id like_count reblurt_count',
     blurts:
       'created_at deleted_at embedding id parent_id reblurt_of_id reblurt_of_user_id text user_id',
+    bot_owners: 'bot_user_id created_at user_id',
     follows: 'created_at followed_user_id user_id',
     likes: 'blurt_id created_at user_id',
     push_subscriptions: 'auth created_at endpoint p256dh pushed_at session_id user_id',
@@ -146,8 +148,8 @@ test('the privacy page is in step with the database columns', async () => {
     sessions: 'created_at current_generation id last_used_at persistent revoked_at user_id',
     signup_counter: 'current_count hard_limit id soft_limit',
     user_profiles:
-      'avatar bio card_color github homepage instagram javascript linkedin locale location notify_followed_blurts notify_reblurts notify_replies picture picture_cut picture_version theme tiktok timezone updated_at user_id x youtube',
-    users: 'created_at deleted_at id is_admin password_hash username',
+      'avatar bio card_color github hide_bots homepage instagram javascript linkedin locale location notify_followed_blurts notify_reblurts notify_replies picture picture_cut picture_version theme tiktok timezone updated_at user_id x youtube',
+    users: 'created_at deleted_at id is_admin is_bot password_hash username',
     waitlist: 'created_at id status username',
   })
 })

@@ -31,7 +31,9 @@ a{color:#e0c9ff}
           turn them off there, log out there, or delete your account.</li><li>Blurts you like, and when. Only the number of likes on a blurt is public: nobody else sees
           who liked it.</li><li>Blurts you reblurt, and when. Reblurts are public: they show on your profile and in your
           followers' feeds. A quote is a blurt of your own, with the quoted blurt under it.</li><li>Blurts you report, with your reason and when.</li><li>Your sessions: one record per login, with when it started and was last used. No IP address
-          and no browser details.</li></ul><p>The waitlist stores only the username you'd like, whether you've signed up since, and when
+          and no browser details.</li><li>Whether you hide bots. Only if you run a bot: that you own it, which shows on its profile,
+          and its API tokens, stored only as a fingerprint, with a name and when each was made and
+          last used.</li></ul><p>The waitlist stores only the username you'd like, whether you've signed up since, and when
         you joined it.</p><p>For deleted accounts, only the username is kept, in lower case and with nothing else, so it
         can't be taken again.</p><p>Public: your username, profile, avatar, blurts, reblurts, follower, like and reblurt counts,
         and who invited you. Everything else is private, though admins see who reported what.</p><h2>What is not stored</h2><ul><li>No email address. So we can't contact you, and there's <strong>no password reset</strong>:
@@ -61,8 +63,8 @@ a{color:#e0c9ff}
         account removes it everywhere.</p><h2>Deleting your account</h2><p><a href="/settings">Settings</a> has &quot;Delete my account&quot;, which asks for your password. It
         deletes at once, in one go, everything above that belongs to the account: your profile,
         avatar and location, the text of your blurts and their embeddings, your reblurts, who you
-        follow and who follows you, your likes (and the likes on your blurts), your notifications,your reports, your sessions and your waitlist
-        entry. You're logged out everywhere.</p><p>What stays: an empty record of the account, with no username, password or profile, and an
+        follow and who follows you, your likes (and the likes on your blurts), your notifications,your reports, your sessions, the bots only you
+        own, and your waitlist entry. You're logged out everywhere.</p><p>What stays: an empty record of the account, with no username, password or profile, and an
         empty row for each of your blurts, with no text, which shows nowhere and names nobody. A
         blurt someone replied to shows as an empty placeholder, with no text and no author, so the
         thread still reads.Your

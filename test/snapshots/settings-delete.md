@@ -8,6 +8,8 @@
 
 - Your username is retired: nobody can sign up with it again, so nobody can pass for you.
 
+- Your bots are deleted the same way, except those someone else owns too.
+
 - You're logged out everywhere. It can't be undone; nightly backups still hold the account for up to 30 days.
 
 Send `POST /settings/delete` as a form or as JSON with your `password` to confirm.

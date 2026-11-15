@@ -16,11 +16,11 @@ that a browser could run too (see Shared components) are in `src/ui/`.
 
 Each page has a folder in `src/pages/` (server only), e.g. `src/pages/feed/`:
 
-| File           | What                                                                      |
-| -------------- | ------------------------------------------------------------------------- |
+| File           | What                                                                       |
+| -------------- | -------------------------------------------------------------------------- |
 | `data.ts`      | The type of the data (what JSON clients get) and its helpers (URLs, texts) |
-| `feed.html.ts` | The HTML page: its components and `renderFeedPage()`                      |
-| `feed.md.ts`   | The Markdown view: `feedMarkdown()`                                       |
+| `feed.html.ts` | The HTML page: its components and `renderFeedPage()`                       |
+| `feed.md.ts`   | The Markdown view: `feedMarkdown()`                                        |
 
 The folders are `feed`, `blurt`, `profile`, `profile-edit` (its settings forms in
 `forms.ts`), `notifications`, `search`, `near`, `people`, `settings` (with
@@ -44,31 +44,31 @@ agents, next to `/robots.txt` and `/sitemap.xml`.
 
 `viewer` is the logged-in user (`{ id, username }`) or `null`, on every page.
 
-| Path               | Auth  | JSON                                                                          | Errors                  |
-| ------------------ | ----- | ----------------------------------------------------------------------------- | ----------------------- |
-| `/`                | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }` | 400 bad cursor          |
-| `/everyone`        | —     | the same, always the everyone feed                                            | 400 bad cursor          |
-| `/:username/`      | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`          | 400, 404 no such user   |
-| `/:username/:id`   | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                 | 400, 404 no such blurt  |
-| `/:username/edit`  | owner | `{ viewer, profile, location, notifications, push }` (`push` only when VAPID keys are set: `{ publicKey, thisDevice, devices }`) | 401, 403 not owner, 404 |
-| `/notifications/`  | —     | 303 → `/:username/notifications/` of the viewer (query kept), or `/login`     |                         |
-| `/api/events`      | yes   | `text/event-stream`, see Live updates                                         | 401, 429 too many tabs  |
-| `/sw.js`           | —     | the service worker (`src/client/sw.ts`, types stripped), see Push notifications |                       |
-| `/manifest.webmanifest` | — | the web app manifest                                                        |                         |
-| `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next, push }` (`push` on the unread page only, when VAPID keys are set: `{ publicKey, thisDevice }`)                       | 400, 401, 403 not owner |
-| `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
-| `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
-| `/people`          | —     | `{ viewer, people, next }`                                                    | 400 bad cursor          |
-| `/login`           | —     | `{ viewer }`                                                                  |                         |
-| `/signup`      | —     | `{ viewer, signup, inviteCode }`                                              |                         |
-| `/waitlist`        | —     | `{ viewer, signup, waiting, username, entry }`                                |                         |
-| `/settings`        | yes   | `{ viewer, activeSessions }`                                                  | 401                     |
-| `/settings/delete` | yes   | `{ viewer }`                                                                  | 401                     |
-| `/admin`           | admin | `{ viewer, limits }`                                                               | 401, 403 not an admin   |
-| `/admin/reports`   | admin | `{ viewer, reports }`                                                         | 401, 403 not an admin   |
-| `/about`           | —     | `{ viewer, contact }`                                                         |                         |
-| `/terms`           | —     | `{ viewer, contact }`                                                         |                         |
-| `/privacy`         | —     | `{ viewer, contact }`                                                         |                         |
+| Path                        | Auth  | JSON                                                                                                                                         | Errors                  |
+| --------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `/`                         | —     | `{ viewer, feed, hasFollowingFeed, followedBlurts, blurts, discovery, next }`                                                                | 400 bad cursor          |
+| `/everyone`                 | —     | the same, always the everyone feed                                                                                                           | 400 bad cursor          |
+| `/:username/`               | —     | `{ viewer, profile, invitedBy, inviteCodes, follows, blurts, next }`                                                                         | 400, 404 no such user   |
+| `/:username/:id`            | —     | `{ viewer, blurt, parent, reported, replies, next, related }`                                                                                | 400, 404 no such blurt  |
+| `/:username/edit`           | owner | `{ viewer, profile, location, notifications, push }` (`push` only when VAPID keys are set: `{ publicKey, thisDevice, devices }`)             | 401, 403 not owner, 404 |
+| `/notifications/`           | —     | 303 → `/:username/notifications/` of the viewer (query kept), or `/login`                                                                    |                         |
+| `/api/events`               | yes   | `text/event-stream`, see Live updates                                                                                                        | 401, 429 too many tabs  |
+| `/sw.js`                    | —     | the service worker (`src/client/sw.ts`, types stripped), see Push notifications                                                              |                         |
+| `/manifest.webmanifest`     | —     | the web app manifest                                                                                                                         |                         |
+| `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next, push }` (`push` on the unread page only, when VAPID keys are set: `{ publicKey, thisDevice }`) | 400, 401, 403 not owner |
+| `/near`                     | yes   | `{ viewer, location, radius, radii, blurts, next }`                                                                                          | 400, 401                |
+| `/search`                   | —     | `{ viewer, query, users, blurts, next }`                                                                                                     | 400, 429                |
+| `/people`                   | —     | `{ viewer, people, next }`                                                                                                                   | 400 bad cursor          |
+| `/login`                    | —     | `{ viewer }`                                                                                                                                 |                         |
+| `/signup`                   | —     | `{ viewer, signup, inviteCode }`                                                                                                             |                         |
+| `/waitlist`                 | —     | `{ viewer, signup, waiting, username, entry }`                                                                                               |                         |
+| `/settings`                 | yes   | `{ viewer, activeSessions }`                                                                                                                 | 401                     |
+| `/settings/delete`          | yes   | `{ viewer }`                                                                                                                                 | 401                     |
+| `/admin`                    | admin | `{ viewer, limits }`                                                                                                                         | 401, 403 not an admin   |
+| `/admin/reports`            | admin | `{ viewer, reports }`                                                                                                                        | 401, 403 not an admin   |
+| `/about`                    | —     | `{ viewer, contact }`                                                                                                                        |                         |
+| `/terms`                    | —     | `{ viewer, contact }`                                                                                                                        |                         |
+| `/privacy`                  | —     | `{ viewer, contact }`                                                                                                                        |                         |
 
 - `/` is the following feed (`feed: 'following'`: top-level blurts from accounts you
   follow, and what they reblurted) when you're logged in and follow more than 10
@@ -184,39 +184,39 @@ A POST shares its path with its GET page, so a failed form re-renders at the sam
 POSTs without a page of their own live under `/api/`. Bodies are form-encoded or JSON
 (`Content-Type: application/json`).
 
-| Path                         | Auth          | Body                                 | Form success                | JSON success                                   |
-| ---------------------------- | ------------- | ------------------------------------ | --------------------------- | ---------------------------------------------- |
-| `/signup`                | —             | `username`, `password`, `inviteCode`, `remember` | 303 → `/`                   | 201 `{ id, username }`, Location `/:username/` |
-| `/waitlist`                  | —             | `username`                           | 303 → `/waitlist?username=` | 201 the `entry`, Location the same             |
-| `/login`                     | —             | `username`, `password`, `remember`   | 303 → `/`                   | 200 `{ id, username }`                         |
-| `/:username/edit`            | owner         | profile fields (missing → cleared)   | 303 → profile               | 200 the updated `profile`                      |
-| `/api/blurts`                | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file) | 303 → feed/parent/quote     | 201 the new blurt as a `FeedItem` (`replies: []`, the viewer's flags), Location `/:username/:id` |
-| `/api/blurts/:id/delete`     | author, admin | —                                    | 303 → back (see Deleting)   | 204                                            |
-| `/api/report`                | yes           | `blurtId`, optional `reason`         | 303 → `/:username/:id`      | 204                                            |
-| `/api/admin/reports/dismiss` | admin         | `blurtId`                            | 303 → `/admin/reports`      | 204                                            |
-| `/api/admin/blurts/delete`  | admin         | `blurtId`                            | 303 → `/admin`              | 204                                            |
-| `/api/admin/invites`         | admin         | `username`, `count`, optional `days` | 201 `/admin` with the codes | 201 `{ username, codes }`                      |
-| `/api/admin/signup-limits`   | admin         | `softLimit`, `hardLimit`             | 303 → `/admin`              | 200 `{ count, softLimit, hardLimit, state }`   |
-| `/api/follow`                | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/unfollow`              | yes           | `username`                           | 303 → profile               | 200 their `follows`                            |
-| `/api/like`                  | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
-| `/api/unlike`                | yes           | `blurtId`                            | 303 → back (see Likes)      | 200 `{ blurtId, likeCount, viewerLikes }`      |
-| `/api/reblurt`               | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
-| `/api/unreblurt`             | yes           | `blurtId`                            | 303 → back (see Reblurts)   | 200 `{ blurtId, reblurtCount, viewerReblurted }` |
-| `/api/notifications/settings` | yes          | `replies`, `reblurts`, `followedBlurts` (left out → off) | 303 → `/:username/edit#notifications` | 200 the settings |
-| `/api/notifications/read`    | yes           | optional `id`                        | 303 → `/:username/notifications/` | 200 `{ unread }`                     |
-| `/api/push/subscriptions`    | yes           | a `PushSubscription` as JSON (`endpoint`, `keys.p256dh`, `keys.auth`), or those as fields | 303 → `/:username/edit#notifications` | 201 `{ subscribed: true }` |
-| `/api/push/subscriptions/delete` | yes       | optional `endpoint` (left out: all of the user's devices) | 303 → `/:username/edit#notifications` | 200 `{ subscribed: false }` |
-| `/api/location`              | yes           | see Location below                   | 303 → `/:username/edit`     | 200 `{ location, timeZone }` (the zone it set, or `null`) |
-| `/api/avatar`                | yes           | see Avatar below                     | 303 → `/:username/edit`     | 200 `{ avatar }`                               |
-| `/api/profile-picture`       | yes           | multipart `picture` (+ optional `cut`), or `remove` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`              |
-| `/api/profile-picture/cut`   | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture) | 303 → `/:username/edit#picture` | 200 `{ avatar }`                   |
-| `/api/theme`                 | yes           | `theme` (see Themes below)           | 303 → `/:username/edit`     | 200 `{ theme }`                                |
-| `/api/timezone`              | yes           | `timezone` (IANA name) and/or `locale` (empty: the browser's) | 303 → `/:username/edit#timezone` | 200 `{ timezone?, locale?, display: { timeZone, locale } }`: what was sent, and how pages show times from now on |
-| `/api/javascript`            | —             | `javascript`: `on` or `off` (JSON: also `true`/`false`) | 303 → `/settings#javascript` (logged in) or `/about#javascript` | 200 `{ javascript }` |
-| `/api/logout`                | —             | —                                    | 303 → `/`                   | 204                                            |
-| `/api/logout-everywhere`     | yes           | —                                    | 303 → `/login`              | 204                                            |
-| `/settings/delete`           | yes           | `password`                           | 303 → `/`                   | 204                                            |
+| Path                             | Auth          | Body                                                                                      | Form success                                                    | JSON success                                                                                                     |
+| -------------------------------- | ------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `/signup`                        | —             | `username`, `password`, `inviteCode`, `remember`                                          | 303 → `/`                                                       | 201 `{ id, username }`, Location `/:username/`                                                                   |
+| `/waitlist`                      | —             | `username`                                                                                | 303 → `/waitlist?username=`                                     | 201 the `entry`, Location the same                                                                               |
+| `/login`                         | —             | `username`, `password`, `remember`                                                        | 303 → `/`                                                       | 200 `{ id, username }`                                                                                           |
+| `/:username/edit`                | owner         | profile fields (missing → cleared)                                                        | 303 → profile                                                   | 200 the updated `profile`                                                                                        |
+| `/api/blurts`                    | yes           | `text`, `parentId` or `reblurtOfId`, optional `picture` (file)                            | 303 → feed/parent/quote                                         | 201 the new blurt as a `FeedItem` (`replies: []`, the viewer's flags), Location `/:username/:id`                 |
+| `/api/blurts/:id/delete`         | author, admin | —                                                                                         | 303 → back (see Deleting)                                       | 204                                                                                                              |
+| `/api/report`                    | yes           | `blurtId`, optional `reason`                                                              | 303 → `/:username/:id`                                          | 204                                                                                                              |
+| `/api/admin/reports/dismiss`     | admin         | `blurtId`                                                                                 | 303 → `/admin/reports`                                          | 204                                                                                                              |
+| `/api/admin/blurts/delete`       | admin         | `blurtId`                                                                                 | 303 → `/admin`                                                  | 204                                                                                                              |
+| `/api/admin/invites`             | admin         | `username`, `count`, optional `days`                                                      | 201 `/admin` with the codes                                     | 201 `{ username, codes }`                                                                                        |
+| `/api/admin/signup-limits`       | admin         | `softLimit`, `hardLimit`                                                                  | 303 → `/admin`                                                  | 200 `{ count, softLimit, hardLimit, state }`                                                                     |
+| `/api/follow`                    | yes           | `username`                                                                                | 303 → profile                                                   | 200 their `follows`                                                                                              |
+| `/api/unfollow`                  | yes           | `username`                                                                                | 303 → profile                                                   | 200 their `follows`                                                                                              |
+| `/api/like`                      | yes           | `blurtId`                                                                                 | 303 → back (see Likes)                                          | 200 `{ blurtId, likeCount, viewerLikes }`                                                                        |
+| `/api/unlike`                    | yes           | `blurtId`                                                                                 | 303 → back (see Likes)                                          | 200 `{ blurtId, likeCount, viewerLikes }`                                                                        |
+| `/api/reblurt`                   | yes           | `blurtId`                                                                                 | 303 → back (see Reblurts)                                       | 200 `{ blurtId, reblurtCount, viewerReblurted }`                                                                 |
+| `/api/unreblurt`                 | yes           | `blurtId`                                                                                 | 303 → back (see Reblurts)                                       | 200 `{ blurtId, reblurtCount, viewerReblurted }`                                                                 |
+| `/api/notifications/settings`    | yes           | `replies`, `reblurts`, `followedBlurts` (left out → off)                                  | 303 → `/:username/edit#notifications`                           | 200 the settings                                                                                                 |
+| `/api/notifications/read`        | yes           | optional `id`                                                                             | 303 → `/:username/notifications/`                               | 200 `{ unread }`                                                                                                 |
+| `/api/push/subscriptions`        | yes           | a `PushSubscription` as JSON (`endpoint`, `keys.p256dh`, `keys.auth`), or those as fields | 303 → `/:username/edit#notifications`                           | 201 `{ subscribed: true }`                                                                                       |
+| `/api/push/subscriptions/delete` | yes           | optional `endpoint` (left out: all of the user's devices)                                 | 303 → `/:username/edit#notifications`                           | 200 `{ subscribed: false }`                                                                                      |
+| `/api/location`                  | yes           | see Location below                                                                        | 303 → `/:username/edit`                                         | 200 `{ location, timeZone }` (the zone it set, or `null`)                                                        |
+| `/api/avatar`                    | yes           | see Avatar below                                                                          | 303 → `/:username/edit`                                         | 200 `{ avatar }`                                                                                                 |
+| `/api/profile-picture`           | yes           | multipart `picture` (+ optional `cut`), or `remove` (see Profile picture)                 | 303 → `/:username/edit#picture`                                 | 200 `{ avatar }`                                                                                                 |
+| `/api/profile-picture/cut`       | yes           | `cut.x` + `cut.y`, or `cut` (see Profile picture)                                         | 303 → `/:username/edit#picture`                                 | 200 `{ avatar }`                                                                                                 |
+| `/api/theme`                     | yes           | `theme` (see Themes below)                                                                | 303 → `/:username/edit`                                         | 200 `{ theme }`                                                                                                  |
+| `/api/timezone`                  | yes           | `timezone` (IANA name) and/or `locale` (empty: the browser's)                             | 303 → `/:username/edit#timezone`                                | 200 `{ timezone?, locale?, display: { timeZone, locale } }`: what was sent, and how pages show times from now on |
+| `/api/javascript`                | —             | `javascript`: `on` or `off` (JSON: also `true`/`false`)                                   | 303 → `/settings#javascript` (logged in) or `/about#javascript` | 200 `{ javascript }`                                                                                             |
+| `/api/logout`                    | —             | —                                                                                         | 303 → `/`                                                       | 204                                                                                                              |
+| `/api/logout-everywhere`         | yes           | —                                                                                         | 303 → `/login`                                                  | 204                                                                                                              |
+| `/settings/delete`               | yes           | `password`                                                                                | 303 → `/`                                                       | 204                                                                                                              |
 
 Following yourself is a 400 and an unknown `username` a 404. Following twice, or
 unfollowing someone you don't follow, does nothing.
@@ -261,9 +261,9 @@ avatar and the text on top. It is a JPEG, `/og/{id}-{hash}.jpg` (`og:image:type`
 `image/jpeg`); every other card stays a PNG, `/og/{id}-{hash}.png`. The wrong extension
 redirects (302) like a stale hash.
 
-| Path                 | Auth | Response                                                          | Errors                                  |
-| -------------------- | ---- | ----------------------------------------------------------------- | --------------------------------------- |
-| `/pictures/:id.svg`  | —    | `image/svg+xml`, `Cache-Control: public, max-age=86400`           | 404 no picture, or the blurt is deleted |
+| Path                | Auth | Response                                                | Errors                                  |
+| ------------------- | ---- | ------------------------------------------------------- | --------------------------------------- |
+| `/pictures/:id.svg` | —    | `image/svg+xml`, `Cache-Control: public, max-age=86400` | 404 no picture, or the blurt is deleted |
 
 ## Likes
 
@@ -672,7 +672,6 @@ and Phillip: the whole top of the head flaps up and down when it talks. Code in
   and holds still with `prefers-reduced-motion`. The profile page
   shows it large.
 
-
 ## Profile picture
 
 Instead of the cartoon avatar, anyone can upload a picture of their own. It goes through
@@ -728,11 +727,11 @@ there is one it is shown wherever the avatar is; removing it brings the cartoon 
   (like the cartoon's `openMouth`). Its user, version and cut are in the card's hash, so a
   new picture or cut is a new card.
 
-| Path                                        | Auth | Response                                                      | Errors |
-| ------------------------------------------- | ---- | ------------------------------------------------------------- | ------ |
-| `/profile-pictures/{user}-{version}-{cut}-top.svg`  | — | the band above the cut, `width`/`height` set; `image/svg+xml`, `Cache-Control: public, max-age=31536000, immutable` | 404 no picture, an old version, a cut outside 5–95, or a deleted account |
-| `/profile-pictures/{user}-{version}-{cut}-jaw.svg`  | — | the band below the cut, likewise                              | likewise |
-| `/profile-pictures/{user}-{version}-{cut}-edit.svg` | — | the whole picture with the cut drawn on it, likewise          | likewise |
+| Path                                                | Auth | Response                                                                                                            | Errors                                                                   |
+| --------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `/profile-pictures/{user}-{version}-{cut}-top.svg`  | —    | the band above the cut, `width`/`height` set; `image/svg+xml`, `Cache-Control: public, max-age=31536000, immutable` | 404 no picture, an old version, a cut outside 5–95, or a deleted account |
+| `/profile-pictures/{user}-{version}-{cut}-jaw.svg`  | —    | the band below the cut, likewise                                                                                    | likewise                                                                 |
+| `/profile-pictures/{user}-{version}-{cut}-edit.svg` | —    | the whole picture with the cut drawn on it, likewise                                                                | likewise                                                                 |
 
 The version goes up with every upload and the cut is in the URL, so each URL always gives
 the same SVG.
@@ -786,7 +785,7 @@ preview.
 One row in `signup_counter` holds the number of sign-ups so far and two limits. The
 sign-up page (`signup` in its data) is in one of three states:
 
-| State      | When                            | `/signup` shows                 | `POST /signup` |
+| State      | When                            | `/signup` shows                     | `POST /signup`     |
 | ---------- | ------------------------------- | ----------------------------------- | ------------------ |
 | `open`     | count below `soft_limit`        | the sign-up form                    | creates the user   |
 | `invite`   | `soft_limit` up to `hard_limit` | "invite-only", the form with a code | needs a valid code |
@@ -835,10 +834,10 @@ waitlisted username marks its entry `joined`. A waitlisted username isn't reserv
 Two `HttpOnly`, `SameSite=Lax` cookies, both on `Path=/` (`__Host-` prefixed and
 `Secure` in production). The code and the reasoning are in `src/middleware/auth.ts`.
 
-| Cookie          | Lifetime | Checked by                                                 |
-| --------------- | -------- | ---------------------------------------------------------- |
-| `access_token`  | 5 min    | its signature only, no database; carries the username, theme, time zone, language and "Use JavaScript" |
-| `refresh_token` | 400 days, or until the browser closes | one row in `sessions`, then rotated to the next generation |
+| Cookie          | Lifetime                              | Checked by                                                                                             |
+| --------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `access_token`  | 5 min                                 | its signature only, no database; carries the username, theme, time zone, language and "Use JavaScript" |
+| `refresh_token` | 400 days, or until the browser closes | one row in `sessions`, then rotated to the next generation                                             |
 
 - When the access token is missing or expired, any request (page load, form POST,
   `fetch()`) with a valid refresh token gets a new pair, transparently. Each refresh
@@ -873,29 +872,32 @@ POSTs that cost CPU or can be spammed are limited by token buckets in
 empty one answers `429` with `Retry-After` (seconds until the next token), as in the
 error table below.
 
-| Limit (env var suffix) | Routes                         | Per                  | Default |
-| ---------------------- | ------------------------------ | -------------------- | ------- |
-| `LOGIN_IP`             | `/login`, every attempt        | IP                   | 10/10m  |
-| `LOGIN_USERNAME`       | `/login`, failed attempts only | username (any case)  | 5/5m    |
-| `CREATE_USER_IP`       | `/signup` (and invites)    | IP                   | 5/1h    |
-| `WAITLIST_IP`          | `/waitlist`                    | IP                   | 10/1h   |
-| `BLURT`                | `/api/blurts` (replies, quotes) | account             | 20/10m  |
-| `REBLURT`              | `/api/reblurt`, `/api/unreblurt` | account (one budget) | 60/10m |
-| `FOLLOW`               | `/api/follow`, `/api/unfollow` | account (one budget) | 60/10m  |
-| `LIKE`                 | `/api/like`, `/api/unlike`     | account (one budget) | 120/10m |
-| `PROFILE_EDIT`         | `/:username/edit`              | account              | 120/10m |
-| `LOCATION`             | `/api/location`                | account              | 60/10m  |
-| `AVATAR`               | `/api/avatar`, `/api/profile-picture/cut` | account (one budget) | 60/10m |
-| `PROFILE_PICTURE`      | `/api/profile-picture`         | account              | 20/10m  |
-| `THEME`                | `/api/theme`                   | account              | 60/10m  |
-| `JAVASCRIPT`           | `/api/javascript`              | IP                   | 60/10m  |
-| `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read` | account (one budget) | 60/10m |
-| `PUSH`                 | `/api/push/subscriptions`, `/api/push/subscriptions/delete` | account (one budget) | 30/10m |
-| `EVENTS`               | opening `/api/events` (each tab, every page load and every ~5 minutes) | account | 600/10m |
-| `REPORT`               | `/api/report`                  | account              | 20/1h   |
-| `DELETE_BLURT`         | `/api/blurts/:id/delete`       | account              | 60/10m  |
-| `DELETE_ACCOUNT`       | `/settings/delete` (POST)      | account              | 5/10m   |
-| `SEARCH`               | `/search` (GET)                | IP                   | 60/1m   |
+| Limit (env var suffix) | Routes                                                                 | Per                  | Default |
+| ---------------------- | ---------------------------------------------------------------------- | -------------------- | ------- |
+| `LOGIN_IP`             | `/login`, every attempt                                                | IP                   | 10/10m  |
+| `LOGIN_USERNAME`       | `/login`, failed attempts only                                         | username (any case)  | 5/5m    |
+| `CREATE_USER_IP`       | `/signup` (and invites)                                                | IP                   | 5/1h    |
+| `WAITLIST_IP`          | `/waitlist`                                                            | IP                   | 10/1h   |
+| `BLURT`                | `/api/blurts` (replies, quotes)                                        | account              | 20/10m  |
+| `REBLURT`              | `/api/reblurt`, `/api/unreblurt`                                       | account (one budget) | 60/10m  |
+| `FOLLOW`               | `/api/follow`, `/api/unfollow`                                         | account (one budget) | 60/10m  |
+| `LIKE`                 | `/api/like`, `/api/unlike`                                             | account (one budget) | 120/10m |
+| `PROFILE_EDIT`         | `/:username/edit`                                                      | account              | 120/10m |
+| `LOCATION`             | `/api/location`                                                        | account              | 60/10m  |
+| `AVATAR`               | `/api/avatar`, `/api/profile-picture/cut`                              | account (one budget) | 60/10m  |
+| `PROFILE_PICTURE`      | `/api/profile-picture`                                                 | account              | 20/10m  |
+| `THEME`                | `/api/theme`                                                           | account              | 60/10m  |
+| `JAVASCRIPT`           | `/api/javascript`                                                      | IP                   | 60/10m  |
+| `NOTIFICATIONS`        | `/api/notifications/settings`, `/api/notifications/read`               | account (one budget) | 60/10m  |
+| `PUSH`                 | `/api/push/subscriptions`, `/api/push/subscriptions/delete`            | account (one budget) | 30/10m  |
+| `EVENTS`               | opening `/api/events` (each tab, every page load and every ~5 minutes) | account              | 600/10m |
+| `REPORT`               | `/api/report`                                                          | account              | 20/1h   |
+| `DELETE_BLURT`         | `/api/blurts/:id/delete`                                               | account              | 60/10m  |
+| `DELETE_ACCOUNT`       | `/settings/delete` (POST)                                              | account              | 5/10m   |
+| `SEARCH`               | `/search` (GET)                                                        | IP                   | 60/1m   |
+| `BOTS`                 | `/settings/bots` (POST), sharing a bot and taking owners off           | account              | 30/10m  |
+| `TOKENS`               | minting and revoking a bot's API tokens                                | account              | 30/10m  |
+| `HIDE_BOTS`            | `/api/hide-bots`                                                       | account              | 60/10m  |
 
 - `10/10m` is a burst of 10, refilling 10 per 10 minutes (one a minute). Override any of
   them with `RATE_LIMIT_<NAME>`, e.g. `RATE_LIMIT_BLURT=40/10m` (periods in `s`, `m`, `h`).
@@ -956,7 +958,7 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 | `?before=` / `?after=` cursors             | 100 characters, and must decode                 |
 | `?radius=` on `/near`                      | one of the listed radii                         |
 | `?q=` on `/search`                         | 200 characters                                  |
-| `?invite=` on `/signup`                | 40 characters                                   |
+| `?invite=` on `/signup`                    | 40 characters                                   |
 | `?username=` on `/waitlist`                | 40 characters                                   |
 | Request body (form or JSON)                | 64 KB, else 413                                 |
 | Blurt `picture` upload                     | 15 MB, else 413 (nginx: 16 MB)                  |
@@ -974,15 +976,15 @@ is one), not bytes. The forms carry the same limits as `maxlength`.
 pages, errors, JSON, Markdown and static files. A test checks a page and the error
 responses.
 
-| Header                                  | Value                                                    |
-| --------------------------------------- | -------------------------------------------------------- |
-| `Content-Security-Policy`               | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map), `; worker-src 'self'` and `blob:` in `img-src` when the page has JavaScript. Client modules (`/static/js/…`) carry `default-src 'none'; script-src 'self'`, the policy of a worker started from one; `/sw.js` carries `default-src 'none'; connect-src 'self'` |
-| `Strict-Transport-Security`             | `max-age=63072000; includeSubDomains` (production only)  |
-| `X-Content-Type-Options`                | `nosniff`                                                |
-| `Referrer-Policy`                       | `no-referrer`                                            |
-| `Permissions-Policy`                    | camera, microphone, geolocation, payment, ... all `()`   |
-| `X-Frame-Options`                       | `DENY` (for browsers without `frame-ancestors`)          |
-| `Cross-Origin-Opener-Policy` / `-Resource-Policy` | `same-origin`                                  |
+| Header                                            | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Content-Security-Policy`                         | `default-src 'none'; connect-src 'self'; style-src 'self' 'sha256-…' (one per theme); img-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, plus `; script-src 'self' 'sha256-…'` (the import map), `; worker-src 'self'` and `blob:` in `img-src` when the page has JavaScript. Client modules (`/static/js/…`) carry `default-src 'none'; script-src 'self'`, the policy of a worker started from one; `/sw.js` carries `default-src 'none'; connect-src 'self'` |
+| `Strict-Transport-Security`                       | `max-age=63072000; includeSubDomains` (production only)                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `X-Content-Type-Options`                          | `nosniff`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `Referrer-Policy`                                 | `no-referrer`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `Permissions-Policy`                              | camera, microphone, geolocation, payment, ... all `()`                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `X-Frame-Options`                                 | `DENY` (for browsers without `frame-ancestors`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `Cross-Origin-Opener-Policy` / `-Resource-Policy` | `same-origin`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 `X-Powered-By` is off.
 
@@ -1084,6 +1086,41 @@ normally. That is the case for:
 Code: `src/speculation.ts`. A link that should never be prefetched goes in the rules
 file's exclude list.
 
+## Bots
+
+A bot is an account of its own, made and run by people (tickets/031-bots.md). Code in
+`src/routes/bots.ts` (managing them), `src/routes/api-v1.ts` (the bot API) and
+`src/routes/state/bots.ts`; the tables in `db/migrations/*_bots.sql`.
+
+- **No password.** `users.is_bot`, and `password_hash` is null (a CHECK holds it), so nobody
+  logs in as a bot. Its owners (`bot_owners`) run it from their own accounts.
+- **Managing.** `/settings/bots` lists the viewer's bots and makes new ones (`POST` with
+  `username`, at most 10 per person; no sign-up slot or invite). `/settings/bots/:username`
+  (owners only, 404 for anyone else) sets its avatar (`POST /api/bots/:username/avatar`, as
+  `/api/avatar`) and bio (`POST /api/bots/:username/bio` with `bio`), mints tokens (`POST /api/bots/:username/tokens` with `name`, at most 5;
+  the token is in that response only), revokes them (`.../tokens/:id/revoke`), shares the
+  bot (`.../owners` with `username`), takes an owner off or leaves (`.../owners/remove`; the
+  last owner can't) and deletes it (`.../delete`, like deleting an account). Handing a bot
+  over is sharing it, then leaving. Admins make someone its only owner
+  (`POST /api/admin/bots/owner` with `bot` and `owner`). Deleting an account deletes the
+  bots nobody else owns.
+- **Tokens.** `blurt_` + 32 random bytes; only their sha256 is stored (`api_tokens`).
+  `authenticate` reads `Authorization: Bearer` on `/api/v1/` only, and cookies everywhere
+  else, so a token never works on a page or form route and a browser's cookies never work
+  on the bot API.
+- **The bot API.** `/api/v1/` answers JSON only (any `Accept`), and 401 with
+  `WWW-Authenticate: Bearer` without a live token. Each route is an alias: it rewrites the
+  method, path and body to the site's own route and lets that handle it, so the JSON, the
+  validation and the rate limits are the site's. The list is `src/pages/info/bot-api.ts`,
+  shown on `/about#bots`.
+- **Looks.** A bot's avatar gets `robot: true` (`avatarColumn`) and is drawn as a robot from
+  the same nine fields (`src/ui/avatar.ts`), never as a profile picture; its name gets a
+  "Bot" label, and its profile says who runs it (`botOwners` in the profile JSON).
+- **Hide bots.** `POST /api/hide-bots` with `hideBots` (`on`/`off`). On, bots the user doesn't
+  follow are left out of the everyone feed, replies, related blurts, discovery, `/near`
+  and search, and make them no notifications (when they're created). Following wins: a
+  followed bot shows everywhere. Not filtered yet: the live "new blurts" count.
+
 ## Rules for new routes
 
 - Every top-level path segment is a reserved username (`reservedUsernames` in
@@ -1130,8 +1167,8 @@ self-contained ES module with Preact, `preact/hooks`, `@preact/signals` and `htm
 bound to its `h`). We serve it ourselves, never from a CDN (the CSP is `'self'` and the
 privacy page promises no third parties), at a URL that carries the installed version:
 
-| Path                                       | Served from                                               | Headers |
-| ------------------------------------------ | --------------------------------------------------------- | ------- |
+| Path                                        | Served from                                                        | Headers                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `/static/vendor/preact-bundle@<version>.js` | `node_modules/preact-hook-signal-htm-bundle/dist/preact-bundle.js` | `text/javascript; charset=utf-8`, `Cache-Control: public, max-age=31536000, immutable` |
 
 `<version>` is read from the package's `package.json` at startup (`preactBundleUrl` in
@@ -1162,14 +1199,14 @@ Client code is the TypeScript Node runs, with its types stripped by Node's own
 and columns stay put and no source map is needed). `src/client-modules.ts` reads the
 three client folders once at startup and serves them:
 
-| Folder        | What                                                         |
-| ------------- | ------------------------------------------------------------ |
-| `src/ui`      | components shared with the server (see Shared components)    |
-| `src/shared`  | the data they need                                           |
-| `src/client`  | browser-only code: `main.ts`, the enhancers, helpers         |
+| Folder       | What                                                      |
+| ------------ | --------------------------------------------------------- |
+| `src/ui`     | components shared with the server (see Shared components) |
+| `src/shared` | the data they need                                        |
+| `src/client` | browser-only code: `main.ts`, the enhancers, helpers      |
 
-| Path                                   | Headers                                                                         |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
+| Path                                    | Headers                                                                                        |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `/static/js/<build>/<folder>/<file>.ts` | `text/javascript; charset=utf-8`, `Cache-Control: public, max-age=31536000, immutable`, `ETag` |
 
 - `<build>` is a hash of every client file's path and contents, computed at startup, so
@@ -1230,12 +1267,12 @@ that, never on `@media (scripting: enabled)` alone), then hands every element wi
 `src/client/requests.ts` sends forms and follows links with `fetch()` and
 `Accept: application/json`, the same request the browser would make:
 
-| Outcome    | When                                                    | The caller     |
-| ---------- | ------------------------------------------------------- | -------------- |
-| `success`  | 2xx with JSON (`data`), or 204 (`data: null`)           | shows the result in place |
-| `errors`   | 4xx (not 401) with `{ errors }` or `{ error, field }`   | shows the messages |
+| Outcome    | When                                                            | The caller                                                                                                                                            |
+| ---------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `success`  | 2xx with JSON (`data`), or 204 (`data: null`)                   | shows the result in place                                                                                                                             |
+| `errors`   | 4xx (not 401) with `{ errors }` or `{ error, field }`           | shows the messages                                                                                                                                    |
 | `fallback` | network error, 5xx, 401, a redirect, an answer that is not JSON | nothing: the helper has started the real submission (`form.submit()`, which skips the handler; the submitter's name and value go along) or navigation |
-| `failed`   | as `fallback`, with `{ fallback: false }`: nothing was started | decides (an autosave keeps its button) |
+| `failed`   | as `fallback`, with `{ fallback: false }`: nothing was started  | decides (an autosave keeps its button)                                                                                                                |
 
 `submitForm(form, { submitter })` honours the submitter's `formaction`/`formmethod`, and
 sends url-encoded bodies unless the form is `multipart/form-data` (the server parses
@@ -1243,19 +1280,19 @@ multipart only where a file is uploaded). `followLink(link)` does the same for a
 
 ### The enhancers there are
 
-| Name       | On                                     | Module                  |
-| ---------- | -------------------------------------- | ----------------------- |
-| `autosave` | the edit page's settings forms: profile and links (with the share card colour), avatar, time zone and language, theme, notifications | `src/client/autosave.ts` |
-| `blurt-actions` | every blurt card, for logged-in viewers | `src/client/blurt-actions.ts` |
-| `composer` | the blurt form (feed, `/near`, thread, quote) | `src/client/composer.ts` |
-| `follow`   | Follow / Unfollow on a profile         | `src/client/follow.ts`  |
-| `map`      | the location map (edit page, `/near`)  | `src/client/map.ts`     |
-| `more`     | the next-page link of every paged list | `src/client/more.ts`    |
-| `mouth`    | the profile picture's cut              | `src/client/mouth.ts`   |
-| `new-blurts` | the feed's list, first page, logged in | `src/client/new-blurts.ts` |
-| `push`     | "Notify me on this device" on the edit page | `src/client/push.ts` |
-| `picture-upload` | the profile picture's upload form | `src/client/picture-upload.ts` |
-| `share`    | Share on every blurt card and on profiles | `src/client/share.ts` |
+| Name             | On                                                                                                                                   | Module                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `autosave`       | the edit page's settings forms: profile and links (with the share card colour), avatar, time zone and language, theme, notifications | `src/client/autosave.ts`       |
+| `blurt-actions`  | every blurt card, for logged-in viewers                                                                                              | `src/client/blurt-actions.ts`  |
+| `composer`       | the blurt form (feed, `/near`, thread, quote)                                                                                        | `src/client/composer.ts`       |
+| `follow`         | Follow / Unfollow on a profile                                                                                                       | `src/client/follow.ts`         |
+| `map`            | the location map (edit page, `/near`)                                                                                                | `src/client/map.ts`            |
+| `more`           | the next-page link of every paged list                                                                                               | `src/client/more.ts`           |
+| `mouth`          | the profile picture's cut                                                                                                            | `src/client/mouth.ts`          |
+| `new-blurts`     | the feed's list, first page, logged in                                                                                               | `src/client/new-blurts.ts`     |
+| `push`           | "Notify me on this device" on the edit page                                                                                          | `src/client/push.ts`           |
+| `picture-upload` | the profile picture's upload form                                                                                                    | `src/client/picture-upload.ts` |
+| `share`          | Share on every blurt card and on profiles                                                                                            | `src/client/share.ts`          |
 
 Autosave (`<form data-enhance="autosave">`) sends the whole form as its button would
 (fields tied to it with the `form` attribute too) with `submitForm`: a select, radio,

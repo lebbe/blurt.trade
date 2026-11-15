@@ -12,6 +12,7 @@ import {
 } from '../negotiate.ts'
 import { listBlurtsByUserId, markViewerFlags, parseCursor } from './state/blurts.ts'
 import { follow, getFollowStats, unfollow } from './state/follows.ts'
+import { getBotOwners } from './state/bots.ts'
 import { getNotificationSettings } from './state/notifications.ts'
 import { countPushDevices } from './state/push.ts'
 import { getPushDevice } from './push.ts'
@@ -84,18 +85,20 @@ profilesRouter.get('/:username/', async (request, response) => {
 
   const viewer = getViewer(request)
   const isOwner = viewer?.id === profile.userId
-  const [invitedBy, inviteCodes, follows, { items: blurts, next }] = await Promise.all([
+  const bot = profile.avatar?.robot === true
+  const [invitedBy, inviteCodes, follows, { items: blurts, next }, botOwners] = await Promise.all([
     getInvitedBy(profile.userId),
     // Codes are only for their owner, and only while sign-up needs one.
     isOwner && (await isInviteOnly()) ? listInviteCodes(profile.userId) : null,
     getFollowStats(profile.userId, viewer?.id ?? null),
     listBlurtsByUserId(profile.userId, before),
+    bot ? getBotOwners(profile.userId) : null,
   ])
   await markViewerFlags(viewer?.id ?? null, blurts)
   await represent(
     request,
     response,
-    { viewer, profile, invitedBy, inviteCodes, follows, blurts, next },
+    { viewer, profile, invitedBy, inviteCodes, follows, blurts, next, botOwners },
     { html: renderProfilePage, markdown: profilePageMarkdown },
   )
 })

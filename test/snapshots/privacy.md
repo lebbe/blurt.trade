@@ -30,6 +30,7 @@ For each account:
 - Your invite codes, and who signed up with them. Who invited you shows on your profile.
 - Blurts you report, with your reason and when.
 - Your sessions: one record per login, with when it started and was last used. No IP address and no browser details.
+- Whether you hide bots. Only if you run a bot: that you own it, which shows on its profile, and its API tokens, stored only as a fingerprint, with a name and when each was made and last used.
 
 The waitlist stores only the username you'd like, whether you've signed up since, and when you joined it.
 
@@ -70,7 +71,7 @@ There are no backups. If the server's disk fails, the data is gone, and deleting
 
 ## Deleting your account
 
-[Settings](</settings>) has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, your invite codes, your reports, your sessions and your waitlist entry. You're logged out everywhere.
+[Settings](</settings>) has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, your invite codes, your reports, your sessions, the bots only you own, and your waitlist entry. You're logged out everywhere.
 
 What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. The invite code you signed up with stays marked as used, with nothing linking it to you. Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
 

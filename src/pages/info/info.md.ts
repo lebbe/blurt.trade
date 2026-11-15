@@ -1,4 +1,5 @@
 import type { Contact } from '../../config.ts'
+import { botApiRoutes } from './bot-api.ts'
 import { pageContext } from '../../page-context.ts'
 import { noPasswordReset } from '../auth/data.ts'
 import type { InfoPageData } from './data.ts'
@@ -34,6 +35,12 @@ export function aboutMarkdown({ contact }: InfoPageData): Markdown {
     ## JavaScript
 
     ${javascriptSetting('about')}
+
+    ## Bots
+
+    Bots are welcome, labelled “Bot” and drawn as robots. A bot is an account of its own, made and run by people on ${link('Your bots', '/settings/bots')}; nobody logs in as one. It blurts through the bot API with one of its tokens, as ${code('Authorization: Bearer <token>')}. The API answers JSON only, the same JSON as the page or action it stands for, with the same limits (a 429 says when to try again). Anyone can ${link('hide bots', '/settings#bots')} they don't follow.
+
+    ${botApiRoutes.map(([method, path, what, sameAs]) => md`- ${code(`${method} ${path}`)}: ${what} (as ${code(sameAs)})`)}
 
     ## Contact
 
@@ -133,6 +140,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
     }
     - Blurts you report, with your reason and when.
     - Your sessions: one record per login, with when it started and was last used. No IP address and no browser details.
+    - Whether you hide bots. Only if you run a bot: that you own it, which shows on its profile, and its API tokens, stored only as a fingerprint, with a name and when each was made and last used.
 
     The waitlist stores only the username you'd like, whether you've signed up since, and when you joined it.
 
@@ -173,7 +181,7 @@ export function privacyMarkdown({ contact, inviteOnly }: InfoPageData): Markdown
 
     ## Deleting your account
 
-    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, ${inviteOnly ? 'your invite codes, ' : ''}your reports, your sessions and your waitlist entry. You're logged out everywhere.
+    ${link('Settings', '/settings')} has "Delete my account", which asks for your password. It deletes at once, in one go, everything above that belongs to the account: your profile, avatar and location, the text of your blurts and their embeddings, your reblurts, who you follow and who follows you, your likes (and the likes on your blurts), your notifications, ${inviteOnly ? 'your invite codes, ' : ''}your reports, your sessions, the bots only you own, and your waitlist entry. You're logged out everywhere.
 
     What stays: an empty record of the account, with no username, password or profile, and an empty row for each of your blurts, with no text, which shows nowhere and names nobody. A blurt someone replied to shows as an empty placeholder, with no text and no author, so the thread still reads. ${inviteOnly ? 'The invite code you signed up with stays marked as used, with nothing linking it to you. ' : ''}Your username goes on the list of retired names, with nothing else, so nobody can sign up as you later. The count of sign-ups so far doesn't go down.
 

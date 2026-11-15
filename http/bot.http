@@ -1,0 +1,107 @@
+# The bot API (/api/v1/, src/routes/api-v1.ts). Make a bot and a token on
+# http://localhost:3000/settings/bots, paste the token below, then send the requests.
+# Bearer tokens only, and the answers are always JSON.
+
+@host = http://localhost:3000
+@token = blurt_Z0xXNirEMz9C57vFrtbgl2yieVMNFPGMCtF5nsDFLuE
+@blurtId = 1
+@username = lars
+
+### Who am I: the bot's own profile and blurts
+GET {{host}}/api/v1/me
+Authorization: Bearer {{token}}
+
+### No token: 401 with WWW-Authenticate: Bearer
+GET {{host}}/api/v1/me
+
+### The bot's feed (paste `next` as ?before= for the next page)
+GET {{host}}/api/v1/feed
+Authorization: Bearer {{token}}
+
+### The everyone feed
+GET {{host}}/api/v1/feed/everyone
+Authorization: Bearer {{token}}
+
+### Search
+GET {{host}}/api/v1/search?q=hello
+Authorization: Bearer {{token}}
+
+### Unread notifications (?read=1 for read ones too)
+GET {{host}}/api/v1/notifications
+Authorization: Bearer {{token}}
+
+### Mark all notifications read (or send { "id": 123 } for one)
+POST {{host}}/api/v1/notifications/read
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### Blurt (set @blurtId above to the id in the answer to try the rest)
+POST {{host}}/api/v1/blurts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "text": "Beep boop, hello from the bot API" }
+
+### Reply to a blurt
+POST {{host}}/api/v1/blurts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "text": "A reply from the bot", "parentId": {{blurtId}} }
+
+### Quote a blurt
+POST {{host}}/api/v1/blurts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "text": "Quoting this", "reblurtOfId": {{blurtId}} }
+
+### A blurt and its replies
+GET {{host}}/api/v1/blurts/{{blurtId}}
+Authorization: Bearer {{token}}
+
+### Like
+PUT {{host}}/api/v1/blurts/{{blurtId}}/like
+Authorization: Bearer {{token}}
+
+### Unlike
+DELETE {{host}}/api/v1/blurts/{{blurtId}}/like
+Authorization: Bearer {{token}}
+
+### Reblurt
+PUT {{host}}/api/v1/blurts/{{blurtId}}/reblurt
+Authorization: Bearer {{token}}
+
+### Undo the reblurt
+DELETE {{host}}/api/v1/blurts/{{blurtId}}/reblurt
+Authorization: Bearer {{token}}
+
+### Delete the bot's own blurt
+DELETE {{host}}/api/v1/blurts/{{blurtId}}
+Authorization: Bearer {{token}}
+
+### A profile and its blurts
+GET {{host}}/api/v1/users/{{username}}
+Authorization: Bearer {{token}}
+
+### Follow
+PUT {{host}}/api/v1/users/{{username}}/follow
+Authorization: Bearer {{token}}
+
+### Unfollow
+DELETE {{host}}/api/v1/users/{{username}}/follow
+Authorization: Bearer {{token}}
+
+### Unknown route: 404 as JSON
+GET {{host}}/api/v1/nope
+Authorization: Bearer {{token}}
+
+### A bot token on the site's own routes: treated as logged out (401)
+POST {{host}}/api/blurts
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{ "text": "This should not post" }

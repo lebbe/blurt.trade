@@ -1088,6 +1088,40 @@ button.danger,
   animation: avatar-jaw 1.6s ease-in-out infinite;
 }
 
+/* A bot's robot (AvatarSvg in src/ui/avatar.ts) talks with the same flaps, but like a
+   machine: the lid and the jaw jump between positions instead of easing, and its lights
+   blink while it talks. The longhand wins over the talking selectors' shorthand. */
+.avatar-robot :is(.avatar-top, .avatar-jaw) {
+  animation-timing-function: steps(2, jump-none) !important;
+}
+
+@keyframes avatar-led {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.avatar-robot:hover .avatar-led,
+.blurt:hover:not(:has(.blurt:hover)) > .blurt-main > .avatar-robot .avatar-led,
+.people li:is(:hover, :focus-within) .avatar-robot .avatar-led {
+  animation: avatar-led 0.4s steps(1) infinite;
+}
+
+/* The text label next to a bot's name, so it isn't only in the drawing. */
+.bot-label {
+  display: inline-block;
+  margin-inline-start: 0.35em;
+  padding: 0 0.4em;
+  border: 1px solid currentColor;
+  border-radius: 0.3em;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
+  opacity: 0.8;
+}
+
 /* A profile picture talks like the cartoon (AvatarView in src/templates/avatar.ts): two
    images stacked in the dark mouth, the part above the cut and the part below. Their
    width and height attributes give each its share of the square. The top one reaches
@@ -1127,6 +1161,7 @@ button.danger,
 @media (prefers-reduced-motion: reduce) {
   .avatar-top,
   .avatar-jaw,
+  .avatar-led,
   .blurt-button,
   .blurt-button::before,
   .blurt-button::after {

@@ -86,6 +86,19 @@ function AdminToolsPage({ minted, limits }: AdminToolsData) {
           </div>
         </form>
       </section>
+      <section class="panel" aria-label="Set a bot's owner">
+        <h2>Set a bot's owner</h2>
+        <p class="tiny">
+          The person becomes the bot's only owner; anyone who owned it before doesn't.
+        </p>
+        <form method="post" action="/api/admin/bots/owner">
+          <label>Bot's username <input name="bot" required /></label>
+          <label>New owner's username <input name="owner" required /></label>
+          <div class="actions">
+            <${SubmitButton} icon="robot" label="Set owner" kind="secondary" />
+          </div>
+        </form>
+      </section>
       <section class="panel" aria-label="Mint invite codes">
         <h2>Mint invite codes</h2>
         <p class="tiny">The codes belong to the user and are listed on their profile.</p>

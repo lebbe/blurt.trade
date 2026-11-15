@@ -37,7 +37,7 @@ export async function getFeedData(
   const hasFollowingFeed = followingCount > followingFeedThreshold
   const feed = path === '/' && hasFollowingFeed ? 'following' : 'everyone'
   const [{ items: blurts, next }, followedBlurts] = await Promise.all([
-    listFeed(before, viewer && feed === 'following' ? viewer.id : null),
+    listFeed(before, viewer && feed === 'following' ? viewer.id : null, viewer?.id ?? null),
     path === '/' && viewer && !hasFollowingFeed && followingCount > 0 && before === null
       ? listFollowedHighlights(viewer.id)
       : [],

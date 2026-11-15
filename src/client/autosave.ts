@@ -60,7 +60,8 @@ function liveForm(form: HTMLFormElement, { page }: EnhancerContext): LiveForm | 
   if (path === '/api/theme') {
     return liveThemeForm(form, page)
   }
-  if (path === '/api/avatar') {
+  // The viewer's own, or a bot's on its management page (/settings/bots/:username).
+  if (path === '/api/avatar' || /^\/api\/bots\/[^/]+\/avatar$/.test(path)) {
     return liveAvatarForm(form, page)
   }
   return null

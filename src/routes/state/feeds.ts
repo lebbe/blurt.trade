@@ -9,6 +9,7 @@ import {
   queryShown,
   selectShown,
 } from './blurts.ts'
+import { hiddenBot, withoutHiddenBots } from './bots.ts'
 
 const feedRepliesPerBlurt = 2
 
@@ -42,21 +43,22 @@ const followedWhere = `r.parent_id IS NULL AND r.user_id IN ${followedBy('$1')}
 // Top-level blurts older than `before`, newest first, each with its latest replies.
 // With `followedBy`, only blurts from accounts that user follows and what they reblurted
 // (the following feed). The everyone feed leaves plain reblurts out: their originals are
-// in it already.
+// in it already, and the bots `viewerId` hides (the following feed has only bots they follow).
 export async function listFeed(
   before: Cursor | null = null,
   followedBy: number | null = null,
+  viewerId: number | null = null,
 ): Promise<Page<FeedItem>> {
   const page =
     followedBy === null
       ? await listPage(
-          `r.parent_id IS NULL AND NOT ${plainReblurt('r')}`,
+          `r.parent_id IS NULL AND NOT ${plainReblurt('r')} AND ${withoutHiddenBots(viewerId)}`,
           [],
           before,
           'newest first',
         )
       : await listPage(followedWhere, [followedBy], before, 'newest first')
-  return { items: await withReplies(page.items), next: page.next }
+  return { items: await withReplies(page.items, viewerId), next: page.next }
 }
 
 // The latest few blurts from accounts the user follows, for the top of the everyone feed.
@@ -64,15 +66,15 @@ export async function listFollowedHighlights(userId: number): Promise<FeedItem[]
   const { items } = await listPage(followedWhere, [userId], null, 'newest first', {
     size: followedHighlightsLimit,
   })
-  return withReplies(items)
+  return withReplies(items, userId)
 }
 
-// Adds each blurt's latest replies, oldest of those first.
-async function withReplies(blurts: Blurt[]): Promise<FeedItem[]> {
+// Adds each blurt's latest replies, oldest of those first, leaving out bots `viewerId` hides.
+async function withReplies(blurts: Blurt[], viewerId: number | null = null): Promise<FeedItem[]> {
   const replies = await queryShown(
     dbRead(),
     `SELECT x.* FROM unnest($1::bigint[]) AS p(id) CROSS JOIN LATERAL (
-       ${selectShown('r.parent_id = p.id', { placeholders: true })}
+       ${selectShown(`r.parent_id = p.id AND ${withoutHiddenBots(viewerId)}`, { placeholders: true })}
        ORDER BY r.created_at DESC, r.id DESC LIMIT $2
      ) x ORDER BY x."createdAt", x.id`,
     [blurts.map((blurt) => blurt.id), feedRepliesPerBlurt],
@@ -86,13 +88,14 @@ async function withReplies(blurts: Blurt[]): Promise<FeedItem[]> {
 // Closest blurts by meaning, excluding the blurt itself and its direct replies (shown anyway).
 // Empty until the blurt's embedding has been computed. Only rows with text have one, so
 // plain reblurts are never among them.
-export function listRelatedBlurts(id: number): Promise<Blurt[]> {
+export function listRelatedBlurts(id: number, viewerId: number | null = null): Promise<Blurt[]> {
   return queryShown(
     dbRead(),
     `WITH target AS (SELECT embedding FROM blurts WHERE id = $1 AND embedding IS NOT NULL)
      ${selectShown(
        `r.id <> $1 AND r.parent_id IS DISTINCT FROM $1 AND r.embedding IS NOT NULL
-        AND r.embedding <=> (SELECT embedding FROM target) < $3`,
+        AND r.embedding <=> (SELECT embedding FROM target) < $3
+        AND ${withoutHiddenBots(viewerId)}`,
      )}
      ORDER BY r.embedding <=> (SELECT embedding FROM target) LIMIT $2`,
     [id, relatedLimit, relatedMaxDistance],
@@ -123,7 +126,8 @@ export function listSimilarToUser(
        `r.parent_id IS NULL AND r.embedding IS NOT NULL
         AND r.user_id <> $1 AND r.user_id NOT IN ${followedBy('$1')}
         AND r.id <> ALL ($3::bigint[])
-        AND r.embedding <=> (SELECT embedding FROM taste) < $5`,
+        AND r.embedding <=> (SELECT embedding FROM taste) < $5
+        AND NOT ${hiddenBot('b.user_id', '$1')}`,
      )}
      ORDER BY r.embedding <=> (SELECT embedding FROM taste) LIMIT $4`,
     [userId, tasteBlurts, excludeIds, limit, relatedMaxDistance],
@@ -139,7 +143,7 @@ const nearbyWhere = `r.parent_id IS NULL AND NOT ${plainReblurt('r')}
     SELECT p.user_id FROM user_profiles me JOIN user_profiles p
       ON ST_DWithin(p.location, me.location, $2::float8 * 1000)
     WHERE me.user_id = $1
-  )`
+  ) AND NOT ${hiddenBot('b.user_id', '$1')}`
 
 // "Blurts near you": older than `before`, newest first, each with its latest replies.
 export async function listNearbyBlurts(
@@ -148,7 +152,7 @@ export async function listNearbyBlurts(
   before: Cursor | null = null,
 ): Promise<Page<FeedItem>> {
   const page = await listPage(nearbyWhere, [userId, radiusKm], before, 'newest first')
-  return { items: await withReplies(page.items), next: page.next }
+  return { items: await withReplies(page.items, userId), next: page.next }
 }
 
 // How far away "Near you" discovery in the feed reaches.
@@ -178,6 +182,15 @@ export function listNearbyForUser(
 export const blurtSearchWhere = `to_tsvector('simple', r.text) @@ websearch_to_tsquery('simple', $1)`
 
 // Blurts, replies and quotes whose text matches `query`, newest first, paged like the feeds.
-export function searchBlurts(query: string, before: Cursor | null = null): Promise<Page<Blurt>> {
-  return listPage(blurtSearchWhere, [query], before, 'newest first')
+export function searchBlurts(
+  query: string,
+  before: Cursor | null = null,
+  viewerId: number | null = null,
+): Promise<Page<Blurt>> {
+  return listPage(
+    `${blurtSearchWhere} AND ${withoutHiddenBots(viewerId)}`,
+    [query],
+    before,
+    'newest first',
+  )
 }

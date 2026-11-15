@@ -12,7 +12,35 @@ import { SubmitButton } from '../../ui/forms.ts'
 import { html } from '../../ui/html.ts'
 import { plural } from '../../ui/text.ts'
 
-function SettingsPage({ viewer, activeSessions }: SettingsData) {
+function BotSettings({ hideBots, bots }: SettingsData) {
+  return html`
+    <section class="panel" id="bots" aria-label="Bots">
+      <h2>Bots</h2>
+      <p>
+        Bots are accounts run by people, labelled “Bot” and drawn as robots. Hide them, and you
+        won't see the bots you don't follow, and they won't notify you.
+      </p>
+      <form method="post" action="/api/hide-bots" class="inline">
+        <input type="hidden" name="hideBots" value=${hideBots ? 'off' : 'on'} />
+        <${SubmitButton}
+          icon="robot"
+          label=${hideBots ? 'Show bots' : 'Hide bots'}
+          kind="secondary"
+        />
+      </form>
+      <p class="tiny">
+        ${bots > 0 ? `You run ${plural(bots, 'bot')}. ` : ''}Make a bot of your own to blurt through
+        the API.
+      </p>
+      <div class="actions">
+        <${ButtonLink} href="/settings/bots" icon="robot" label="Your bots" />
+      </div>
+    </section>
+  `
+}
+
+function SettingsPage(data: SettingsData) {
+  const { viewer, activeSessions } = data
   const edit = `/${viewer.username}/edit`
   return html`
     <${Page}
@@ -47,6 +75,7 @@ function SettingsPage({ viewer, activeSessions }: SettingsData) {
           <${ButtonLink} href=${`${edit}#theme`} icon="palette" label="Theme" />
         </div>
       </section>
+      <${BotSettings} ...${data} />
       <section class="panel" id="javascript" aria-label="JavaScript">
         <h2>JavaScript</h2>
         <${JavaScriptSetting} />

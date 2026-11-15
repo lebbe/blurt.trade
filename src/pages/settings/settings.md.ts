@@ -7,7 +7,12 @@ import { plural } from '../../ui/text.ts'
 // as the HTML, for text/markdown and text/plain clients (curl, LLMs, terminals). Forms are
 // described instead of rendered.
 
-export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Markdown {
+export function settingsMarkdown({
+  viewer,
+  activeSessions,
+  hideBots,
+  bots,
+}: SettingsData): Markdown {
   return md`
     # Settings: ${viewer.username}
 
@@ -19,6 +24,13 @@ export function settingsMarkdown({ viewer, activeSessions }: SettingsData): Mark
 
     Send ${code('POST /api/logout-everywhere')} to log out everywhere, this client included.
     Other devices are logged out within 5 minutes.
+
+    ## Bots
+
+    Bots are ${hideBots ? 'hidden' : 'shown'}: send ${code('POST /api/hide-bots')} with
+    ${code(`hideBots=${hideBots ? 'off' : 'on'}`)} to ${hideBots ? 'show' : 'hide'} them. Bots you follow always show.
+
+    You run ${plural(bots, 'bot')}: see ${link('Your bots', '/settings/bots')}.
 
     ## JavaScript
 

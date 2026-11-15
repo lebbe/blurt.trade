@@ -71,8 +71,8 @@ async function getBlurtPageData(
   const [parent, reported, { items: replies, next }, related, cardColor] = await Promise.all([
     blurt.parentId === null ? null : getBlurt(blurt.parentId).then((parent) => parent ?? null),
     viewer ? hasReported(viewer.id, blurt.id) : false,
-    listReplies(blurt.id, after),
-    listRelatedBlurts(blurt.id),
+    listReplies(blurt.id, after, viewer?.id ?? null),
+    listRelatedBlurts(blurt.id, viewer?.id ?? null),
     blurt.username ? getCardColor(blurt.username) : null,
   ])
   await markViewerFlags(viewer?.id ?? null, [blurt, parent, ...replies, ...related])

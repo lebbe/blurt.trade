@@ -2,6 +2,7 @@ import { Router, type Request } from 'express'
 import { hash, verify } from '@node-rs/argon2'
 import { z } from 'zod'
 import {
+  type AuthenticatedUser,
   clearSessionCookies,
   countActiveSessions,
   endAllSessions,
@@ -38,6 +39,8 @@ import type { WaitlistData } from '../pages/auth/data.ts'
 import { renderDeleteAccountPage, renderSettingsPage } from '../pages/settings/settings.html.ts'
 import { createUserMarkdown, loginMarkdown, waitlistMarkdown } from '../pages/auth/auth.md.ts'
 import { deleteAccountMarkdown, settingsMarkdown } from '../pages/settings/settings.md.ts'
+import { getHideBots, listOwnedBots, listSoleOwnedBots } from './state/bots.ts'
+import type { SettingsData } from '../pages/settings/data.ts'
 
 export const usersRouter = Router()
 
@@ -102,7 +105,7 @@ const password = z
   .min(passwordMinLength, `Password must be at least ${passwordMinLength} characters`)
   .max(passwordMaxLength, 'Password is too long')
 
-const newUsername = z
+export const newUsername = z
   .string()
   .trim()
   .min(1, 'Username is required')
@@ -278,7 +281,7 @@ usersRouter.post('/login', rateLimit('loginIp'), async (request, response) => {
     return
   }
   const user = await getUserByUsername(username)
-  if (!user || !(await verify(user.passwordHash, password))) {
+  if (!user?.passwordHash || !(await verify(user.passwordHash, password))) {
     await sendFormErrors(request, response, [{ message: 'Invalid username or password' }], rerender)
     return
   }
@@ -296,14 +299,21 @@ usersRouter.post('/api/logout', async (request, response) => {
   sendFormSuccess(request, response, { redirect: '/' })
 })
 
+async function getSettingsData(viewer: AuthenticatedUser): Promise<SettingsData> {
+  const [activeSessions, hideBots, bots] = await Promise.all([
+    countActiveSessions(viewer.id),
+    getHideBots(viewer.id),
+    listOwnedBots(viewer.id),
+  ])
+  return { viewer, activeSessions, hideBots, bots: bots.length }
+}
+
 usersRouter.get('/settings', requireAuth, async (request, response) => {
   const viewer = response.locals.authenticatedUser
-  await represent(
-    request,
-    response,
-    { viewer, activeSessions: await countActiveSessions(viewer.id) },
-    { html: renderSettingsPage, markdown: settingsMarkdown },
-  )
+  await represent(request, response, await getSettingsData(viewer), {
+    html: (data) => renderSettingsPage(data),
+    markdown: settingsMarkdown,
+  })
 })
 
 // Logs the user out on every browser and device, this one included.
@@ -351,7 +361,7 @@ usersRouter.post(
       sendError(request, response, 401, 'Authentication required')
       return
     }
-    if (!(await verify(user.passwordHash, result.data.password))) {
+    if (!user.passwordHash || !(await verify(user.passwordHash, result.data.password))) {
       const errors = [
         { field: 'password', message: 'Wrong password. Your account was not deleted.' },
       ]
@@ -359,6 +369,10 @@ usersRouter.post(
       return
     }
 
+    // Their bots go with them, unless someone else owns them too.
+    for (const botId of await listSoleOwnedBots(user.id)) {
+      await deleteAccount(botId)
+    }
     const sessionIds = (await deleteAccount(user.id)) ?? []
     endDeletedAccountSessions(sessionIds, response)
     sendFormSuccess(request, response, { redirect: '/' })

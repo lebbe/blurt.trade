@@ -28,11 +28,13 @@ const avatarFields = [
 
 // The avatar the fields describe. Unchecked: AvatarSvg checks every value itself and draws
 // a default for anything it doesn't know, as it does for what comes from the database.
+// A bot's form (data-robot) draws a robot.
 function fromFields(form: HTMLFormElement): Avatar {
   const data = new FormData(form)
-  return Object.fromEntries(
+  const avatar = Object.fromEntries(
     avatarFields.map((name) => [name, String(data.get(name) ?? '')]),
   ) as unknown as Avatar
+  return form.dataset.robot === 'true' ? { ...avatar, robot: true } : avatar
 }
 
 function fill(form: HTMLFormElement, avatar: Avatar): void {

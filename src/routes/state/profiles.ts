@@ -177,6 +177,15 @@ export async function setAvatar(userId: number, avatar: Avatar): Promise<boolean
   return rowCount === 1
 }
 
+// Just the bio (a bot's, from /settings/bots/:username). False when the user no longer exists.
+export async function setBio(userId: number, bio: string): Promise<boolean> {
+  const { rowCount } = await db().query(
+    'UPDATE user_profiles SET bio = $2, updated_at = now() WHERE user_id = $1',
+    [userId, bio],
+  )
+  return rowCount === 1
+}
+
 // The colour theme (src/themes.ts). False when the user no longer exists.
 export async function setTheme(userId: number, theme: ThemeId): Promise<boolean> {
   const { rowCount } = await db().query(

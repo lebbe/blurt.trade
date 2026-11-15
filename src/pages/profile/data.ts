@@ -10,7 +10,8 @@ import type { Viewer } from '../../ui/context.ts'
 
 // `invitedBy` is the username of whoever invited them (null if nobody did).
 // `inviteCodes` are the profile's own codes, only for its owner and only while sign-up needs
-// an invite code (null otherwise).
+// an invite code (null otherwise). `botOwners`: who runs the bot, by username (null for a
+// person).
 export type ProfilePageData = {
   viewer: Viewer
   profile: UserProfile
@@ -19,4 +20,5 @@ export type ProfilePageData = {
   follows: FollowStats
   blurts: Blurt[]
   next: string | null
+  botOwners: string[] | null
 }
