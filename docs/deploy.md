@@ -189,6 +189,16 @@ most 10 seconds). Caddy answers 502 for the second or two until the new process 
 
 Logs: `journalctl -u blurt -f` (Logs and monitoring, below).
 
+**The deploy bot.** After a push to `main` is deployed (`.github/workflows/docker.yml`), a
+bot blurts `New deploy released: <commit message>`, so people can follow the updates. The
+message is the pushed head commit's, so write the merge commit to say what changed (GitHub's
+own "Merge pull request #… from …" line is left out, and a message too long for a blurt is
+cut off with "…"). To set it up once: make a bot on `https://blurt.trade/settings/bots`,
+mint a token for it, and add the token as the secret `DEPLOY_BOT_TOKEN` of the `production`
+environment on GitHub. Without the secret the step does nothing; if blurting fails, the
+deploy still counts as done. A manual run of the workflow doesn't blurt. A staging site sets
+the variable `PUBLIC_URL` on its environment.
+
 The browser's JavaScript needs no build step: the client modules are read from `src/` and
 type-stripped at startup, under a URL with a hash of their contents
 (`/static/js/<build>/…`, docs/routes.md, JavaScript in the browser), so a deploy gives

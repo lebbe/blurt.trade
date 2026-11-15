@@ -61,3 +61,28 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           # The key's command= on the server runs deploy-latest.sh, whatever is asked.
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$DEPLOY_HOST"
+      # The deploy bot blurts the commit message (docs/deploy.md, Deploying). Only on a push
+      # (a manual run deploys nothing new), only if the token is set, and a failure here
+      # doesn't fail the deploy.
+      - name: Blurt about the deploy
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          BOT_TOKEN: ${{ secrets.DEPLOY_BOT_TOKEN }}
+          SITE: ${{ vars.PUBLIC_URL || 'https://blurt.trade' }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then echo "No DEPLOY_BOT_TOKEN, not blurting."; exit 0; fi
+          # Wait for the new server to answer.
+          for _ in $(seq 30); do curl -fsS -o /dev/null "$SITE/healthz" && break; sleep 2; done
+          # GitHub's own "Merge pull request #1 from …" line says nothing: use what follows.
+          # Blurts are at most 280 characters (code points, as jq counts them).
+          body=$(jq -n --arg message "$MESSAGE" '
+            ($message | sub("^Merge (pull request|branch) [^\n]*\n+"; "") | gsub("^\\s+|\\s+$"; ""))
+            as $m
+            | "New deploy released: " as $p
+            | (280 - ($p | length)) as $room
+            | { text: ($p + (if ($m | length) > $room then $m[0:$room - 1] + "…" else $m end)) }')
+          curl -fsS --retry 3 --retry-connrefused -o /dev/null -w '%{http_code}\n' \
+            -H "Authorization: Bearer $BOT_TOKEN" -H 'Content-Type: application/json' \
+            -d "$body" "$SITE/api/v1/blurts"
