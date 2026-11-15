@@ -285,7 +285,7 @@ test('log lines are single-line JSON, with errors expanded', (t) => {
   assert.equal((logs[0].error as { message: string }).message, 'two\nlines')
 })
 
-test('Docker Compose passes every push setting from docker/.env into the app container', () => {
+test('Docker Compose passes every push and contact setting from docker/.env into the app container', () => {
   // docs/deploy.md says to put them in docker/.env, but Compose only hands the container
   // what its environment: block names.
   const root = join(import.meta.dirname, '..')
@@ -293,7 +293,8 @@ test('Docker Compose passes every push setting from docker/.env into the app con
   const push = readFileSync(join(root, 'src', 'push.ts'), 'utf8')
   const names = [...new Set(push.match(/\bVAPID_[A-Z_]+/g))]
   assert.deepEqual(names.toSorted(), ['VAPID_PRIVATE_KEY', 'VAPID_PUBLIC_KEY', 'VAPID_SUBJECT'])
-  for (const name of names) {
+  // CONTACT_EMAIL is the default push subject (and the /about contact).
+  for (const name of [...names, 'CONTACT_EMAIL']) {
     assert.match(compose, new RegExp(`^\\s+${name}: \\$\\{${name}:-\\}$`, 'm'), name)
   }
 })
