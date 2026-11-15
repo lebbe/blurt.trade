@@ -1804,3 +1804,11 @@ dialog.share .actions {
 .push-all .tiny {
   margin-bottom: 8px;
 }
+
+/* The same, offered at the top of the unread notifications. */
+.push-offer {
+  margin-bottom: 16px;
+}
+.push-offer .tiny {
+  font-size: inherit;
+}

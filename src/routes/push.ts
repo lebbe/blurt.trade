@@ -7,12 +7,14 @@ import { z } from 'zod'
 import { getSessionId, getViewer, requireAuth } from '../middleware/auth.ts'
 import { accountKey, rateLimit } from '../middleware/rate-limit.ts'
 import { fieldErrors, sendError, sendFormErrors, sendFormSuccess } from '../negotiate.ts'
-import { isPushEndpoint } from '../push.ts'
+import { isPushEndpoint, vapidKeys } from '../push.ts'
 import { themeColor, defaultTheme } from '../shared/themes.ts'
 import { notificationsPath } from '../ui/urls.ts'
+import type { PushDevice } from '../ui/push.ts'
 import {
   deleteAllPushSubscriptions,
   deletePushSubscription,
+  listSessionPushEndpoints,
   savePushSubscription,
 } from './state/push.ts'
 
@@ -20,6 +22,17 @@ export const pushRouter = Router()
 // Mounted before cookies and auth (src/server.ts): the same for everyone, and a browser
 // checking its service worker for updates mustn't rotate anyone's tokens.
 export const appFilesRouter = Router()
+
+// What "Notify me on this device" (src/ui/push.ts) needs for this login, when this server
+// sends pushes (VAPID keys set).
+export async function getPushDevice(request: Request): Promise<PushDevice | undefined> {
+  const keys = vapidKeys()
+  const sessionId = getSessionId(request)
+  if (!keys || !sessionId) {
+    return undefined
+  }
+  return { publicKey: keys.publicKey, thisDevice: await listSessionPushEndpoints(sessionId) }
+}
 
 // --- Subscriptions -------------------------------------------------------------------
 

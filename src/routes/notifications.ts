@@ -12,6 +12,7 @@ import {
 } from './state/notifications.ts'
 import { renderNotificationsPage } from '../pages/notifications/notifications.html.ts'
 import { notificationsMarkdown } from '../pages/notifications/notifications.md.ts'
+import { getPushDevice } from './push.ts'
 
 export const notificationsRouter = Router()
 
@@ -29,14 +30,16 @@ notificationsRouter.get('/:username/notifications/', requireAuth, async (request
     return
   }
   const read = request.query.read === '1'
-  const [{ items: notifications, next }, unread] = await Promise.all([
+  // The unread page offers push on this device (src/ui/push.ts), when this server sends it.
+  const [{ items: notifications, next }, unread, push] = await Promise.all([
     listNotifications(viewer.id, read, before),
     countUnreadNotifications(viewer.id),
+    read ? undefined : getPushDevice(request),
   ])
   await represent(
     request,
     response,
-    { viewer, read, unread, notifications, next },
+    { viewer, read, unread, notifications, next, ...(push && { push }) },
     { html: renderNotificationsPage, markdown: notificationsMarkdown },
   )
 })

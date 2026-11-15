@@ -1,6 +1,13 @@
 // <div data-enhance="push" data-vapid-key="…" data-endpoints="[…]" hidden>: "Notify me on
-// this device", under Notifications on the edit page. Hidden without JavaScript, since
-// push needs it. The browser's permission is only asked for when the button is clicked.
+// this device" (src/ui/push.ts), under Notifications on the edit page. Hidden without
+// JavaScript, since push needs it. The browser's permission is only asked for when the
+// button is clicked: browsers hold a prompt that comes on its own against the site.
+//
+// With data-push-offer it is the offer at the top of the unread notifications, which only
+// shows where it can help: not when this device is on already, the browser blocks
+// notifications or can't show them (iPhones and iPads not on the Home Screen are told
+// how), nor after "Not now" on this device (remembered in localStorage; the edit page
+// still has the button).
 //
 // Turning it on registers the service worker (/sw.js, ./sw.ts), subscribes with our
 // public VAPID key (src/push.ts) and hands the subscription to the server, which pushes
@@ -41,22 +48,52 @@ function needsHomeScreen(): boolean {
   return ios && !matchMedia('(display-mode: standalone)').matches
 }
 
+const dismissedKey = 'push-offer-dismissed'
+
+function offerDismissed(): boolean {
+  try {
+    return localStorage.getItem(dismissedKey) === '1'
+  } catch {
+    return false
+  }
+}
+
+function dismissOffer(): void {
+  try {
+    localStorage.setItem(dismissedKey, '1')
+  } catch {
+    // Storage blocked: the offer comes back on the next visit, which is all that's lost.
+  }
+}
+
 export async function enhance(element: HTMLElement): Promise<void> {
   const key = element.dataset.vapidKey ?? ''
   const known = new Set(JSON.parse(element.dataset.endpoints ?? '[]') as string[])
   const status = element.querySelector<HTMLElement>('[data-push-status]')
-  const button = element.querySelector<HTMLButtonElement>('button')
+  const button = element.querySelector<HTMLButtonElement>('[data-push-toggle]')
   if (!key || !status || !button) {
     throw new Error('Not a push element')
   }
+  const offer = element.hasAttribute('data-push-offer')
+  if (offer && offerDismissed()) {
+    return
+  }
+  const dismiss = element.querySelector<HTMLButtonElement>('[data-push-dismiss]')
+  dismiss?.addEventListener('click', () => {
+    dismissOffer()
+    element.hidden = true
+  })
   const say = (text: string) => {
     status.textContent = text
   }
-  element.hidden = false
 
   const supported =
     'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
   if (!supported) {
+    if (offer && !needsHomeScreen()) {
+      return
+    }
+    element.hidden = false
     button.hidden = true
     say(
       needsHomeScreen()
@@ -82,7 +119,11 @@ export async function enhance(element: HTMLElement): Promise<void> {
   }
   const current = await subscription()
   const isOn = current !== null && known.has(current.endpoint)
+  if (offer && (isOn || Notification.permission === 'denied')) {
+    return
+  }
   render(isOn ? 'on' : 'off')
+  element.hidden = false
   say(
     isOn
       ? 'This device gets a notification when something new is waiting for you.'
@@ -97,7 +138,13 @@ export async function enhance(element: HTMLElement): Promise<void> {
     }
     const turnOn = state === 'off'
     render('busy')
-    void (turnOn ? on() : off()).then((ok) => render(ok === turnOn ? 'on' : 'off'))
+    void (turnOn ? on() : off()).then((ok) => {
+      render(ok === turnOn ? 'on' : 'off')
+      if (dismiss) {
+        // Once on, "Not now" makes no sense; the edit page is where it's turned off.
+        dismiss.hidden = state === 'on'
+      }
+    })
   })
 
   async function on(): Promise<boolean> {

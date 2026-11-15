@@ -10,6 +10,7 @@ import { blurtMaxLength } from '../../shared/limits.ts'
 import { themes } from '../../shared/themes.ts'
 import { localeLabel, locales, timeZones } from '../../shared/time-zones.ts'
 import { usePageContext } from '../../ui/context.ts'
+import { PushDeviceButton } from '../../ui/push.ts'
 import { SubmitButton, ValidationError } from '../../ui/forms.ts'
 import { html } from '../../ui/html.ts'
 import { Icon } from '../../ui/icons.ts'
@@ -158,23 +159,12 @@ export function NotificationsForm({
   `
 }
 
-// Push notifications on this device: a button only JavaScript can make work (the browser's
-// permission, a service worker), so it is hidden until src/client/push.ts shows it. And,
-// while any device gets them, a plain form that stops them everywhere, which works
-// without JavaScript too.
+// Push notifications on this device (src/ui/push.ts) and, while any device gets them, a
+// plain form that stops them everywhere, which works without JavaScript too.
 function PushForms({ push }: { push: PushSettings }) {
   return html`
     <h3>On your devices</h3>
-    <div
-      class="push-device"
-      data-enhance="push"
-      data-vapid-key=${push.publicKey}
-      data-endpoints=${JSON.stringify(push.thisDevice)}
-      hidden
-    >
-      <p class="tiny" data-push-status></p>
-      <div class="actions"><button type="button" class="secondary"></button></div>
-    </div>
+    <${PushDeviceButton} push=${push} />
     ${
       push.devices > 0 &&
       html`<form method="post" action="/api/push/subscriptions/delete" class="push-all">

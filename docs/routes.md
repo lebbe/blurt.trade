@@ -55,7 +55,7 @@ agents, next to `/robots.txt` and `/sitemap.xml`.
 | `/api/events`      | yes   | `text/event-stream`, see Live updates                                         | 401, 429 too many tabs  |
 | `/sw.js`           | —     | the service worker (`src/client/sw.ts`, types stripped), see Push notifications |                       |
 | `/manifest.webmanifest` | — | the web app manifest                                                        |                         |
-| `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next }`                       | 400, 401, 403 not owner |
+| `/:username/notifications/` | owner | `{ viewer, read, unread, notifications, next, push }` (`push` on the unread page only, when VAPID keys are set: `{ publicKey, thisDevice }`)                       | 400, 401, 403 not owner |
 | `/near`            | yes   | `{ viewer, location, radius, radii, blurts, next }`                           | 400, 401                |
 | `/search`          | —     | `{ viewer, query, users, blurts, next }`                                       | 400, 429                |
 | `/people`          | —     | `{ viewer, people, next }`                                                    | 400 bad cursor          |
@@ -548,7 +548,11 @@ nothing asks for it and everything is as above: the count refreshes with the pag
 
 ### Push notifications
 
-"Notify me on this device" under Notifications on the edit page (`src/client/push.ts`),
+"Notify me on this device" under Notifications on the edit page (`src/client/push.ts`,
+markup in `src/ui/push.ts`), and offered at the top of the unread notifications with a
+"Not now" (remembered on the device in `localStorage`); the offer only shows where it can
+help: not when the device is on already, the browser blocks notifications or can't show
+them (iPhones and iPads off the Home Screen are told how),
 only when the server has VAPID keys and the page has JavaScript (the button is `hidden`
 until the script shows it). The browser's permission is asked for only on the click.
 

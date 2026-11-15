@@ -1,4 +1,4 @@
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -160,7 +160,9 @@ test('the stream closes when the page is left and opens again when it comes back
   assert.deepEqual(problems, [])
 })
 
-test('Notify me on this device: permission on click, the worker shows what is unread', async (t) => {
+// A tab in full Chromium that can turn push on: VAPID keys set, a fake push service that
+// records pushes, and the browser's subscribing stubbed to hand out a subscription there.
+async function pushTab(t: TestContext) {
   const keys = generateVapidKeys()
   process.env.VAPID_PUBLIC_KEY = keys.publicKey
   process.env.VAPID_PRIVATE_KEY = keys.privateKey
@@ -231,6 +233,11 @@ test('Notify me on this device: permission on click, the worker shows what is un
       return (state.subscribed ? fake : null) as unknown as PushSubscription
     }
   }, `${serviceOrigin}/device/lars`)
+  return { page, context, problems, pushes, serviceOrigin }
+}
+
+test('Notify me on this device: permission on click, the worker shows what is unread', async (t) => {
+  const { page, context, problems, pushes, serviceOrigin } = await pushTab(t)
 
   await signUp(page, 'Lars')
   const lars = await cookieHeader(context)
@@ -339,6 +346,51 @@ test('Notify me on this device: permission on click, the worker shows what is un
   assert.deepEqual(problems, [])
 })
 
+test('the unread notifications offer push on this device, until it is on or "Not now"', async (t) => {
+  const { page, problems } = await pushTab(t)
+  await signUp(page, 'Lars')
+  const offer = '.push-offer'
+  const toggle = '.push-offer [data-push-toggle]'
+  await page.goto('/Lars/notifications/')
+  await enhancersReady(page)
+  assert.equal(await page.isVisible(offer), true)
+  assert.equal(await page.textContent(toggle), 'Notify me on this device')
+  assert.equal(
+    await page.evaluate(() => (window as unknown as { permissionAsked: number }).permissionAsked),
+    0,
+  )
+
+  // "Not now" hides it, and it stays hidden on this device.
+  await page.click('.push-offer [data-push-dismiss]')
+  assert.equal(await page.isHidden(offer), true)
+  await page.reload()
+  await enhancersReady(page)
+  assert.equal(await page.isHidden(offer), true)
+
+  // Turned on from the offer: then it's gone from there, and the edit page shows it on.
+  await page.evaluate(() => localStorage.clear())
+  await page.reload()
+  await enhancersReady(page)
+  await page.click(toggle)
+  await page.waitForFunction(
+    (selector) => document.querySelector(selector)?.textContent === 'Stop notifying this device',
+    toggle,
+  )
+  assert.equal(await page.isHidden('.push-offer [data-push-dismiss]'), true)
+  assert.equal((await db().query('SELECT 1 FROM push_subscriptions')).rowCount, 1)
+  await page.reload()
+  await enhancersReady(page)
+  assert.equal(await page.isHidden(offer), true)
+  await page.goto('/Lars/edit#notifications')
+  await enhancersReady(page)
+  assert.equal(await page.textContent('.push-device button'), 'Stop notifying this device')
+
+  // Not on the read ones.
+  await page.goto('/Lars/notifications/?read=1')
+  assert.equal(await page.locator(offer).count(), 0)
+  assert.deepEqual(problems, [])
+})
+
 test('the push button is not shown without JavaScript, nor without VAPID keys', async (t) => {
   const keys = generateVapidKeys()
   process.env.VAPID_PUBLIC_KEY = keys.publicKey
@@ -352,8 +404,12 @@ test('the push button is not shown without JavaScript, nor without VAPID keys', 
   await page.goto('/Lars/edit')
   assert.ok(await page.isHidden('.push-device'))
   assert.equal(await page.locator('.push-device button').isVisible(), false)
+  await page.goto('/Lars/notifications/')
+  assert.ok(await page.isHidden('.push-offer'))
   delete process.env.VAPID_PUBLIC_KEY
   await page.reload()
+  assert.equal(await page.locator('.push-device').count(), 0)
+  await page.goto('/Lars/edit')
   assert.equal(await page.locator('.push-device').count(), 0)
   assert.deepEqual(problems, [])
 })

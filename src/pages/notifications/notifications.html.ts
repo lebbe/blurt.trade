@@ -5,9 +5,10 @@ import { Page, renderDocument } from '../shared/layout.ts'
 import { SubmitButton } from '../../ui/forms.ts'
 import { html } from '../../ui/html.ts'
 import { NotificationItem, UnreadBadge } from '../../ui/notifications.ts'
+import { PushDeviceButton } from '../../ui/push.ts'
 import { notificationsPath } from '../../ui/urls.ts'
 
-function NotificationsPage({ viewer, read, unread, notifications, next }: NotificationsData) {
+function NotificationsPage({ viewer, read, unread, notifications, next, push }: NotificationsData) {
   const here = (before?: string) => notificationsPath(viewer.username, { read, before })
   return html`
     <${Page}
@@ -28,6 +29,7 @@ function NotificationsPage({ viewer, read, unread, notifications, next }: Notifi
         <${SupportLinks} />
       `}
     >
+      ${push && html`<${PushDeviceButton} push=${push} offer />`}
       <section aria-label="Notifications" class="panel">
         <h2>${read ? 'Read' : 'Unread'}</h2>
         ${
