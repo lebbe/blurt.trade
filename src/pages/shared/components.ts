@@ -43,7 +43,7 @@ export function LinkPanel({
 }) {
   return html`
     <section class="panel">
-      <h3>${title}</h3>
+      <h2>${title}</h2>
       <ul class="list">
         ${links.map(([href, label]) => html`<li><a href=${href}>${label}</a></li>`)}
       </ul>
@@ -161,7 +161,7 @@ export function InviteFriends() {
   const url = `${publicUrl()}/signup`
   return html`
     <section class="panel" aria-label="Invite your friends">
-      <h3>Invite your friends</h3>
+      <h2>Invite your friends</h2>
       <p>blurt.trade is better filled with people you know. Share this link:</p>
       <p><a href=${url}>${url}</a></p>
     </section>

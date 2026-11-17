@@ -36,7 +36,7 @@ function CreateUserPage({
   />`
   const aside = html`
     <section class="panel">
-      <h3>Already here?</h3>
+      <h2>Already here?</h2>
       <p>Welcome back.</p>
       <${ButtonLink} href="/login" icon="login" label="Log in" />
     </section>
@@ -203,7 +203,7 @@ function LoginPage({ username = '', validationError }: LoginProps) {
       tagline="Back for more blurting."
       aside=${html`
         <section class="panel">
-          <h3>New here?</h3>
+          <h2>New here?</h2>
           <p>A username and a password is all it takes. No email, no phone number.</p>
           <${ButtonLink} href="/signup" icon="personPlus" label="Create a profile" />
         </section>
