@@ -5,7 +5,9 @@ import { getPictureShapes } from './state/blurts.ts'
 
 export const picturesRouter = Router()
 
-// The drawing of a blurt's picture, as SVG. No auth: like the blurt, it is public.
+// The drawing of a blurt's picture, as SVG. No auth: like the blurt, it is public. A blurt's
+// picture never changes, so it is cached for a year (not `immutable`: a reload still
+// revalidates, and a deleted blurt's picture then 404s).
 picturesRouter.get('/pictures/:file', async (request, response) => {
   const match = /^(\d{1,15})\.svg$/.exec(request.params.file)
   const shapes = match ? await getPictureShapes(Number(match[1])) : undefined
@@ -14,7 +16,7 @@ picturesRouter.get('/pictures/:file', async (request, response) => {
     return
   }
   response
-    .set('Cache-Control', 'public, max-age=86400')
+    .set('Cache-Control', 'public, max-age=31536000')
     .type('image/svg+xml')
     .send(pictureSvg(shapes))
 })

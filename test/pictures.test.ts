@@ -26,7 +26,7 @@ test('a blurt with a picture is shown as a drawing, and the upload is never stor
   const picture = await request('GET', `/pictures/${id}.svg`)
   assert.equal(picture.statusCode, 200)
   assert.match(picture.contentType ?? '', /^image\/svg\+xml/)
-  assert.equal(picture.headers['cache-control'], 'public, max-age=86400')
+  assert.equal(picture.headers['cache-control'], 'public, max-age=31536000')
   assert.ok(picture.body.startsWith('<svg'))
 
   const { rows } = await db().query(

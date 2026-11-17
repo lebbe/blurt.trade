@@ -263,7 +263,7 @@ redirects (302) like a stale hash.
 
 | Path                | Auth | Response                                                | Errors                                  |
 | ------------------- | ---- | ------------------------------------------------------- | --------------------------------------- |
-| `/pictures/:id.svg` | —    | `image/svg+xml`, `Cache-Control: public, max-age=86400` | 404 no picture, or the blurt is deleted |
+| `/pictures/:id.svg` | —    | `image/svg+xml`, `Cache-Control: public, max-age=31536000` | 404 no picture, or the blurt is deleted |
 
 ## Likes
 
