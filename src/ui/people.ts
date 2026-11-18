@@ -5,10 +5,11 @@ import { html } from './html.ts'
 import { plural, preview } from './text.ts'
 
 // One row of /people. Here, not in the page, because the browser renders the next page
-// of the list with it too (src/client/more.ts).
+// of the list with it too (src/client/more.ts). The avatar links where the name beside it
+// does, so it is one link for screen readers and the keyboard: the name.
 export function PersonItem({ person }: { person: Person }) {
   return html`<li>
-    <a href="/${person.username}/" class="person-avatar"
+    <a href="/${person.username}/" class="person-avatar" aria-hidden="true" tabindex="-1"
       ><${AvatarView} avatar=${person.avatar}
     /></a>
     <div class="person-body">

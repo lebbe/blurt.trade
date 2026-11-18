@@ -13,7 +13,7 @@
   --muted: #9bb0d4;
   --line: #6d9adf;
   --line-soft: #2b4e7d;
-  --accent: #3f7ad9;
+  --accent: #3b73cc;
   --accent-strong: #aac9ff;
   --accent-soft: #1a315c;
   --pop: #43a7ff;
@@ -564,6 +564,9 @@ button.secondary:hover,
 button.danger,
 .button.danger {
   background: var(--warn);
+  /* --warn is a light colour in every theme (it is also text on the panels), too light
+     under white text: the page's own dark background reads on it instead. */
+  color: var(--bg);
   border-color: color-mix(in srgb, var(--warn), #000 35%);
   box-shadow: 2px 2px 0 color-mix(in srgb, var(--warn), #000 35%);
 }
@@ -1450,7 +1453,7 @@ button.danger,
   background: #d08c5e;
 }
 .swatch-midnight-clay span:nth-child(3) {
-  background: #e0694d;
+  background: #e27056;
 }
 .swatch-midnight-clay span:nth-child(4) {
   background: #7baea0;

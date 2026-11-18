@@ -60,7 +60,7 @@ function BlurtPage({
       />`
     }
     <section class="panel" aria-label="Related blurts">
-      <h3>Related blurts</h3>
+      <h2>Related blurts</h2>
       ${
         related.length > 0
           ? html`<${RelatedList} blurts=${related} />`

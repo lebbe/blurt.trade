@@ -57,7 +57,7 @@ function ProfileLinks({ profile }: { profile: UserProfile }) {
   }
   return html`
     <section class="panel" aria-label="Links">
-      <h3>Links</h3>
+      <h2>Links</h2>
       <dl class="profile-data">
         ${set.map(
           ([key, label]) =>
@@ -91,7 +91,7 @@ function InviteCodes({ codes }: { codes: InviteCode[] }) {
   })
   return html`
     <section class="panel" aria-label="Your invite codes">
-      <h3>Your invite codes</h3>
+      <h2>Your invite codes</h2>
       <p class="tiny">Each code lets one person sign up, even while blurt.trade is invite-only.</p>
       ${
         items.length > 0

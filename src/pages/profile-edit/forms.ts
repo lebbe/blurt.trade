@@ -163,7 +163,7 @@ export function NotificationsForm({
 // plain form that stops them everywhere, which works without JavaScript too.
 function PushForms({ push }: { push: PushSettings }) {
   return html`
-    <h3>On your devices</h3>
+    <h2>On your devices</h2>
     <${PushDeviceButton} push=${push} />
     ${
       push.devices > 0 &&

@@ -22,7 +22,7 @@ function NearPage({ viewer, location, radius, radii, blurts, next }: NearData) {
       />`}
       aside=${html`
         <section class="panel">
-          <h3>Local context</h3>
+          <h2>Local context</h2>
           <p class="tiny">
             Only ${gridDescription} is stored for anyone, never the exact spot, and nobody sees
             yours. Set or remove it on <a href=${`${edit}#location`}>your edit page</a>.

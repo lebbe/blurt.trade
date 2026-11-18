@@ -33,7 +33,7 @@ function FeedAside({ viewer }: { viewer: Viewer }) {
   if (!viewer) {
     return html`
       <section class="panel">
-        <h3>What is this?</h3>
+        <h2>What is this?</h2>
         <p>
           Short posts, blurts, of up to ${blurtMaxLength} characters. No ads, no tracking, no email
           address needed. Works fully without JavaScript, and you can${' '}
