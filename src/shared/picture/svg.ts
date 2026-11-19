@@ -33,7 +33,20 @@ export function pictureSvg(
   const { width, height, background, areas } = decodeShapes(bytes)
   const y0 = Math.max(0, Math.min(height, top ?? 0))
   const y1 = Math.max(y0, Math.min(height, bottom ?? height))
+  // A band only needs the areas that reach into it: outlines are drawn in z-order and the
+  // smooth path stays within its corners' hull, so dropping the others changes no pixel.
+  // (A jaw band is often a fifth of the picture and needs a fraction of its areas.)
   const paths = areas
+    .filter(({ points }) => {
+      if (y0 === 0 && y1 === height) return true
+      let low = Infinity
+      let high = -Infinity
+      for (const [, y] of points) {
+        low = Math.min(low, y)
+        high = Math.max(high, y)
+      }
+      return high >= y0 && low <= y1
+    })
     .map(
       ({ color, points }) =>
         `<path fill="${pictureColors[color]}" d="${path(points, width, height)}"/>`,

@@ -7,7 +7,7 @@ import { criticalCss, themeColor, themeStylesheetUrl } from '../../shared/themes
 import { importMapJson, mainModulePreloads, mainModuleUrl } from '../../client-modules.ts'
 import { pageContextElementId, PageContextValue, usePageContext } from '../../ui/context.ts'
 import { html } from '../../ui/html.ts'
-import { Icon } from '../../ui/icons.ts'
+import { Icon, IconSprite } from '../../ui/icons.ts'
 import { NavLink, navItems } from '../../ui/nav.ts'
 import { javascriptSettingPath } from '../../ui/urls.ts'
 
@@ -257,6 +257,7 @@ export function renderDocument(page: ComponentChildren, meta: PageMeta = {}): st
           <html lang="en">
             <${Head} meta=${meta} />
             <body>
+              <${IconSprite} />
               <div class="shell">${page} <${Footer} /></div>
             </body>
           </html>
