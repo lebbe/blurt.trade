@@ -8,6 +8,7 @@ import {
   decodeShapes,
   drawnSize,
   encodeShapes as encodeShared,
+  pictureColors,
 } from '../src/shared/picture/shapes.ts'
 import { photoPartSvg } from '../src/shared/picture/svg.ts'
 
@@ -73,4 +74,34 @@ test('photoPartSvg gives the profile picture halves', async () => {
   assert.match(photoPartSvg(shapes, 65, 'top'), /viewBox="0 0 640 424" width="640" height="424"/)
   assert.match(photoPartSvg(shapes, 65, 'jaw'), /viewBox="0 416 640 224" width="640" height="224"/)
   assert.match(photoPartSvg(shapes, 50, 'edit'), /<path d="M0 320H640"/)
+})
+
+test('a band of a picture only has the areas that reach into it, in the same order', () => {
+  const square = (
+    color: number,
+    y0: number,
+    y1: number,
+  ): { color: number; points: [number, number][] } => ({
+    color,
+    points: [
+      [0, y0],
+      [640, y0],
+      [640, y1],
+      [0, y1],
+    ],
+  })
+  const bytes = encodeShared({
+    width: 640,
+    height: 640,
+    background: 3,
+    areas: [square(0, 0, 200), square(4, 100, 600), square(10, 500, 640)],
+  })
+  const fills = (svg: string) => [...svg.matchAll(/<path fill="([^"]+)"/g)].map((m) => m[1])
+  const [black, red, green] = [0, 4, 10].map((i) => pictureColors[i])
+  assert.deepEqual(fills(pictureSvg(bytes)), [black, red, green]) // whole picture: all
+  assert.deepEqual(fills(pictureSvg(bytes, { top: 0, bottom: 150 })), [black, red])
+  assert.deepEqual(fills(pictureSvg(bytes, { top: 550 })), [red, green])
+  assert.deepEqual(fills(pictureSvg(bytes, { top: 620 })), [green])
+  // The edit view (a line, no band) keeps everything.
+  assert.deepEqual(fills(photoPartSvg(bytes, 50, 'edit')), [black, red, green])
 })

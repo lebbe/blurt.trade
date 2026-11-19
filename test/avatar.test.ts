@@ -35,7 +35,9 @@ function formBody(fields: Record<string, string>): string {
 // Every <svg> on a page: only the elements and attributes the avatar template draws with.
 function assertSafeSvgs(body: string): void {
   for (const [svg] of body.matchAll(/<svg[^]*?<\/svg>/g)) {
-    assert.doesNotMatch(svg, /<script|<foreignObject|<use|<image|href|url\(|\son\w+=/i)
+    // The one exception: an icon points at its symbol in the page's own sprite.
+    const checked = svg.replaceAll(/<use href="#icon-[a-zA-Z]+"\s*\/?>(<\/use>)?/g, '')
+    assert.doesNotMatch(checked, /<script|<foreignObject|<use|<image|href|url\(|\son\w+=/i)
   }
 }
 

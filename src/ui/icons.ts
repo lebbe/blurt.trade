@@ -87,6 +87,22 @@ const paths = {
 
 export type IconName = keyof typeof paths
 
+// The icons are drawn once per page, as <symbol>s in a sprite (IconSprite, the first thing in
+// <body>), and each use is a small <svg><use href="#icon-name"/></svg>. The page used to
+// repeat every icon's paths at every use (about 400 inline SVGs, 140 kB of the front page's
+// HTML). Plain markup, so it needs no JavaScript and no request, and the colour and stroke
+// still come from the <svg> around each use (they are inherited into the symbol).
+export function IconSprite() {
+  return html`<svg hidden aria-hidden="true" focusable="false" width="0" height="0">
+    ${(Object.keys(paths) as IconName[]).map(
+      (name) =>
+        html`<symbol id=${`icon-${name}`} viewBox="0 0 24 24">
+          ${paths[name].map((d) => html`<path d=${d} />`)}
+        </symbol>`,
+    )}
+  </svg>`
+}
+
 // Decorative: always next to text that says the same, so hidden from screen readers.
 export function Icon({ name }: { name: IconName }) {
   return html`<svg
@@ -102,6 +118,6 @@ export function Icon({ name }: { name: IconName }) {
     aria-hidden="true"
     focusable="false"
   >
-    ${paths[name].map((d) => html`<path d=${d} />`)}
+    <use href=${`#icon-${name}`} />
   </svg>`
 }
