@@ -25,6 +25,7 @@ import { sendError } from './negotiate.ts'
 import { clearSpeculations, speculationRulesType } from './speculation.ts'
 import { serveVendorFiles } from './vendor.ts'
 import { serveClientModules } from './client-modules.ts'
+import { serveStylesheet } from './css.ts'
 import { javascriptEnabled } from './javascript.ts'
 import { runWithPageContext } from './page-context.ts'
 import { isAdmin } from './routes/state/accounts.ts'
@@ -88,6 +89,8 @@ serveVendorFiles(app)
 // Client modules, TypeScript from src/ui, src/shared and src/client with the types
 // stripped, under /static/js/<build>/ (src/client-modules.ts). Nothing else in src/.
 serveClientModules(app)
+// The main stylesheet, minified (src/css.ts); the rest of public/ is served as it is.
+serveStylesheet(app)
 // Public files from public/ (css, images, map), before auth: they are the same for everyone.
 // ETag handles revalidation; keep max-age at 0 so clients check before reuse.
 app.use(
