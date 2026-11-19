@@ -21,6 +21,13 @@ jobs:
             context: docker/postgres
             image: ghcr.io/lebbe/blurt.trade-db
     name: ${{ matrix.name }}
+    # A push whose commit message starts with "chore:" (or "chore(scope):"), e.g. a squash
+    # merge of a docs-only PR, builds and deploys nothing. The deploy job needs this one,
+    # so it is skipped too (and so is the blurt). A manual run always goes ahead.
+    if: >-
+      github.event_name != 'push' ||
+      !(startsWith(github.event.head_commit.message, 'chore:') ||
+        startsWith(github.event.head_commit.message, 'chore('))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

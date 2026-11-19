@@ -199,6 +199,12 @@ environment on GitHub. Without the secret the step does nothing; if blurting fai
 deploy still counts as done. A manual run of the workflow doesn't blurt. A staging site sets
 the variable `PUBLIC_URL` on its environment.
 
+A push to `main` whose head commit message starts with `chore:` (or `chore(scope):`, any
+case) builds, deploys and blurts nothing. Use it for what needs no deploy, such as docs:
+squash-merge the PR with a title like `chore: update deploy docs`. It only looks at the
+message's start, so a regular merge commit ("Merge pull request #… from …") doesn't count;
+squash instead. A manual run of the workflow always builds and deploys.
+
 The browser's JavaScript needs no build step: the client modules are read from `src/` and
 type-stripped at startup, under a URL with a hash of their contents
 (`/static/js/<build>/…`, docs/routes.md, JavaScript in the browser), so a deploy gives
